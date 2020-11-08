@@ -9,6 +9,6 @@ The device is controlled via an ordinary web-browser over WiFi and can be remote
 
 Contact: dxzl@live.com
 
-![Pic1](pics/ssesp1.png)
-![Pic2](pics/ssesp2.png)
-![Pic3](pics/ssesp3.png)
+![Pic1](pics/Image00001.png)
+![Pic2](pics/Image00001.png)
+![Pic3](pics/Image00001.png)
