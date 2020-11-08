@@ -129,9 +129,9 @@ const char DEFAULT_SOFTAP_SSID[] = "dts7";
 const char DEFAULT_SOFTAP_PWD[]  = "1234567890";
 
 const char DEFAULT_HOSTNAME[] = "dts7";
-const char DEFAULT_SSID[]     = "ATT4cD9cFj";
-const char DEFAULT_PWD[]      = "hGZZnBTOHfbl5xWz5iOBzDa883BXDumj";
-const char OBFUSCATE_STR[]    = "jsjdhhruuslldiifjjelsisheefsllsnnduur493ssllejceoos";
+const char DEFAULT_SSID[]     = "YourRouterSSID";
+const char DEFAULT_PWD[]      = "YourRouterPassword";
+const char OBFUSCATE_STR[]    = "somerandomstringtoobfuscate";
 
 // you can type these commands into the HOSTNAME web-edit field and submit the command!
 const char COMMAND_RESET[]   = "reset";
