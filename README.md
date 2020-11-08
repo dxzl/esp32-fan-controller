@@ -5,4 +5,10 @@ This code may be useful to paruse for ideas or or for adapting to your own ESP32
 
 It is for a custom PCB I ordered using EasyEDA upon which the ESP32 module is soldered and has switching transistors that drive solid-state relays. I should note that the PCB needs work. The ESP32 footprint is off by a bit so I had to bend the module's pins to fit the PCB holes for soldering.
 
-The device is controlled via an ordinary web-browser over WiFi and can be remotely updated. There is a switch to switch between WiFi access-point mode and station mode (router connection). I use the AP mode to enter WiFi router credentials then flip the switch to connect to my router. 
+The device is controlled via an ordinary web-browser over WiFi and can be remotely updated. There is a switch to switch between WiFi access-point mode and station mode (router connection). I use the AP mode to enter WiFi router credentials then flip the switch to connect to my router.
+
+Contact: dxzl@live.com
+
+![Pic1](pics/ssesp1.png)
+![Pic2](pics/ssesp2.png)
+![Pic3](pics/ssesp3.png)
