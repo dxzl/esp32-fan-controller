@@ -4,10 +4,11 @@
 #include <Arduino.h>
 
 // Import required libraries
-//#include <WiFi.h>
-#include <AsyncTCP.h>
+#include <WiFi.h>
+
+//#include <AsyncTCP.h>
 //#include <WiFiClient.h>
-#include <WebServer.h>
+//#include <WebServer.h>
 #include <ESPmDNS.h>
 //#include <OneWire.h>
 //#include <DallasTemperature.h>
@@ -15,7 +16,6 @@
 // I modified preferences to add usedEntries (zip is in the "stuff" folder,
 // put it in Arduino libraries folder
 #include <MyPreferences.h>
-
 #include <Update.h>
 
 // Import library headers
@@ -26,18 +26,42 @@
 #include "IndexRepeatList.h"
 #include "FCUtils.h"
 
-#define DTS_VERSION "Version 1.51B (October 25, 2020)"
+#define DTS_VERSION "Version 1.72 (March 26, 2021)"
 #define PRINT_ON true // set true to enable status printing to console
 #define CLEAR_PREFS false
 #define CLEAR_SLOTS false
-#define FORCE_AP_ON false
+#define FORCE_AP_ON false // can also tie SW_SOFT_AP GPI34 to 3.3V for AP (ground it for router-mode)
+#define TIME_SYNC_OFF false
+#define USE_UPDATE_LOGIN false // set true to require password entry after typing "c update" into index.html host-name field
+
+// efuse bits are all 0 from factory and can only be set once - once set, say for a serial-number
+// (custom MAC address), then write-protect the bits that are still 0!
+#define FORCE_NEW_EFUSE_BITS_ON false // set true to force new bits to be set (if not yet write-protected)
+#define WRITE_PROTECT_BLK3 false // set true and run once to write protect BLK3 data (presently NOT write-protected!)
+// setting READ_WRITE_CUSTOM_BLK3_MAC true will write to BLK3 and permanently set efuse bits specified (presently written once).
+// set it false to use original factory base MAC from BLK1, set true to use MAC shown below as base MAC.
+#define READ_WRITE_CUSTOM_BLK3_MAC false
+#define BLK3_VER  0x0a // version next 1a
+#define BLK3_MAC0 0xe6
+#define BLK3_MAC1 0xcd
+#define BLK3_MAC2 0x43 // next 47
+#define BLK3_MAC3 0xa3 // next ac
+#define BLK3_MAC4 0x6e
+#define BLK3_MAC5 0xb5
 
 #define UPLOAD_USERID  "dts7"
 #define UPLOAD_USERPW  "1234567890"
 
-#define AP_CHANNEL 0 // 1-13
+#define ERASE_DATA_CONFIRM "hsi83NSehaL9Wht"
+
+#define WIFI_COUNTRY "US" // JP, CN
+#define WIFI_MAX_CHANNEL 11 // max is 11 in USA!
+#define AP_MAX_CHANNEL 11 // 1-13
 #define MAX_AP_CLIENTS 1 // 1-4 allowed but for security allow only one
-#define MAX_SHIFT_COUNT 8 // used for the index.html %SCT% max value
+
+// used for hnDecode() for web-pages
+#define MIN_SHIFT_COUNT 1
+#define MAX_SHIFT_COUNT 15
 
 #define CPU_FREQ 80 // 160 MHz standard
 
@@ -51,17 +75,16 @@
 //#define BTN_RESTORE_SSID_PWD    0 // NOTE: sadly, I can't get this pin to work - it's tied in as BOOT
 #define ONBOARD_LED_GPIO2       2
 
-// Input only pins
+// Input only pins (on left top as usb port faces down, second pin down on left is GPI36)
 #define POT_1                   36 // ADC1_0 (2)
-// POT_2 is being used as a switch to boot in softAP mode using
+#define POT_2                   39 // ADC1_3 (3)
+// POT_3 is being used as a switch to boot in softAP mode using
 // SPDT no-center-off switch with outer pins tied to 3V3 and ground
 // In future, make this a center off DPDT tied to two other GPIO pins - the POT
 // pins are input only and I had trouble adding internal pullup/pulldown!
-#define SW_SOFT_AP              34
-
-//#define POT_2                   39 // ADC1_3 (3)
 //#define POT_3                   34 // ADC1_6 (4)
-//#define POT_4                   35 // ADC1_7 (5)
+#define SW_SOFT_AP              34
+#define POT_4                   35 // ADC1_7 (5)
 
 // Inputs with pulldowns (3-states 0,0 1,0 0,1)
 #define SW_1                    18
@@ -96,12 +119,17 @@
 #define TASK_RELAY_B      8
 #define TASK_HOSTNAME     9
 #define TASK_RECONNECT    10
-#define TASK_RESET_PARMS  11
-#define TASK_RESET_SLOTS  12
-#define TASK_TOGGLE       13
-#define TASK_RESTORE      14
-#define TASK_PAGE_REFRESH_REQUEST 15
-#define TASK_WIFI_CONNECT 16
+#define TASK_MAC          11
+#define TASK_RESET_PARMS  12
+#define TASK_RESET_SLOTS  13
+#define TASK_TOGGLE       14
+#define TASK_RESTORE      15
+#define TASK_PAGE_REFRESH_REQUEST 16
+#define TASK_WIFI_CONNECT 17
+#define TASK_MIDICHAN     18
+#define TASK_MIDINOTE_A   19
+#define TASK_MIDINOTE_B   20
+#define TASK_REBOOT       21
 
 // this order can't change unless you change p2.html!
 #define SSR_MODE_OFF  0
@@ -124,6 +152,25 @@
 #define TIMER_2 2
 #define TIMER_3 3
 
+// ledFlashTimer .25ms resolution
+#define LED_FASTFLASH_TIME 1
+#define LED_SLOWFLASH_TIME 4
+
+// ledFlashCounter
+#define LED_PAUSE_COUNT    10 // pause time between digit flash-sequences
+
+// ledSeqState
+#define LEDSEQ_ENDED       0
+#define LEDSEQ_FLASHING    1
+#define LEDSEQ_PAUSED      2
+
+// ledMode, ledSaveMode
+#define LEDMODE_OFF        0
+#define LEDMODE_ON         1
+#define LEDMODE_SLOWFLASH  2
+#define LEDMODE_FASTFLASH  3
+#define LEDMODE_PAUSED     4
+
 #define SSR1_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
 #define SSR2_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
 #define PHASE_MIN               0 // %
@@ -136,6 +183,12 @@
 #define DUTY_CYCLE_B_INIT       50 // percent on (0-100)
 #define LOCKCOUNT_INIT          -1 // unlocked
 #define LOCKPASS_INIT           "****"
+#define MIDICHAN_INIT           MIDICHAN_OFF // off
+#define MIDINOTE_A_INIT         60 // middle C
+#define MIDINOTE_B_INIT         62 // middle D
+#define MIDINOTE_ALL            128 // all notes
+#define MIDICHAN_ALL            0 // all channels
+#define MIDICHAN_OFF            255 // no channels
 
 #define PERUNITS_INIT           1 // 0= 1/2 sec, 1=sec, 2=min, 3=hrs
 #define PERMAX_INIT             6 // 0=reserved, 1=10, 2=20, 3=30... 10=100
@@ -174,13 +227,15 @@
 
 // function prototypes
 void IRAM_ATTR onTimer();
+void FlashSequencer(bool bStart=false);
+void FlashLED();
 void SetWiFiHostName(AsyncWebServerRequest* &request, String &s, String &cmd);
 void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd);
 void WiFiMonitorConnection(bool bDisconnect=false, bool bEraseOldCredentials=false);
 void WiFiStartAP(bool bDisconnect=false, bool bEraseOldCredentials=false);
 void dnsAndServerStart(bool bDisconnect=false);
 void GetPreferences();
-String hnDecode(String sIn);
+//String hnDecode(String sIn, int &errorCode);
 void print_wakeup_reason();
 void notFound(AsyncWebServerRequest *request);
 String processor(const String& var);
@@ -196,8 +251,9 @@ bool ParseRepeatMode(String &s, int16_t &iRepeatMode);
 bool ParseDevAddressAndMode(String &s, int16_t &iDevAddr, int16_t &iDevMode);
 bool ParseDate(String &s, int16_t &iMonth, int16_t &iDay, int16_t &iYear);
 bool ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int16_t &iSecond);
-bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl);
-bool IsLockedAlertPost(AsyncWebServerRequest *request);
+bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bAllowInAP=false);
+bool IsLockedAlertPost(AsyncWebServerRequest *request, bool bAllowInAP=false);
+bool IsLocked();
 
 #endif
 
@@ -211,6 +267,7 @@ extern const char DEFAULT_SOFTAP_SSID[], DEFAULT_SOFTAP_PWD[], DEFAULT_HOSTNAME[
 extern int m_slotCount;
 extern uint8_t sw1Value, sw2Value, oldSw1Value, oldSw2Value;
 extern uint8_t nvSsrMode1, nvSsrMode2, m_taskMode;
+extern uint8_t digitArray[];
 extern uint16_t pot1Value, oldPot1Value;
 extern bool bManualTimeWasSet, bWiFiTimeWasSet, bSoftAP;
 extern bool bRequestManualTimeSync, bRequestWiFiTimeSync;

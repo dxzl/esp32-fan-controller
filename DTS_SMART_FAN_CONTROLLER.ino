@@ -18,6 +18,25 @@
 *********/
 #include "FanController.h"
 
+//#include <ArduinoJson.h>
+//#include <AsyncJson.h>
+
+//#include <Base64.h>
+#include <esp_system.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
+
+//extern "C" {
+//  #include <crypto/base64.h>
+//}
+
+//#include <WiFiUdp.h>
+//#include <AsyncUDP.h>
+//#include <MIDI.h>
+#include <esp_wifi.h>
+#include <AppleMIDI.h>
+USING_NAMESPACE_APPLEMIDI
+
 // FYI:
 // Using the flash-string function to conserve SRAM
 // client.println(F("<H3>Arduino with Ethernet Shield</H2>"));
@@ -43,8 +62,9 @@
 // https://arduino-esp8266.readthedocs.io/en/latest/filesystem.html
 // Date-Time input example: https://blog.startingelectronics.com/using-html-drop-down-select-boxes-for-hour-and-minute-on-arduino-web-server/
 // https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/system/system_time.html
-
+// https://circuits4you.com/2019/03/21/esp8266-url-encode-decode-example/
 // https://randomnerdtutorials.com/esp32-external-wake-up-deep-sleep/
+
 // The ESP32 has 8kB SRAM on the RTC part, called RTC fast memory. The data saved here is not erased
 // during deep sleep. However, it is erased when you press the reset button (the button labeled EN on the ESP32 board).
 // To save data in the RTC memory, you just have to add RTC_DATA_ATTR before a variable definition.
@@ -102,10 +122,10 @@ const char NTP_SERVER2[] = "time.nist.gov";
 
 const char VERSION_STR[] = DTS_VERSION;
 
-const char WEB_PAGE_LIFORM[] = "/serverIndex.html";
-const char WEB_PAGE_INDEX[] = "/index.html";
-const char WEB_PAGE_P1[] = "/p1.html";
-const char WEB_PAGE_P2[] = "/p2.html";
+const char WEB_PAGE_LOGIN[] = "loginIndex.html";
+const char WEB_PAGE_INDEX[] = "index.html";
+const char WEB_PAGE_P1[] = "p1.html";
+const char WEB_PAGE_P2[] = "p2.html";
 
 // these are 15 chars max!
 const char EE_SLOT_PREFIX[]    = "EE_SLOT_"; // will become EE_SLOT_000
@@ -124,14 +144,23 @@ const char EE_PWD[]            = "EE_PWD";
 const char EE_OLDPWD[]         = "EE_OLDPWD";
 const char EE_LOCKCOUNT[]      = "EE_LOCKCOUNT"; // 0xff=unlocked, 0x00=locked
 const char EE_LOCKPASS[]       = "EE_LOCKPASS";
+const char EE_MIDICHAN[]       = "EE_MIDICHAN";
+const char EE_MIDINOTE_A[]     = "EE_MIDINOTE_A";
+const char EE_MIDINOTE_B[]     = "EE_MIDINOTE_B";
+const char EE_MAC[]            = "EE_MAC";
+
+// most signifigant byte bit 0 is multicast bit - do not set
+// most signifigant byte bit 1 is locally administered bit - set this.
+// least signifigant three bytes are unique to manufacturer
+const char DEFAULT_MAC[] = ""; // not set we use chip's MAC... format 42:ad:f2:23:d0
 
 const char DEFAULT_SOFTAP_SSID[] = "dts7";
 const char DEFAULT_SOFTAP_PWD[]  = "1234567890";
 
 const char DEFAULT_HOSTNAME[] = "dts7";
-const char DEFAULT_SSID[]     = "YourRouterSSID";
-const char DEFAULT_PWD[]      = "YourRouterPassword";
-const char OBFUSCATE_STR[]    = "somerandomstringtoobfuscate";
+const char DEFAULT_SSID[]     = "MyRouter";
+const char DEFAULT_PWD[]      = "MyRouterPass";
+const char OBFUSCATE_STR[]    = "jsjdhhruuslldiifjjelsisheefsllsnnduur493ssllejceoos";
 
 // you can type these commands into the HOSTNAME web-edit field and submit the command!
 const char COMMAND_RESET[]   = "reset";
@@ -148,15 +177,13 @@ const char COMMAND_INFO[]    = "info";
 const char COMMAND_UPDATE[]  = "update";
 const char COMMAND_LOCK[]    = "lock";
 const char COMMAND_UNLOCK[]  = "unlock";
-
+const char COMMAND_MAC[]     = "mac";
 
 // Web-page placeholders we fill-in dynamically as the html file is "served"
 // index.html
 const char PH_HOSTNAME[] = "HOSTNAME";
 const char PH_MAXSCT[] = "MAXSCT";
-const char PH_PERMAX[] = "PERMAX";
-const char PH_PERUNITS[] = "PERUNITS";
-const char PH_PERVAL[] = "PERVAL";
+const char PH_PERVARS[] = "PERVARS";
 const char PH_STATE1[] = "STATE1";
 const char PH_STATE2[] = "STATE2";
 const char PH_MODE1[] = "MODE1";
@@ -166,6 +193,7 @@ const char PH_ISAPMODE[] = "ISAPMODE";
 const char PH_PHASE[] = "PHASE";
 const char PH_DC_A[] = "DC_A";
 const char PH_DC_B[] = "DC_B";
+const char PH_P1VARS[] = "P1VARS"; // combination script tag with vars for m_midiChan, m_midiNoteA, m_midiNoteB
 
 // p2.html
 const char PH_DELSTYLE[] = "DELSTYLE";
@@ -173,49 +201,50 @@ const char PH_DELETEITEMS[] = "DELETEITEMS";
 
 // index.html
 const char PARAM_HOSTNAME[]    = "hnEnc";
-const char PARAM_PERMAX[]      = "perMax";
-const char PARAM_PERUNITS[]    = "perUnits";
-const char PARAM_PERVAL[]      = "perVal";
-const char PARAM_STATE1[]      = "stateVal1";
-const char PARAM_STATE2[]      = "stateVal2";
+const char PARAM_PERMAX[]      = "kduxwdhs";
+const char PARAM_PERUNITS[]    = "lwsaohskwtn";
+const char PARAM_PERVAL[]      = "eyobsqkv";
+const char PARAM_STATE1[]      = "qtsclfitj";
+const char PARAM_STATE2[]      = "jthspwnchd";
 
 // loginIndex.html
-const char PARAM_UDID[]   = "hidUdId"; // used un firmware update
-const char PARAM_UDPW[]   = "hidUdPw";
+const char PARAM_UDID[]   = "rckjsoa"; // used un firmware update
+const char PARAM_UDPW[]   = "ejlduje";
 
 // p1.html
-const char PARAM_BUTRST[]     = "butRst"; // restore button press
-const char PARAM_WIFINAME[]   = "hidName"; // set by hidden field on p1.html - variable %ISAPMODE% is replaced by two edit-input fields
-const char PARAM_WIFIPASS[]   = "hidPass"; // data submitted is handled in in processor().
-const char PARAM_PHASE[]      = "phaseVal";
-const char PARAM_DC_A[]       = "dcAVal";
-const char PARAM_DC_B[]       = "dcBVal";
+const char PARAM_BUTRST[]     = "neuddjs"; // restore button press
+const char PARAM_WIFINAME[]   = "gsyegcn"; // set by hidden field on p1.html - variable %ISAPMODE% is replaced by two edit-input fields
+const char PARAM_WIFIPASS[]   = "kcmdheggs"; // data submitted is handled in in processor().
+const char PARAM_PHASE[]      = "ihlexmqdi";
+const char PARAM_DC_A[]       = "wdxkdbrirv";
+const char PARAM_DC_B[]       = "wkdhroucmf";
+const char PARAM_MIDICHAN[]   = "jdupwcdrkq";
+const char PARAM_MIDINOTE_A[] = "udnehrtams";
+const char PARAM_MIDINOTE_B[] = "iendigjebal";
 
 // p2.html
 // received from p2.html when Add button pressed
-const char PARAM_MINUTE[] = "minutes";
-const char PARAM_HOUR[] = "hours";
-const char PARAM_SECOND[] = "seconds";
-const char PARAM_AMPM[] = "pmFlag";
-const char PARAM_DEVICE_MODE[] = "deviceMode";
-const char PARAM_DEVICE_ADDR[] = "deviceAddr";
-const char PARAM_REPEAT_MODE[] = "repeatMode";
-const char PARAM_REPEAT_COUNT[] = "repeatCount";
-const char PARAM_EVERY_COUNT[] = "everyCount";
-const char PARAM_DATE[] = "myDate";
+const char PARAM_MINUTE[] = "uehhxvqiss";
+const char PARAM_HOUR[] = "usheodknw";
+const char PARAM_SECOND[] = "ecfdnngi";
+const char PARAM_AMPM[] = "skwiyvejs";
+const char PARAM_DEVICE_MODE[] = "indgkwtzbw";
+const char PARAM_DEVICE_ADDR[] = "dehyfnmcjflt";
+const char PARAM_REPEAT_MODE[] = "tdjuboal";
+const char PARAM_REPEAT_COUNT[] = "xedswgjfi";
+const char PARAM_EVERY_COUNT[] = "fskenghto";
+const char PARAM_DATE[] = "ehspxm";
 // when Edit button pressed on p2.html
-const char PARAM_EDITITEM[] = "editItem";
-const char PARAM_EDITINDEX[] = "editIndex";
-const char PARAM_DELINDEX[] = "delIndex";
+const char PARAM_EDITINDEX[] = "oelxnctwd";
+const char PARAM_DELINDEX[] = "sonelkb";
 // received from p2.html
-const char PARAM_REPLACEINDEX[] = "replaceIndex";
-const char PARAM_INCLUDETIMINGCYCLE[] = "cbCycle";
-const char PARAM_TIMINGCYCLEINREPEATS[] = "cbRepeats";
-const char PARAM_USEOLDTIMEVALS[] = "useOldTimeVals";
-const char PARAM_DELITEMS[] = "delItems";
-const char PARAM_DATETIME[] = "dateTime";
-const char PARAM_FILEDATA[] = "fileData";
-const char PARAM_ERASEDATA[] = "eraseData";
+const char PARAM_REPLACEINDEX[] = "lqoshrvbs";
+const char PARAM_INCLUDETIMINGCYCLE[] = "oumsjwgave";
+const char PARAM_TIMINGCYCLEINREPEATS[] = "swgdubmxu";
+const char PARAM_USEOLDTIMEVALS[] = "illypwxgc";
+const char PARAM_DATETIME[] = "dkgudalup";
+const char PARAM_FILEDATA[] = "wfonaiecj";
+const char PARAM_ERASEDATA[] = "hduenmsllwu";
 
 // RTC_SLOW_ATTR, RTC_FAST_ATTR, RTC_RODATA_ATTR - read-only
 // (RTC_IRAM_ATTR can be used in a function declaration to put it in RTC memory!)
@@ -228,7 +257,13 @@ int m_slotCount;
 
 // three-position switch with pulldowns on the GPIO pins
 uint8_t sw1Value, sw2Value, oldSw1Value, oldSw2Value;
-uint8_t nvSsrMode1, nvSsrMode2, m_taskMode, m_sct, m_max;
+uint8_t nvSsrMode1, nvSsrMode2, m_taskMode, m_sct, m_minSct, m_maxSct;
+uint8_t m_midiNoteA, m_midiNoteB, m_midiChan;
+
+ // used to flash the ip address least-signifigant digit first, 4th (last) number
+ // 0 is placed at end of sequence, we can flash, say 192.168.1.789 - the 789 part, 9 first...
+uint8_t ledFlashCount, ledFlashCounter, ledDigitCounter, ledSaveMode, ledMode, ledSeqState;
+uint8_t digitArray[4];
 
 // variable for storing the potentiometer value
 uint16_t pot1Value, oldPot1Value;
@@ -236,7 +271,7 @@ uint16_t pot1Value, oldPot1Value;
 bool bWiFiConnected, bWiFiConnecting, bSoftAP, bWiFiDisabled;
 bool bResetOrPowerLoss, bTellP2WebPageToReload;
 bool bManualTimeWasSet, bWiFiTimeWasSet, bValidated;
-bool bRequestManualTimeSync, bRequestWiFiTimeSync;
+bool bRequestManualTimeSync, bRequestWiFiTimeSync, bMidiConnected;
 
 // timers
 uint16_t dutyCycleTimerA, dutyCycleTimerB, periodTimer, savePeriod, phaseTimer;
@@ -252,10 +287,10 @@ time_t m_prevNow;
 t_time_date m_prevDateTime;
 
 // Stores states
-String ledState, ssr1State, ssr2State, swState, inputMessage, inputParam, hostName, m_ssid;
+String ssr1State, ssr2State, swState, hostName, m_ssid, m_mac;
 
 hw_timer_t * m_timer;
-volatile SemaphoreHandle_t timerSemaphore, webInputSemaphore;
+volatile SemaphoreHandle_t timerSemaphore;
 portMUX_TYPE timerMux; // synchronization between main loop and ISR
 
 // Create AsyncWebServer object on port 80
@@ -263,6 +298,18 @@ AsyncWebServer webServer(SERVER_PORT);
 
 // create an instance of Preferences library
 Preferences preferences;
+
+// see definition in AppleMidi.h
+//APPLEMIDI_CREATE_INSTANCE(WiFiUDP, MIDI, "AppleMIDI-ESP32", 5004);
+//                           │       │      │       └──── Local port number
+//                           │       │      └──────────── Name
+//                           │       └─────────────────── MIDI instance name
+//                           └─────────────────────────── Network socket class
+
+// Then wrap it in a Control Surface-compatible MIDI interface
+//FortySevenEffectsMIDI_Interface<decltype(MIDI) &> AppleMIDI_interface = MIDI;
+
+APPLEMIDI_CREATE_INSTANCE(WiFiUDP, RTP_MIDI, "AppleMIDI-ESP32", DEFAULT_CONTROL_PORT);
 
 void notFound(AsyncWebServerRequest *request)
 {
@@ -310,22 +357,38 @@ void setup()
   oldSw1Value = ~sw1Value;
   sw2Value = digitalRead(SW_2);
   oldSw2Value = ~sw2Value;
-      
+
+  fiveSecondTimer = FIVE_SECOND_TIME-2; // call PollApSwitch() in 2-3 seconds
+
+  // init blue LED on the ESP32 daughter-board      
+  ledMode = LEDMODE_OFF;
+  ledSaveMode = LEDMODE_OFF;
+  ledSeqState = LEDSEQ_ENDED;
+  ledFlashTimer = 0;
+  ledFlashCount = 0;
+  ledFlashCounter = 0;
+  ledDigitCounter = 0;
+  digitArray[0] = 0;
   digitalWrite(ONBOARD_LED_GPIO2, LOW);
-  ledState = "OFF";
   
   bootCount = 0;
   clockSetDebounceTimer = 0;
 
+  m_midiChan = 0; // off is >= 17, omni is 0, 1-16
+  m_midiNoteA = 0; // 0-127
+  m_midiNoteB = 0; // 0-127
   m_taskTimer = 0;
   m_taskMode = 0;
   m_taskData = 0;
-  m_max = 1;
-  m_sct = 1;
+  m_lockCount = 0;
+  m_minSct = MIN_SHIFT_COUNT;
+  m_maxSct = MAX_SHIFT_COUNT;
+  m_sct = m_minSct;
   
   m_timer = NULL;
   timerMux = portMUX_INITIALIZER_UNLOCKED;
-  
+
+  bMidiConnected = false;
   bWiFiConnected = false;
   bWiFiConnecting = false;
   bWiFiDisabled = false;
@@ -345,14 +408,113 @@ void setup()
   //  ESP_SLEEP_WAKEUP_UART Wakeup caused by UART (light sleep only)
   bResetOrPowerLoss = (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) ? true : false; // if reset or power loss
 
-// NOTE: GetPreferences() sets period (which is in percent) and nvPeriodMax from
-// SPIFFS non-volitile memory
-#if CLEAR_PREFS
-  ErasePreferences();
-#endif
-#if CLEAR_SLOTS
-  EraseTimeSlots();
-#endif
+  // Initialize SPIFFS
+  if(!SPIFFS.begin(true))
+  {
+    prtln("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
+  // It appears that we can write to BLK3 using esp_efuse_write_field_blob() and it will
+  // persist through power-cycling and resets. But if you reflash the program it is erased.
+  // To PERMANENTLY write it, set BURN_EFUSE_ENABLED true
+  #if READ_WRITE_CUSTOM_BLK3_MAC
+
+  uint8_t ver;
+  if (esp_efuse_read_field_blob(ESP_EFUSE_MAC_CUSTOM_VER, &ver, 8) == ESP_OK)
+  {
+    #if !FORCE_NEW_EFUSE_BITS_ON
+    if (ver == 0)
+    {
+    #endif
+      ver = BLK3_VER;
+      if (esp_efuse_write_field_blob(ESP_EFUSE_MAC_CUSTOM_VER, &ver, 8) == ESP_OK)
+        prtln("wrote custom version to efuse: " + String(ver));
+      else
+        prtln("error trying to write custom version: " + String(ver));
+    #if !FORCE_NEW_EFUSE_BITS_ON
+    }
+    else
+      prtln("custom version read as:" + String(ver));
+    #endif
+  }
+  else
+    prtln("error trying to read custom efuse version...");
+  
+  // One-time burn MAC address
+  // uint8_t mac[6]; // = {0xe6, 0xcd, 0x43, 0xa3, 0x6e, 0xb5};
+  // esp_err_t esp_efuse_read_field_blob(ESP_EFUSE_MAC_CUSTOM, mac, 48); // check first to make sure empty (all 0s)!
+  // esp_err_t esp_efuse_write_field_blob(const esp_efuse_desc_t *field[], const void *src, size_t src_size_bits)
+  // returns ESP_OK
+  // void esp_efuse_burn_new_values(void)
+  // esp_base_mac_addr_set(); // set all MAC addresses to BLK3 Mac
+  // https://docs.espressif.com/projects/esp-idf/en/v3.1.7/api-reference/system/base_mac_address.html
+  // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/efuse.html
+
+  //int numBits = esp_efuse_get_field_size(ESP_EFUSE_MAC_CUSTOM);
+  //prtln("bits in custom MAC field = " + String(numBits)); // 48 bits
+  //int numBytes = numBits/8;
+  uint8_t mac[6] = {0};
+  if (esp_efuse_read_field_blob(ESP_EFUSE_MAC_CUSTOM, mac, 48) == ESP_OK)
+  {
+    bool bIsEmpty = true;
+    for (int ii=0; ii < 6; ii++)
+    {
+      prtln("MAC[" + String(ii) + "] = " + String(mac[ii]));
+      if (bIsEmpty && mac[ii] != 0)
+        bIsEmpty = false;
+    }
+    #if !FORCE_NEW_EFUSE_BITS_ON
+    if (bIsEmpty)
+    {
+    #endif
+      mac[0] = BLK3_MAC0;
+      mac[1] = BLK3_MAC1;
+      mac[2] = BLK3_MAC2;
+      mac[3] = BLK3_MAC3;
+      mac[4] = BLK3_MAC4;
+      mac[5] = BLK3_MAC5;
+      // burn the efuse permanently (be careful!)
+      if (esp_efuse_write_field_blob(ESP_EFUSE_MAC_CUSTOM, mac, 48) == ESP_OK)
+        prtln("wrote new efuse MAC to BLK3 registers!");
+      else
+        prtln("error writing new efuse MAC into BLK3...");
+    #if !FORCE_NEW_EFUSE_BITS_ON
+    }
+    else
+      prtln("successfully read custom base MAC address from BLK3 efuse...");
+    #endif
+      
+    prtln("setting custom base MAC address from BLK3 efuse...");
+    esp_base_mac_addr_set(mac); // set all MAC addresses to BLK3 Mac
+  }
+  else if (esp_efuse_mac_get_default(mac) == ESP_OK)
+  {
+    prtln("setting default base MAC address...");
+    esp_base_mac_addr_set(mac); // set all MAC addresses to BLK3 Mac
+  }
+  else
+    prtln("error reading default base MAC address...");
+
+  #endif // end #if WRITE_CUSTOM_BLK3_MAC
+
+  #if WRITE_PROTECT_BLK3
+  
+    if (esp_efuse_set_write_protect(EFUSE_BLK3) == ESP_OK)
+      prtln("BLK3 efuse write-protect set!");
+    else
+      prtln("BLK3 efuse already write-protected!");
+
+  #endif
+      
+  // NOTE: GetPreferences() sets period (which is in percent) and nvPeriodMax from
+  // SPIFFS non-volitile memory
+  #if CLEAR_PREFS
+    ErasePreferences();
+  #endif
+  #if CLEAR_SLOTS
+    EraseTimeSlots();
+  #endif
 
   GetPreferences();
   
@@ -367,24 +529,6 @@ void setup()
 //  setenv("TZ", TIMEZONE, 1); // Set timezone
 //  tzset();
 
-  // Initialize SPIFFS
-  if(!SPIFFS.begin(true))
-  {
-    prtln("An Error has occurred while mounting SPIFFS");
-    return;
-  }
-
-//    WL_CONNECTED: assigned when connected to a WiFi network;
-//    WL_NO_SHIELD: assigned when no WiFi shield is present;
-//    WL_IDLE_STATUS: it is a temporary status assigned when WiFi.begin() is called and
-//      remains active until the number of attempts expires (resulting in WL_CONNECT_FAILED)
-//      or a connection is established (resulting in WL_CONNECTED);
-//    WL_NO_SSID_AVAIL: assigned when no SSID are available;
-//    WL_SCAN_COMPLETED: assigned when the scan networks is completed;
-//    WL_CONNECT_FAILED: assigned when the connection fails for all the attempts;
-//    WL_CONNECTION_LOST: assigned when the connection is lost;
-//    WL_DISCONNECTED: assigned when disconnected from a network;   // Connect to Wi-Fi
-  //WiFi.mode(WIFI_STA);
   webServer.onNotFound(notFound);
   
   //Let’s say we are designing a network application. Let’s list down few
@@ -405,54 +549,42 @@ void setup()
     // flag = true saves as attachment! String() is the content-type
     // processor is the handler function, SPIFFS serves page from file-system
     // /index.html is the file to serve based from root '/'
-//    request->send(SPIFFS, "/index.html", String(), false, processor);
-
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/index.html", String(), false, processor);
-    SetHeaders(response);
-    request->send(response);
+    SendWithHeaders(request, "/index.html");
   });
   
   webServer.on("/index.html", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/index.html", String(), false, processor);
-    SetHeaders(response);
-    request->send(response);
+    SendWithHeaders(request, "/index.html");
   });
 
-  // Route for p1 web page
+  webServer.on("/help.html", HTTP_GET, [](AsyncWebServerRequest *request)
+  {
+    SendWithHeaders(request, "/help.html");
+  });
+
   webServer.on("/p1.html", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-//    request->send(SPIFFS, "/p1.html", String(), false, processor);
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/p1.html", String(), false, processor);
-    SetHeaders(response);
-    request->send(response);
+    SendWithHeaders(request, "/p1.html");
   });
   
-  // Route for p2 web page
   webServer.on("/p2.html", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-//    request->send(SPIFFS, "/p2.html", String(), false, processor);
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/p2.html", String(), false, processor);
-    SetHeaders(response);
-    request->send(response);
+    SendWithHeaders(request, "/p2.html");
   });
   
-  // Route to load p2.js file
   webServer.on("/p2.js", HTTP_GET, [](AsyncWebServerRequest *request)
   {
     request->send(SPIFFS, "/p2.js", "text/javascript");
-//    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/p2.js", "text/javascript");
-//    SetHeaders(response);
-//    request->send(response);
   });
 
-  // Route to load sct.js file
+  webServer.on("/jquery.min.js", HTTP_GET, [](AsyncWebServerRequest *request)
+  {
+    request->send(SPIFFS, "/jquery.min.js", "text/javascript");
+  });
+
   webServer.on("/sct.js", HTTP_GET, [](AsyncWebServerRequest *request)
   {
     request->send(SPIFFS, "/sct.js", "text/javascript");
-//    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/sct.js", "text/javascript");
-//    SetHeaders(response);
-//    request->send(response);
   });
 
   // Route to load style.css files
@@ -468,37 +600,98 @@ void setup()
   {
     request->send(SPIFFS, "/style3.css", "text/css");
   });
+  webServer.on("/led.css", HTTP_GET, [](AsyncWebServerRequest *request)
+  {
+    request->send(SPIFFS, "/led.css", "text/css");
+  });
 
   // loginIndex is launched when we enter "c update" and press submit while on p1.html in AP mode
   webServer.on("/loginIndex", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/loginIndex.html", String(), false, processor);
-    response->addHeader("Connection", "close");
-    request->send(response);
+    // block web update if locked unless in AP mode
+    if (IsLockedAlertGet(request, WEB_PAGE_P1, true))
+      return;
+      
+    // set USE_UPDATE_LOGIN true for secure password-protected login screen required to update
+    // set false to simplify and go directly to file-selection screen.
+    #if USE_UPDATE_LOGIN
+      SendWithHeaders(request, "/loginIndex.html");
+    #else
+      bValidated = true;
+      SendWithHeaders(request, "/serverIndex.html");
+    #endif
   });
 
-// don't enable this - it will negate security if you do - we send it below...
+  webServer.on("/serverIndex.html", HTTP_GET, [](AsyncWebServerRequest *request)
+  {
+    // block web update if locked unless in AP mode
+    if (IsLockedAlertGet(request, WEB_PAGE_P1, true))
+      return;
+
+    if (bValidated)
+      request->send(SPIFFS, "/serverIndex.html", "text/javascript");
+  });
+
+  #if USE_UPDATE_LOGIN
+  webServer.on("/getLIform", HTTP_GET, [] (AsyncWebServerRequest *request)
+  {
+    // block web update if locked unless in AP mode
+    if (IsLockedAlertGet(request, WEB_PAGE_P1, true))
+      return;
+
+    if (request->hasParam(PARAM_UDID) && request->hasParam(PARAM_UDPW))
+    {
+      int errorCodeId, errorCodePw;
+      String id = hnDecode(request->getParam(PARAM_UDID)->value(), errorCodeId);
+      String pw = hnDecode(request->getParam(PARAM_UDPW)->value(), errorCodePw);
+      if (id == UPLOAD_USERID && pw == UPLOAD_USERPW) // change to stored values - maybe use hostName (???)
+      {
+        bValidated = true;
+        SendWithHeaders(request, "/serverIndex.html");
+      }
+      else
+      {
+        bValidated = false;
+        // hnDecode returns empty string if error
+        // returns errorCode -2 if empty string, -3 if bad validation prefix,
+        // -4 if bad checksum, -5 if have validation but empty string thereafter
+        if (errorCodeId < -1 || errorCodePw < -1)        
+          request->send(200, "text/html", "<script>alert('Transmission error - please retry!');location.href = '" + String(WEB_PAGE_LOGIN) + "'</script>");
+        else
+          request->send(200, "text/html", "<script>alert('Incorrect credentials!');location.href = '" + String(WEB_PAGE_LOGIN) + "'</script>");
+      };
+        
+      id = OBFUSCATE_STR; // obfuscate memory for security
+      pw = OBFUSCATE_STR;
+    }
+  });
+  #endif
+
   // not able to get this working thus far - to eliminate much of the above...
   //webServer.serveStatic("/", SPIFFS, "/www/"); // upload to root directory (if you add "www" directory in "data", last param becomes "/www/")
   
   webServer.on("/update", HTTP_POST, [](AsyncWebServerRequest *request)
   {
-    if (IsLockedAlertPost(request))
+    if (IsLockedAlertPost(request, true)) // allow in AP!
       return;
 
     if (!bValidated)
-    {
       request->send(204, "text/html", "");
-      return;
+    else
+    {
+      bool shouldReboot = !Update.hasError();
+      AsyncWebServerResponse *r = request->beginResponse(200, "text/plain", shouldReboot ? "OK" : "FAIL");
+      r->addHeader("Connection", "close");
+      request->send(r);
+  
+      if (shouldReboot)
+      {
+        m_taskMode = TASK_REBOOT;
+        m_taskTimer = TASK_TIME;
+      }
+      else
+        SendWithHeaders(request, "/serverIndex.html");
     }
-      
-    bool shouldReboot = !Update.hasError();
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", shouldReboot?"OK":"FAIL");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    delay(1000);
-    ESP.restart();
-    
   },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final)
   {
     if(index == 0)
@@ -561,12 +754,15 @@ void setup()
     }
     yield();
   });
+
+//  uint8_t* g_buf = null;
+//  uint8_t* p_buf = null;
   
   // Route to set GPIO SSR_1 to HIGH
   webServer.on("/buttons", HTTP_GET, [](AsyncWebServerRequest *request){
     if (!IsLockedAlertGet(request, WEB_PAGE_INDEX)){
       if (request->hasParam("A")){
-        String buttonMode = request->getParam("A")->value();
+        String buttonMode = hnDecode(request->getParam("A")->value());
         if (buttonMode == "0"){
           if (nvSsrMode1 != SSR_MODE_OFF){
             nvSsrMode1 = SSR_MODE_OFF;
@@ -593,7 +789,7 @@ void setup()
         }
       }
       else if (request->hasParam("B")){
-        String buttonMode = request->getParam("B")->value();
+        String buttonMode = hnDecode(request->getParam("B")->value());
         if (buttonMode == "0"){
           if (nvSsrMode2 != SSR_MODE_OFF){
             nvSsrMode2 = SSR_MODE_OFF;
@@ -620,39 +816,13 @@ void setup()
         }
       }
     }
-    request->send(SPIFFS, "/index.html", String(), false, processor);
+    request->send(204, "text/html", "");
+//    request->send(SPIFFS, "/index.html", String(), false, processor);
   });
   
-  webServer.on("/getLIform", HTTP_GET, [] (AsyncWebServerRequest *request)
-  {
-    if (request->hasParam(PARAM_UDID) && request->hasParam(PARAM_UDPW))
-    {
-      String id = hnDecode(request->getParam(PARAM_UDID)->value());
-      String pw = hnDecode(request->getParam(PARAM_UDPW)->value());
-      if (id == UPLOAD_USERID && pw == UPLOAD_USERPW) // change to stored values - maybe use hostName (???)
-      {
-        bValidated = true;
-        AsyncWebServerResponse *r = request->beginResponse(SPIFFS, WEB_PAGE_LIFORM, String(), false, processor);
-        r->addHeader("Connection", "close");
-        request->send(r);
-      }
-      else
-      {
-        bValidated = false;
-        request->send(200, "text/html", "<script>alert('Incorrect credentials!');location.href = '" + String(WEB_PAGE_INDEX) + "'</script>");
-      };
-        
-      id = OBFUSCATE_STR; // obfuscate memory for security
-      pw = OBFUSCATE_STR;
-    }
-  });
-
   webServer.on("/getIndex", HTTP_GET, [] (AsyncWebServerRequest *request)
   {
     byte iStatus = 0; // status 0 = no send needed at end, 1 = OK response, 2 = fail response
-    
-    inputMessage = "";
-    inputParam = "";
     
     String s = ""; // if this in not empty later, we send it as code 200 to the client
     // index.html: hostName perMax perVal perUnits
@@ -661,21 +831,23 @@ void setup()
     
     if (request->hasParam(PARAM_STATE1))
       // this sends outlet mode and current state to javascript in our HTML web-page
-      s = "Outlet1: <strong> " + ssr1State + ", " + SsrModeToString(nvSsrMode1) + "</strong>";
+//      s = "Outlet1: <strong> " + ssr1State + ", " + SsrModeToString(nvSsrMode1) + "</strong>";
+      s = ssr1State + "," + SsrModeToString(nvSsrMode1);
     else if (request->hasParam(PARAM_STATE2))
-      s = "Outlet2: <strong> " + ssr2State + ", " + SsrModeToString(nvSsrMode2) + "</strong>";
+//      s = "Outlet2: <strong> " + ssr2State + ", " + SsrModeToString(nvSsrMode2) + "</strong>";
+      s = ssr2State + "," + SsrModeToString(nvSsrMode2);
     else if (request->hasParam(PARAM_HOSTNAME))
     {
-      inputMessage = request->getParam(PARAM_HOSTNAME)->value();
-      inputParam = PARAM_HOSTNAME;
-
-      String cmd = hnDecode(inputMessage);
+      int errorCode;
+      String cmd = hnDecode(request->getParam(PARAM_HOSTNAME)->value(), errorCode);
       cmd.trim();
       
       // process commands first... "c somecommand"
-      if (cmd.length() > 2 && (cmd[0] == 'c' || cmd[0] == 'C') && cmd[1] == ' ')
+      if (errorCode < -1)
+        s = "<script>alert('Transmission error - please try again!');";
+      else if (cmd.length() > 2 && (cmd[0] == 'c' || cmd[0] == 'C') && cmd[1] == ' ')
         ProcessCommand(request, s, cmd); // all by reference!
-      else if (m_lockCount == 0xff) // set WiFi hostName
+      else if (!IsLocked()) // set WiFi hostName
         SetWiFiHostName(request, s, cmd);
       else
         s = "<script>alert('Interface is locked!');";
@@ -691,59 +863,50 @@ void setup()
       // locked commands...  
       if (request->hasParam(PARAM_PERMAX))
       {
-        inputMessage = request->getParam(PARAM_PERMAX)->value();
-        inputParam = PARAM_PERMAX;
-        perMax = inputMessage.toInt();
-        m_taskMode = TASK_PERMAX;
-        m_taskTimer = TASK_TIME;
-        iStatus = 1;
+        String cmd = hnDecode(request->getParam(PARAM_PERMAX)->value());
+        if (cmd.length() > 0)
+        {
+          perMax = cmd.toInt();
+          m_taskMode = TASK_PERMAX;
+          m_taskTimer = TASK_TIME;
+          iStatus = 1;
+        }
       }
       else if (request->hasParam(PARAM_PERUNITS))
       {
-        inputMessage = request->getParam(PARAM_PERUNITS)->value();
-        inputParam = PARAM_PERUNITS;
-        perUnits = inputMessage.toInt();
-        m_taskMode = TASK_PERUNITS;
-        m_taskTimer = TASK_TIME;
-        iStatus = 1;
+        String cmd = hnDecode(request->getParam(PARAM_PERUNITS)->value());
+        if (cmd.length() > 0)
+        {
+          perUnits = cmd.toInt();
+          m_taskMode = TASK_PERUNITS;
+          m_taskTimer = TASK_TIME;
+          iStatus = 1;
+        }
       }
       else if (request->hasParam(PARAM_PERVAL))
       {
-        inputMessage = request->getParam(PARAM_PERVAL)->value();
-        inputParam = PARAM_PERVAL;
-        perVal = inputMessage.toInt();
-        m_taskMode = TASK_PERVAL;
-        m_taskTimer = TASK_TIME;
-        iStatus = 1;
+        String cmd = hnDecode(request->getParam(PARAM_PERVAL)->value());
+        if (cmd.length() > 0)
+        {
+          perVal = cmd.toInt();
+          m_taskMode = TASK_PERVAL;
+          m_taskTimer = TASK_TIME;
+          iStatus = 1;
+        }
       }
     }
     
     // 200 = OK
     // 204 = OK but No Content
-    //request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
-    //                                 + inputParam + ") with value: " + inputMessage +
-    //                                 "<br><a href=\"/\">Return to Home Page</a>");
     if (s != "")
       request->send(200, "text/html", s.c_str());
     else if (iStatus == 1)
       request->send(204, "text/html", "");
-    else if (iStatus == 2)
-    {
-      s = "<script>alert('Out of range (" + inputParam + ") with value: " + inputMessage + "');location.href = '" + String(WEB_PAGE_INDEX) + "';</script>";
-      request->send(200, "text/html", s.c_str());
-    }
-    
-    // Give a semaphore that we can check in the loop (just prints the inputMessege)
-    xSemaphoreGiveFromISR(webInputSemaphore, NULL);
   });
   
-      
   webServer.on("/getP1", HTTP_GET, [] (AsyncWebServerRequest *request)
   {
     byte iStatus = 0; // status 0 = no send needed at end, 1 = OK response
-    
-    inputMessage = "";
-    inputParam = "";
     
     String s = ""; // if this in not empty later, we send it as code 200 to the client
     // index.html: hostName perMax perVal perUnits
@@ -755,42 +918,89 @@ void setup()
       
     if (request->hasParam(PARAM_PHASE))
     {
-      inputMessage = request->getParam(PARAM_PHASE)->value();
-      inputParam = PARAM_PHASE;
-      phase = inputMessage.toInt();
-      if (phase < PHASE_MIN)
-        phase = PHASE_MIN;
-      else if (phase > PHASE_MAX)
-        phase = PHASE_MAX;
-      m_taskMode = TASK_PHASE;
-      m_taskTimer = TASK_TIME;
-      iStatus = 1;
+      String cmd = hnDecode(request->getParam(PARAM_PHASE)->value());
+      if (cmd.length() > 0)
+      {
+        phase = cmd.toInt();
+        if (phase < PHASE_MIN)
+          phase = PHASE_MIN;
+        else if (phase > PHASE_MAX)
+          phase = PHASE_MAX;
+        m_taskMode = TASK_PHASE;
+        m_taskTimer = TASK_TIME;
+        iStatus = 1;
+      }
     }
     else if (request->hasParam(PARAM_DC_A))
     {
-      inputMessage = request->getParam(PARAM_DC_A)->value();
-      inputParam = PARAM_DC_A;
-      dutyCycleA = inputMessage.toInt();
-      if (dutyCycleA < DUTY_CYCLE_MIN)
-        dutyCycleA = DUTY_CYCLE_MIN;
-      else if (dutyCycleA > DUTY_CYCLE_MAX)
-        dutyCycleA = DUTY_CYCLE_MAX;
-      m_taskMode = TASK_DCA;
-      m_taskTimer = TASK_TIME;
-      iStatus = 1;
+      String cmd = hnDecode(request->getParam(PARAM_DC_A)->value());
+      if (cmd.length() > 0)
+      {
+        dutyCycleA = cmd.toInt();
+        if (dutyCycleA < DUTY_CYCLE_MIN)
+          dutyCycleA = DUTY_CYCLE_MIN;
+        else if (dutyCycleA > DUTY_CYCLE_MAX)
+          dutyCycleA = DUTY_CYCLE_MAX;
+        m_taskMode = TASK_DCA;
+        m_taskTimer = TASK_TIME;
+        iStatus = 1;
+      }
     }
     else if (request->hasParam(PARAM_DC_B))
     {
-      inputMessage = request->getParam(PARAM_DC_B)->value();
-      inputParam = PARAM_DC_B;
-      dutyCycleB = inputMessage.toInt();
-      if (dutyCycleB < DUTY_CYCLE_MIN)
-        dutyCycleB = DUTY_CYCLE_MIN;
-      else if (dutyCycleB > DUTY_CYCLE_MAX)
-        dutyCycleB = DUTY_CYCLE_MAX;
-      m_taskMode = TASK_DCB;
-      m_taskTimer = TASK_TIME;
-      iStatus = 1;
+      String cmd = hnDecode(request->getParam(PARAM_DC_B)->value());
+      if (cmd.length() > 0)
+      {
+        dutyCycleB = cmd.toInt();
+        if (dutyCycleB < DUTY_CYCLE_MIN)
+          dutyCycleB = DUTY_CYCLE_MIN;
+        else if (dutyCycleB > DUTY_CYCLE_MAX)
+          dutyCycleB = DUTY_CYCLE_MAX;
+        m_taskMode = TASK_DCB;
+        m_taskTimer = TASK_TIME;
+        iStatus = 1;
+      }
+    }
+    else if (request->hasParam(PARAM_MIDICHAN))
+    {
+      String cmd = hnDecode(request->getParam(PARAM_MIDICHAN)->value());
+      if (cmd.length() > 0)
+      {
+        m_midiChan = cmd.toInt();
+        m_taskMode = TASK_MIDICHAN;
+        m_taskTimer = TASK_TIME;
+        iStatus = 1; // send ok but no data back
+      }
+    }
+    else if (request->hasParam(PARAM_MIDINOTE_A))
+    {
+      String cmd = hnDecode(request->getParam(PARAM_MIDINOTE_A)->value());
+      if (cmd.length() > 0)
+      {
+        uint8_t tmp = cmd.toInt();
+        if (tmp <= 128 && tmp != GetPreferenceUChar(EE_MIDINOTE_A, MIDINOTE_A_INIT))
+        {
+          m_midiNoteA = tmp;
+          m_taskMode = TASK_MIDINOTE_A;
+          m_taskTimer = TASK_TIME;
+          iStatus = 1; // send ok but no data back
+        }
+      }
+    }
+    else if (request->hasParam(PARAM_MIDINOTE_B))
+    {
+      String cmd = hnDecode(request->getParam(PARAM_MIDINOTE_B)->value());
+      if (cmd.length() > 0)
+      {
+        uint8_t tmp = cmd.toInt();
+        if (tmp <= 128 && tmp != GetPreferenceUChar(EE_MIDINOTE_B, MIDINOTE_B_INIT))
+        {
+          m_midiNoteB = tmp;
+          m_taskMode = TASK_MIDINOTE_B;
+          m_taskTimer = TASK_TIME;
+          iStatus = 1; // send ok but no data back
+        }
+      }
     }
     else if (request->hasParam(PARAM_BUTRST))
     {
@@ -798,7 +1008,6 @@ void setup()
       {
         m_taskMode = TASK_RESTORE;
         m_taskTimer = TASK_TIME;
-        prtln("Received command to restore WiFi credentials!");
         s = "<script>alert('SSID and password reset to previous values!');";
       }
       else
@@ -808,11 +1017,19 @@ void setup()
     {
       if (bSoftAP)
       {
-        String valN = hnDecode(request->getParam(PARAM_WIFINAME)->value());
+        int errorCodeN, errorCodeP;
+        String valN = hnDecode(request->getParam(PARAM_WIFINAME)->value(), errorCodeN);
         int lenN = valN.length();
-        String valP = hnDecode(request->getParam(PARAM_WIFIPASS)->value());
+        String valP = hnDecode(request->getParam(PARAM_WIFIPASS)->value(), errorCodeP);
         int lenP = valP.length();
-        if (lenN >= 1 && lenN <= 32 && lenP >= 1 && lenP <= 63)
+
+        if (errorCodeN < -1 || errorCodeP < -1)
+        {
+          s = "<script>alert('Transmission error - please try again!');";
+          prtln("errorCodeN = " + String(errorCodeN));
+          prtln("errorCodeP = " + String(errorCodeP));
+        }
+        else if (lenN >= 1 && lenN <= 32 && lenP >= 1 && lenP <= 63)
         {
           if (valN[0] != ' ' && valN[lenN-1] != ' ' && valP[0] != ' ' && valP[lenP-1] != ' ')
           {
@@ -837,7 +1054,16 @@ void setup()
             s = "<script>alert('Leading or trailing spaces not allowed!);";
         }
         else
+        {
           s = "<script>alert('SSID is max 32 chars and pass is max 63 chars!');";
+          
+          //prtln("Note: if lenP or lenN is 0, there's either a bad checksum OR firewall-issue for your browser and javascript.");
+          //prtln("lenP=" + String(lenP) + ", lenN=" + String(lenN));
+          //prtln("Pass decoded as \"" + valP + "\"");
+          //prtln("SSID decoded as \"" + valN + "\"");
+          //prtln("Sct=" + String(m_sct));
+          //prtln("maxSct=" + String(m_maxSct));
+        }
         // obfuscate memory for security
         valP = OBFUSCATE_STR;
         lenP = 0;
@@ -850,15 +1076,189 @@ void setup()
     
     // 200 = OK
     // 204 = OK but No Content
-    //request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
-    //                                 + inputParam + ") with value: " + inputMessage +
-    //                                 "<br><a href=\"/\">Return to Home Page</a>");
     if (s != "")
       request->send(200, "text/html", s.c_str());
     else if (iStatus == 1)
       request->send(204, "text/html", "");
   });
   
+  webServer.on("/p2Form", HTTP_POST, [](AsyncWebServerRequest *request)
+  {
+    if (IsLockedAlertPost(request))
+      return;
+
+    int count = request->params();
+    //prtln("#parms: " + String(count));
+    
+    if (count == 0)
+      return;
+      
+    byte iStatus = 0; // status 0 = no send needed at end, 1 = OK response, 2 = fail response
+    String s = ""; // if this in not empty later, we send it as code 200 to the client
+
+    //if (request->multipart())
+    //  prtln("request is multipart!");
+      
+    t_event t = {0};
+    
+    uint16_t tempHour = 0;
+    bool bTempPmFlag = false;
+    bool bTempIncludeCycleTiming = false; // allows us to record cycle-timing, such as phase and duty-cycle, into this event
+    bool bTempCycleTimingInRepeats = false; // apply cycle-timing for repeat-events
+    bool bUseOldTimeVals = false; // in a slot-replace after editing, keep old slot's timing cycle values
+    int repIndex = -1; // if this is -1 we add an event rather than replace
+    
+    // cancel pending refresh task
+    if (m_taskMode == TASK_PAGE_REFRESH_REQUEST)
+    {
+      m_taskTimer = 0;
+      bTellP2WebPageToReload = false;
+    }
+    
+    for (int ii = 0; ii < count; ii++)
+    {
+      AsyncWebParameter* p = request->getParam(ii);
+      if (p == 0) continue;
+      
+      if(p->isFile())
+      {
+       prtln("_FILE: " + p->name() + ", " + p->value());
+       continue;
+      }
+
+      if(p->isPost())
+      {
+       prtln("_POST: " + p->name() + ", " + p->value());
+       continue;
+      }
+       
+      String sName = p->name();
+      String sVal = hnDecode(p->value());
+
+      //prtln("hnDecode: " + sName + ":" + sVal);
+      
+      int iVal = sVal.toInt();
+      if (sName == PARAM_REPLACEINDEX)
+        repIndex = iVal;
+      else if (sName == PARAM_DATE)
+      {
+        // 2020-08-08
+        String sYear = sVal.substring(0,4);
+        t.timeDate.year = sYear.toInt();
+        String sMonth = sVal.substring(5,7);
+        t.timeDate.month = sMonth.toInt();
+        if (t.timeDate.month > 12)
+          t.timeDate.month = 1;
+        String sDay = sVal.substring(8,10);
+        t.timeDate.day = sDay.toInt();
+        if (t.timeDate.day < 1 || t.timeDate.day > 31)
+          t.timeDate.day = 1;
+      }
+      else if (sName == PARAM_HOUR)
+        tempHour = iVal; // 12-hour format!
+      else if (sName == PARAM_MINUTE)
+        t.timeDate.minute = iVal;
+      else if (sName == PARAM_SECOND)
+        t.timeDate.second = iVal;
+      else if (sName == PARAM_AMPM)
+        bTempPmFlag = (iVal > 0) ? true : false; // PM if 1, AM if 0
+      else if (sName == PARAM_REPEAT_MODE)
+        t.repeatMode = iVal;
+      else if (sName == PARAM_REPEAT_COUNT)
+        t.repeatCount = iVal;
+      else if (sName == PARAM_EVERY_COUNT)
+        t.everyCount = iVal;
+      else if (sName == PARAM_DEVICE_ADDR)
+        t.deviceAddr = iVal;
+      else if (sName == PARAM_DEVICE_MODE)
+        t.deviceMode = iVal;
+      else if (sName == PARAM_USEOLDTIMEVALS)
+        bUseOldTimeVals = iVal ? true : false; // set in response to javascript "confirm" dialog in p2.js
+      else if (sName == PARAM_INCLUDETIMINGCYCLE)
+        // this is a checkbox - weirdly, it reports "on" if checked and no parameter is sent
+        // at all if unchecked.
+        bTempIncludeCycleTiming = (sVal == "on") ? true : false; // include current cycle-timing if 1
+      else if (sName == PARAM_TIMINGCYCLEINREPEATS)
+        bTempCycleTimingInRepeats = (sVal == "on") ? true : false; // include current cycle-timing if 1
+    }
+    
+    // convert 12-hour am/pm to 0-23, 24-hour time
+    if (bTempPmFlag)
+    {
+      if (tempHour != 12)
+        tempHour += 12;
+    }
+    else if (tempHour == 12) // 1-11am is 1-11, 12 midnight is 0
+      tempHour = 0;
+      
+    t.timeDate.hour = tempHour;
+
+    t.timeDate.dayOfWeek = MyDayOfWeek(t.timeDate.day, t.timeDate.month, t.timeDate.year);
+
+    t.bIncludeCycleTiming = bTempIncludeCycleTiming;
+    t.bCycleTimingInRepeats = bTempCycleTimingInRepeats;
+    
+    if (bTempIncludeCycleTiming)
+    {
+      t_event t2;
+      // if user has chosen to keep old cycle-values, load them
+      if (bUseOldTimeVals && repIndex >= 0 && GetTimeSlot(repIndex, t2))
+      {
+        // move old slot's cycle-timing vals to new slot
+        t.dutyCycleA = t2.dutyCycleA;
+        t.dutyCycleB = t2.dutyCycleB;
+        t.phase = t2.phase;
+        t.perUnits = t2.perUnits;
+        t.perMax = t2.perMax;
+        t.perVal = t2.perVal;
+      }
+      else
+      {
+        t.dutyCycleA = dutyCycleA;
+        t.dutyCycleB = dutyCycleB;
+        t.phase = phase;
+        t.perUnits = perUnits;
+        t.perMax = perMax;
+        t.perVal = perVal;
+      }
+    }
+    else
+    {
+      t.dutyCycleA = 0xff;
+      t.dutyCycleB = 0xff;
+      t.phase = 0xff;
+      t.perUnits = 0xff;
+      t.perMax = 0xff;
+      t.perVal = 0xffff;
+    }
+    
+    t.bEnable = true;
+
+    if (repIndex >= 0)      
+    {
+      if (repIndex < m_slotCount && PutTimeSlot(repIndex, t))
+        s = "Replaced timeslot...";
+      else
+        s = "Unable to replace timeslot " + String(repIndex) + "...";
+    }
+    else if (m_slotCount < MAX_TIME_SLOTS)
+    {
+      if (AddTimeSlot(t))
+        s = "Added timeslot...";
+      else
+        s = "Unable to add timeslot...";
+    }
+    else // timeslots are full
+      s = "<script>alert('Timeslots are all full. Delete some! Count is: " + String(MAX_TIME_SLOTS) + "');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
+    
+    // 200 = OK
+    // 204 = OK but No Content
+    if (s != "")
+      request->send(200, "text/html", s.c_str());
+    else if (iStatus == 1)
+      request->send(204, "text/html", ""); // OK but no data
+  });
+
   webServer.on("/postP2", HTTP_POST, [] (AsyncWebServerRequest *request)
   {
     int count = request->params();
@@ -872,9 +1272,6 @@ void setup()
       
     byte iStatus = 0; // status 0 = no send needed at end, 1 = OK response, 2 = fail response
 
-    inputMessage = "";
-    inputParam = "";
-    
     String s = ""; // if this in not empty later, we send it as code 200 to the client
 
     if (count == 1)
@@ -884,19 +1281,9 @@ void setup()
       if (request->multipart())
         prtln("WARNING: is multipart!");
         
-      if (request->hasParam(PARAM_ERASEDATA, true)) // expecting two parms here...
+      if (request->hasParam(PARAM_FILEDATA, true))
       {
-        sIn = request->getParam(PARAM_ERASEDATA, true)->value();
-        if (sIn == "confirm")
-        {
-          m_taskMode = TASK_RESET_SLOTS;
-          m_taskTimer = TASK_TIME;
-          s = "All time-events erased!";
-        }
-      }
-      else if (request->hasParam(PARAM_FILEDATA, true))
-      {
-        sIn = request->getParam(PARAM_FILEDATA, true)->value();
+        sIn = hnDecode(request->getParam(PARAM_FILEDATA, true)->value());
 
         //prtln("fileData=" + sIn);
 
@@ -904,7 +1291,9 @@ void setup()
 
         int iCount = 0;
         int len = sIn.length();
-        if (len > MAX_FILE_SIZE)
+        if (len == 0)
+          s = "error sending, please retry...";
+        else if (len > MAX_FILE_SIZE)
           s = "file is too long!";
         else
         {
@@ -947,9 +1336,6 @@ void setup()
   {
     byte iStatus = 0; // status 0 = no send needed at end, 1 = OK response, 2 = fail response
     
-    inputMessage = "";
-    inputParam = "";
-    
     String s = ""; // if this in not empty later, we send it as code 200 to the client
 
     int count = request->params();
@@ -957,37 +1343,36 @@ void setup()
     if (count == 0)
       return;
       
-    if (request->hasParam(PARAM_DATETIME))
+    if (request->hasParam(PARAM_DATETIME, false))
     {
-      // this is just 0 now but we could send the browser's timedate
-      // and set the esp32 time/date!
-      inputMessage = request->getParam(PARAM_DATETIME)->value();
       bool bSetRequestedButLocked = false;
       bool bTimeSetFailed = false;
       bool bTimeSetSuccess = false;
+
+      // this is just 0 now but we could send the browser's timedate
+      // and set the esp32 time/date!
+      String sVal = hnDecode(request->getParam(PARAM_DATETIME, false)->value());
       
       // set our time if unlocked and it is present in input string: 2020-06-23T01:23:00
-      if (inputMessage != "0" && inputMessage.length() >= 19)
+      if (sVal.length() >= 19 && sVal != "0")
       {
-        if (m_lockCount == 0xff)
+        if (!IsLocked())
         {
-          inputParam = PARAM_DATETIME;
-          
-          //prtln("setting clock to web browser's time (user pressed \"Set\" button!): \"" + inputMessage + "\"");
+          //prtln("setting clock to web browser's time (user pressed \"Set\" button!): \"" + sVal + "\"");
           
           // parse date/time
           String sT;
-          sT = inputMessage.substring(0,4);
+          sT = sVal.substring(0,4);
           int myYear = sT.toInt();
-          sT = inputMessage.substring(5,7);
+          sT = sVal.substring(5,7);
           int myMonth = sT.toInt();
-          sT = inputMessage.substring(8,10);
+          sT = sVal.substring(8,10);
           int myDay = sT.toInt();
-          sT = inputMessage.substring(11,13);
+          sT = sVal.substring(11,13);
           int myHour = sT.toInt();
-          sT = inputMessage.substring(14,16);
+          sT = sVal.substring(14,16);
           int myMinute = sT.toInt();
-          sT = inputMessage.substring(17,19);
+          sT = sVal.substring(17,19);
           int mySecond = sT.toInt();
   
           if (SetTimeManually(myYear, myMonth, myDay, myHour, myMinute, mySecond))
@@ -999,15 +1384,18 @@ void setup()
           bSetRequestedButLocked = true;        
       }
       
-      // send back the time to esp32: 2020-11-31T04:32:00
+      // send back the time to esp32: 2020-11-31T04:32:00pm
 
       // read internal time
       struct tm timeInfo = {0};
       if (ReadInternalTime(NULL, &timeInfo) != NULL) // get current time as struct tm
       {
+        bool bPmFlag; // by ref
+        int hr12 = Make12Hour(timeInfo.tm_hour, bPmFlag);
+        String sPm = bPmFlag ? "pm" : "am";
         s = String(timeInfo.tm_year+EPOCH_YEAR) + "-" +
           ZeroPad(timeInfo.tm_mon+1) + "-" + ZeroPad(timeInfo.tm_mday) + "T" +
-          ZeroPad(timeInfo.tm_hour) + ":" + ZeroPad(timeInfo.tm_min) + ":" + ZeroPad(timeInfo.tm_sec);
+          String(hr12) + ":" + ZeroPad(timeInfo.tm_min) + ":" + ZeroPad(timeInfo.tm_sec) + "<br>" + sPm;
         //prtln("dateTime (send): \"" + s + "\"");
       }
 
@@ -1045,205 +1433,73 @@ void setup()
         // ->isFile()
         // ->isPost()
         // ->size()
-        inputMessage = request->getParam(PARAM_DELINDEX)->value();
-        
-        inputParam = PARAM_DELINDEX;
-        
-        int iSlotNum = inputMessage.toInt();
+        String sVal = hnDecode(request->getParam(PARAM_DELINDEX)->value());
+      
         // NOTE: slot-numbers requested for deletion are not in order - there could
         // be a m_slotCount of 1 and its delete-index of 99!
-        if (m_slotCount)
+        if (m_slotCount && sVal.length() > 0)
         {
+          int iSlotNum = sVal.toInt();
           if (DeleteTimeSlot(iSlotNum))
             s = "Time-slot " + String(iSlotNum) + " deleted!";
           else
             s = "Failed to delete time-slot " + String(iSlotNum) + "...";
         }
         else
-          iStatus = 2; // bad data!
+          s = "Failed to send, please retry...";
       }
-      else if (request->hasParam(PARAM_EDITINDEX)) // expecting two parms here...
+      else if (request->hasParam(PARAM_ERASEDATA))
       {
-        int idx = request->getParam(PARAM_EDITINDEX)->value().toInt();
-        //String sItem = request->getParam(PARAM_EDITITEM)->value();
-        //prtln("sItem: " + sItem + " idx:" + String(idx));
-  
-        // Here, the user has pressed Edit and we have the edit item's index and string - 
-        // we need to send back a comma-separated list of decoded vars for year, day, month, Etc.
-        // We can do it two ways - parse the incomming string that represents a stored time-event,
-        // or pull it out of flash where it's stored in time-slots. The latter makes more sense!
-        t_event t;
-        if (GetTimeSlot(idx, t)) // by ref
+        String sVal = hnDecode(request->getParam(PARAM_ERASEDATA)->value());
+        
+        if (sVal.length() > 0 && sVal == ERASE_DATA_CONFIRM)
         {
-          bool pmFlag; // by ref
-          int hr12 = Make12Hour(t.timeDate.hour, pmFlag);
-          s = String(t.repeatMode) + "," + String(t.deviceMode) + "," + String(t.deviceAddr) + "," + String (t.repeatCount) + "," + String(t.everyCount) + "," +
-            String(t.timeDate.dayOfWeek) + "," + String(hr12) + "," + String(t.timeDate.minute) + "," + String (t.timeDate.second) + "," +
-              String(t.timeDate.day) + "," + String(t.timeDate.month) + "," + String(t.timeDate.year) + "," + String(pmFlag) + "," +
-                String(t.dutyCycleA) + "," + String(t.dutyCycleB) + "," + String(t.phase) + "," + String(t.perUnits) + "," +
-                  String(t.perMax) + "," + String(t.bIncludeCycleTiming) + "," + String(t.bCycleTimingInRepeats) + "," + String(t.bEnable) + "," + String(idx);
+          m_taskMode = TASK_RESET_SLOTS;
+          m_taskTimer = TASK_TIME;
+          s = "Deleting all time-events!";
         }
         else
-          iStatus = 2; // bad data!
+          s = "Not able to erase...";
       }
-      // happens when Add or Edit buttons pressed on p2.html
-      // (We can differentiate by PARAM_REPLACEINDEX is -1 for  Add)
-      else if (request->hasParam(PARAM_DATE)) // just check for one...
+      else if (request->hasParam(PARAM_EDITINDEX))
       {
-        t_event t = {0};
-        
-        uint16_t tempHour = 0;
-        bool bTempPmFlag = false;
-        bool bTempIncludeCycleTiming = false; // allows us to record cycle-timing, such as phase and duty-cycle, into this event
-        bool bTempCycleTimingInRepeats = false; // apply cycle-timing for repeat-events
-        bool bUseOldTimeVals = false; // in a slot-replace after editing, keep old slot's timing cycle values
-        int repIndex = -1; // if this is -1 we add an event rather than replace
-        
-        // cancel pending refresh task
-        if (m_taskMode == TASK_PAGE_REFRESH_REQUEST)
+        String sVal = hnDecode(request->getParam(PARAM_EDITINDEX)->value());
+
+        if (sVal.length() > 0)
         {
-          m_taskTimer = 0;
-          bTellP2WebPageToReload = false;
-        }
-      
-        for (int ii = 0; ii < count; ii++)
-        {
-          AsyncWebParameter* pParam = request->getParam(ii);
-          if (pParam == 0) continue;
-          
-          String sName = pParam->name();
-          String sVal = pParam->value();
-          int iVal = sVal.toInt();
-          if (sName == PARAM_REPLACEINDEX)
-            repIndex = iVal;
-          else if (sName == PARAM_DATE)
-          {
-            // 2020-08-08
-            String sYear = sVal.substring(0,4);
-            t.timeDate.year = sYear.toInt();
-            String sMonth = sVal.substring(5,7);
-            t.timeDate.month = sMonth.toInt();
-            if (t.timeDate.month > 12)
-              t.timeDate.month = 1;
-            String sDay = sVal.substring(8,10);
-            t.timeDate.day = sDay.toInt();
-            if (t.timeDate.day < 1 || t.timeDate.day > 31)
-              t.timeDate.day = 1;
-          }
-          else if (sName == PARAM_HOUR)
-            tempHour = iVal; // 12-hour format!
-          else if (sName == PARAM_MINUTE)
-            t.timeDate.minute = iVal;
-          else if (sName == PARAM_SECOND)
-            t.timeDate.second = iVal;
-          else if (sName == PARAM_AMPM)
-            bTempPmFlag = (iVal > 0) ? true : false; // PM if 1, AM if 0
-          else if (sName == PARAM_REPEAT_MODE)
-            t.repeatMode = iVal;
-          else if (sName == PARAM_REPEAT_COUNT)
-            t.repeatCount = iVal;
-          else if (sName == PARAM_EVERY_COUNT)
-            t.everyCount = iVal;
-          else if (sName == PARAM_DEVICE_ADDR)
-            t.deviceAddr = iVal;
-          else if (sName == PARAM_DEVICE_MODE)
-            t.deviceMode = iVal;
-          else if (sName == PARAM_USEOLDTIMEVALS)
-            bUseOldTimeVals = iVal ? true : false; // set in response to javascript "confirm" dialog in p2.js
-          else if (sName == PARAM_INCLUDETIMINGCYCLE)
-            // this is a checkbox - weirdly, it reports "on" if checked and no parameter is sent
-            // at all if unchecked.
-            bTempIncludeCycleTiming = (sVal == "on") ? true : false; // include current cycle-timing if 1
-          else if (sName == PARAM_TIMINGCYCLEINREPEATS)
-            bTempCycleTimingInRepeats = (sVal == "on") ? true : false; // include current cycle-timing if 1
-        }
-        
-        // convert 12-hour am/pm to 0-23, 24-hour time
-        if (bTempPmFlag)
-        {
-          if (tempHour != 12)
-            tempHour += 12;
-        }
-        else if (tempHour == 12) // 1-11am is 1-11, 12 midnight is 0
-          tempHour = 0;
-          
-        t.timeDate.hour = tempHour;
+          int idx = sVal.toInt();
   
-        t.timeDate.dayOfWeek = MyDayOfWeek(t.timeDate.day, t.timeDate.month, t.timeDate.year);
-  
-        t.bIncludeCycleTiming = bTempIncludeCycleTiming;
-        t.bCycleTimingInRepeats = bTempCycleTimingInRepeats;
-        
-        if (bTempIncludeCycleTiming)
-        {
-          t_event t2;
-          // if user has chosen to keep old cycle-values, load them
-          if (bUseOldTimeVals && repIndex >= 0 && GetTimeSlot(repIndex, t2))
+          // Here, the user has pressed Edit and we have the edit item's index - 
+          // we need to send back a comma-separated list of decoded vars for year, day, month, Etc.
+          // We can do it two ways - parse the incomming string that represents a stored time-event,
+          // or pull it out of flash where it's stored in time-slots. The latter makes more sense!
+          t_event t;
+          if (GetTimeSlot(idx, t)) // by ref
           {
-            // move old slot's cycle-timing vals to new slot
-            t.dutyCycleA = t2.dutyCycleA;
-            t.dutyCycleB = t2.dutyCycleB;
-            t.phase = t2.phase;
-            t.perUnits = t2.perUnits;
-            t.perMax = t2.perMax;
-            t.perVal = t2.perVal;
+            bool pmFlag; // by ref
+            int hr12 = Make12Hour(t.timeDate.hour, pmFlag);
+            s = String(t.repeatMode) + "," + String(t.deviceMode) + "," + String(t.deviceAddr) + "," + String (t.repeatCount) + "," + String(t.everyCount) + "," +
+              String(t.timeDate.dayOfWeek) + "," + String(hr12) + "," + String(t.timeDate.minute) + "," + String (t.timeDate.second) + "," +
+                String(t.timeDate.day) + "," + String(t.timeDate.month) + "," + String(t.timeDate.year) + "," + String(pmFlag) + "," +
+                  String(t.dutyCycleA) + "," + String(t.dutyCycleB) + "," + String(t.phase) + "," + String(t.perUnits) + "," +
+                    String(t.perMax) + "," + String(t.bIncludeCycleTiming) + "," + String(t.bCycleTimingInRepeats) + "," + String(t.bEnable) + "," + String(idx);
           }
           else
-          {
-            t.dutyCycleA = dutyCycleA;
-            t.dutyCycleB = dutyCycleB;
-            t.phase = phase;
-            t.perUnits = perUnits;
-            t.perMax = perMax;
-            t.perVal = perVal;
-          }
+            iStatus = 2;
         }
         else
-        {
-          t.dutyCycleA = 0xff;
-          t.dutyCycleB = 0xff;
-          t.phase = 0xff;
-          t.perUnits = 0xff;
-          t.perMax = 0xff;
-          t.perVal = 0xffff;
-        }
-        
-        t.bEnable = true;
-  
-        if (repIndex >= 0)      
-        {
-          if (repIndex < m_slotCount && PutTimeSlot(repIndex, t))
-            s = "<script>alert('Replaced timeslot...');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
-          else
-            s = "<script>alert('Unable to replace timeslot " + String(repIndex) + "...');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
-        }
-        else if (m_slotCount < MAX_TIME_SLOTS)
-        {
-          if (AddTimeSlot(t))
-            s = "<script>alert('Added timeslot...');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
-          else
-            s = "<script>alert('Unable to add timeslot...');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
-        }
-        else // timeslots are full
-          s = "<script>alert('Timeslots are all full. Delete some! Count is: " + String(MAX_TIME_SLOTS) + "');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
+          iStatus = 2;
       }
     }
     
-    
     // 200 = OK
     // 204 = OK but No Content
-    //request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
-    //                                 + inputParam + ") with value: " + inputMessage +
-    //                                 "<br><a href=\"/\">Return to Home Page</a>");
+    if (iStatus == 2)
+      s = "<script>alert('Send failed, please retry...');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
     if (s != "")
       request->send(200, "text/html", s.c_str());
     else if (iStatus == 1)
       request->send(204, "text/html", ""); // OK but no data
-    else if (iStatus == 2)
-    {
-      s = "<script>alert('Out of range (" + inputParam + ") with value: " + inputMessage + "');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
-      request->send(200, "text/html", s.c_str());
-    }
     
     // Give a semaphore that we can check in the loop (just prints the inputMessege)
 //    xSemaphoreGiveFromISR(webInputSemaphore, NULL);
@@ -1259,7 +1515,7 @@ void setup()
   prtln("m_slotCount = " + String(m_slotCount));
   
   // Create webInputSemaphore
-  webInputSemaphore = xSemaphoreCreateBinary();
+//  webInputSemaphore = xSemaphoreCreateBinary();
 
   // need this before configTime!
   WiFi.mode(WIFI_STA);
@@ -1389,7 +1645,7 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
     
     if (cmd == COMMAND_LOCK)
     {
-      if (m_lockCount == 0xff)
+      if (!IsLocked())
       {
         if (subCommand.length() == 0)
         {
@@ -1444,7 +1700,7 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
     }
     else // c unlock
     {
-      if (m_lockCount != 0xff)
+      if (IsLocked())
       {
         if (!bResetPwd && subSubCommand.length() == 0 && (currentPass == LOCKPASS_INIT || currentPass == subCommand))
         {
@@ -1462,17 +1718,12 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
     if (bPrintUsage)
       s = "<script>alert('c lock, c lock \"pass\" (lock), c lock \"pass\" \"pass\" (set pw), c lock \"pass\" \"\" (remove pw), c lock \"pass\" \"newpass\" (change pw)');";
   }
-  else if (m_lockCount != 0xff)
+  else if (IsLocked())
   {
     // if locked...
-    
-    // this little duplication of processing allows reset of parms (and lock-flag) if WiFi connected in AP mode...
-    if (bSoftAP && cmd == COMMAND_RESET && subCommand == SC_RESET_PARMS)
-    {
-      m_taskMode = TASK_RESET_PARMS;
-      m_taskTimer = TASK_TIME;
-      s = "<script>alert('Resetting parameters to defaults!');";
-    }
+    // allow update while unlocked if in AP mode... successful update in AP mode resets parms...
+    if (bSoftAP && cmd == COMMAND_UPDATE)
+      request->send(200, "text/html", "<script>window.open('/loginIndex', '_self');</script>"); // special case to send here...
     else
       // this far and no farther! (interface is locked)
       s = "<script>alert('Interface is locked! (" + String(VERSION_STR) + ")');";
@@ -1483,7 +1734,7 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
   }
   else if (cmd == COMMAND_VERSION || cmd == COMMAND_INFO)
   {
-    String sInfo = "Version: " + String(VERSION_STR) + ", " + GetStringIP();
+    String sInfo = String(VERSION_STR) + ", " + GetStringIP();
     //prtln(sInfo);        
     s = "<script>alert('" + sInfo + "');";
   }
@@ -1503,6 +1754,35 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
     }
     else
       s = "<script>alert('Invalid command!');";
+  }
+  else if (cmd == COMMAND_MAC)
+  {
+    subCommand.toLowerCase();
+    
+    if (subCommand == "" || subCommand == "rand")
+    {
+      m_mac = subCommand;
+      m_taskMode = TASK_MAC;
+      m_taskTimer = TASK_TIME;
+      
+      if (m_mac == "rand")
+        s = "<script>alert('Setting random MAC address mode...');";
+      else
+        s = "<script>alert('Setting hardware MAC address...');";
+    }
+    else
+    {
+      uint8_t buf[6];
+      if (MacStringToByteArray(subCommand.c_str(), buf) != NULL)
+      {
+        m_mac = subCommand;
+        m_taskMode = TASK_MAC;
+        m_taskTimer = TASK_TIME;
+        s = "<script>alert('Setting MAC address: " + m_mac + "');";
+      }
+      else
+        s = "<script>alert('Invalid MAC address (ex 84:0D:8E:1A:11:A0): " + subCommand + "');";
+    }
   }
   else if (cmd == COMMAND_WIFI)
   {
@@ -1577,19 +1857,24 @@ void SetWiFiHostName(AsyncWebServerRequest* &request, String &s, String &cmd)
 //    response->addHeader("Content-Type", "application/json");
 //    response->addHeader("Content-Type", "*");
 //    response->addHeader("Access-Control-Allow-Origin", "POST, GET, OPTIONS"); // fixes it for edge but not firefox...
-void SetHeaders(AsyncWebServerResponse *response)
+void SendWithHeaders(AsyncWebServerRequest *request, String s)
 {
-  response->addHeader("Access-Control-Allow-Headers", "*");
-  response->addHeader("Access-Control-Allow-Origin", "*");
-  response->addHeader("Access-Control-Allow-Methods", "*");
-  response->addHeader("Cache-Control", "no-cache, no-store");
-//  response->addHeader("Connection", "close"); // keep-alive is default and keeps same tcp connection
+  AsyncWebServerResponse *r = request->beginResponse(SPIFFS, s.c_str(), String(), false, processor);
+  r->addHeader("Access-Control-Allow-Headers", "*");
+  r->addHeader("Access-Control-Allow-Origin", "*");
+  r->addHeader("Access-Control-Allow-Methods", "*");
+  r->addHeader("Cache-Control", "no-cache, no-store");
+  r->addHeader("Connection", "close");
+  request->send(r);
 }
 
 // set sReloadUrl to WEB_PAGE_P2 Etc.
-bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl)
+bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bAllowInAP)
 {
-  if (m_lockCount != 0xff)
+  if (bAllowInAP && bSoftAP)
+    return false;
+    
+  if (IsLocked())
   {
     String s = "<script>alert('System is locked!');";
     if (sReloadUrl != "")
@@ -1601,9 +1886,12 @@ bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl)
   return false;
 }
   
-bool IsLockedAlertPost(AsyncWebServerRequest *request)
+bool IsLockedAlertPost(AsyncWebServerRequest *request, bool bAllowInAP)
 {
-  if (m_lockCount != 0xff)
+  if (bAllowInAP && bSoftAP)
+    return false;
+    
+  if (IsLocked())
   {
     request->send(200, "text/html", "System is locked!");
     return true;
@@ -1611,18 +1899,119 @@ bool IsLockedAlertPost(AsyncWebServerRequest *request)
   return false;
 }
   
-void gleanEscapes(String sIn, std::vector<uint16_t>* p)
+// returns empty string if error
+// returns errorCode -2 or -3 if unknown escape, -4 if empty input string, -5 if bad validation prefix,
+// -6 if bad checksum, -7 if have validation but empty string thereafter.
+String hnDecode(String sIn)
+{
+  int errorCode;
+  String s = hnDecode(sIn, errorCode);
+  if (errorCode < 0)
+    prtln("hnDecode error: " + String(errorCode));
+  return s;
+}
+
+String hnDecode(String sIn, int &errorCode)
+{
+  errorCode = 0; // assume no error
+  
+  //prtln("raw input: \"" + sIn + "\"");
+
+  std::vector<uint16_t> arr;
+  int ret = gleanEscapes(sIn, &arr);
+  if (ret < -1)
+  {
+    prtln("encoded input string has unknown escapes!");
+    errorCode = ret;
+    return "";
+  }
+  int arrLen = arr.size();
+  if (arrLen <= 0)
+  {
+    prtln("encoded input string is empty!");
+    errorCode = -4;
+    return "";
+  }
+
+  uint16_t tempSct = m_sct;
+  uint16_t cs = 0; // checksum
+  
+  char charArray[arrLen]; // room for chars plus null, minus checksum
+  for(int i = 0; i < arrLen-1; i++)
+  {
+    uint16_t c = (uint16_t)arr[i];
+    for (uint16_t j = 0; j < tempSct; j++)
+    {
+      bool lsbSet = (c & 1) ? true : false;
+      c >>= 1;
+      if (lsbSet)
+        c |= 0x8000;
+    }
+
+    if (c > 255)
+      prtln("unicode char at index " + String(i) + " : " + String(c));
+    charArray[i] = (char)c;
+      
+    cs += c; // this adds to 0 since encoder sets last char to XOR of the sum
+    
+    if (--tempSct < m_minSct)
+      tempSct = m_maxSct;
+  }
+
+  cs += (uint16_t)arr[arrLen-1]; // last char, unencoded, is the exclusive-or checksum
+  
+  charArray[arrLen-1] = '\0'; // add null-terminator
+  
+  String sOut = String(charArray);
+
+  //prtln("decoded string: \"" + sOut + "\"");
+  
+  for (int i = 0; i < arrLen; i++)
+    charArray[i] = i; // obfuscate memory
+
+  // javascript encoder prepends a two-digit, zero-padded ascii number which is the shift-count
+  if (!(sOut.length() > 2 && isdigit(sOut[0]) && isdigit(sOut[1]) && sOut.substring(0, 2).toInt() == m_sct))
+  {
+    prtln("incoming string validation prefix is bad!");
+    errorCode = -5;
+    return ""; // no good...
+  }
+    
+  if (cs == 0)
+  {
+    prtln("bad checksum on encoded string!");
+    errorCode = -6;
+    return ""; // no good...
+  }
+  
+  sOut = sOut.substring(2); // trim off first two chars which are ascii two-digit shift-count
+
+  if (sOut.length() == 0)
+  {
+    errorCode = -7;
+    return ""; // no good...
+  }
+  
+  return sOut; // trim off first two chars which are ascii two-digit shift-count
+}
+
+// input string can contain decimal numbers representing unprintable unicode chars,
+// The form is &#12345;&#67890; We need to parse these
+// returns 0 if no error
+int gleanEscapes(String sIn, std::vector<uint16_t>* p)
 {
   if (!p)
-    return;
+    return false;
 
   p->resize(0);
   
-  // input string can contain decimal numbers representing unptintable unicode chars,
-  // The form is &#12345;&#67890; We need to hand parse these
   int strLen = sIn.length();
   String sEsc;
   bool bStartEsc = false;
+  bool bIsHex = false;
+
+  //prtln("gleanEscapes(): \"" + sIn + "\"");
+  
   for (int i = 0; i < strLen; i++)
   {
     char c = sIn[i];
@@ -1631,93 +2020,61 @@ void gleanEscapes(String sIn, std::vector<uint16_t>* p)
       if (c == ';')
       {
         bStartEsc = false;
-        if (sEsc.length() > 0)        
-          p->push_back((uint16_t)sEsc.toInt());
+        if (sEsc.length() > 0)
+        {        
+          uint16_t u;
+          if (bIsHex)
+          {
+            u = (uint16_t)strtol(sEsc.c_str(), NULL, 16); //convert hex string to decimal
+            bIsHex = false;
+          }
+          else
+            u = (uint16_t)sEsc.toInt();
+          p->push_back(u); // add unicode char
+        }
         else // abort
         {
           p->resize(0);
-          return;
+          return -2; // string has unknown escape!
         }
       }
-      else if (isDigit(c))
+      else if (isDigit(c) || (bIsHex && isHex(c)))
         sEsc += c;
-      else if (c == '#')
-        continue; // ignore # sign
       else // abort
       {
         p->resize(0);
-        return;
+        return -3; // string has unknown escape!
       }
     }
     else if (c == '&')
     {
-      bStartEsc = true;
-      sEsc = "";
+      if (i+1 < strLen && sIn[i+1] == '#')
+      {
+        if (i+2 < strLen && sIn[i+2] == 'x')
+        {
+          bIsHex = true;
+          i++;
+        }
+        bStartEsc = true;
+        i++;
+        sEsc = "";
+      }
     }
     else
-      p->push_back((uint16_t)c);
+      p->push_back((uint16_t)c); // ansi 8-bit char
   }
+  return 0;
 }
 
-//bool allDigits(String sIn)
-//{
-//  int strLen = sIn.length();
-//  for (int i = 0; i < strLen; i++)
-//  {
-//    if (!isDigit(sIn[i])
-//      return false;
-//  }
-//  return true;
-//}
-
-String hnDecode(String sIn)
+bool isHex(char c)
 {
-  //prtln("raw input: \"" + sIn + "\"");
-
-  std::vector<uint16_t> arr;
-  gleanEscapes(sIn, &arr);
-  int arrLen = arr.size();
-  if (arrLen <= 0)
-    return "";
-
-  int saveSct = m_sct;
-  
-  char charArray[arrLen+1];
-  for(int i = 0; i < arrLen; i++)
-  {
-    uint16_t c = (uint16_t)arr[i];
-    for (int j = 0; j < m_sct; j++)
-    {
-      bool lsbSet = (c & 1) ? true : false;
-      c >>= 1;
-      if (lsbSet)
-        c |= 0x8000;
-    }
-    charArray[i] = (char)c;
-    if (--m_sct <= 0)
-      m_sct = m_max;
-  }
-  charArray[arrLen] = '\0';
-  m_sct = saveSct;
-  
-  //prtln("decoded input: \"" + String(charArray) + "\"");
-  
-  // two-digit validation prefix:
-  String sOut = String(charArray);
-  
-  for (int i = 0; i < arrLen; i++)
-    charArray[i] = i; // obfuscate memory
-    
-  if (!(sOut.length() > 2 && isdigit(sOut[0]) && isdigit(sOut[1]) && sOut.substring(0, 2).toInt() == m_sct))
-    return ""; // no good...
-    
-  return sOut.substring(2);
+  return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
 void RefreshMaxSct()
 {
-  m_max = random(MAX_SHIFT_COUNT/2, MAX_SHIFT_COUNT);
-  m_sct = random(1, m_max);
+  m_maxSct = random(MAX_SHIFT_COUNT/4, MAX_SHIFT_COUNT);
+  m_sct = random(m_minSct, m_maxSct);
 }
 
 void IRAM_ATTR onTimer()
@@ -1780,36 +2137,41 @@ void RunTasks()
     case TASK_HOSTNAME:
       PutPreferenceString(EE_HOSTNAME, hostName);
 
-      if (bWiFiConnected)
-        WiFiMonitorConnection(true); // disconnect STA mode (it will reconnect)
-      if (bSoftAP)
-        WiFiStartAP(true); // disconnect AP mode (it will reconnect)
+      WiFiMonitorConnection(true); // disconnect STA mode (it will reconnect)
         
       prtln("New hostName has been set!");
     break;
     
     case TASK_RECONNECT:
 
-      // only reconnect if not in AP mode - generally, we HAVE to be in AP mode to
-      // even set the PWD and SSID!
-      if (!bSoftAP && bWiFiConnected)
-        WiFiMonitorConnection(true, true); // disconnect
-        
+      WiFiMonitorConnection(true, true); // disconnect
       prtln("Reconnecting by TASK_RECONNECT...");
     
+    break;
+    
+    case TASK_REBOOT:
+      if (bSoftAP)
+      {
+        //ErasePreferences(); // erase lock pw and prefs if AP mode...
+
+        // only remove locked condition if we updated firmware while in AP mode
+        // NOTE: we do NOT remove a lock condition if updated via a router/internet
+        m_lockCount = 0xff;
+        PutPreference(EE_LOCKCOUNT, m_lockCount);
+        PutPreferenceString(EE_LOCKPASS, LOCKPASS_INIT);
+      }
+      ESP.restart();
     break;
     
     case TASK_RESET_PARMS:
       if (!ErasePreferences()) // ersae prefs...
         prtln("Error erasing preferences!");
       GetPreferences();
-      WiFiMonitorConnection(true, true); // disconnect (and then reconnect with default preferences)
     break;
     
     case TASK_RESET_SLOTS:
       if (!EraseTimeSlots())
         prtln("Error erasing time-slots!");
-      m_slotCount = 0;
     break;
     
     case TASK_TOGGLE:
@@ -1818,8 +2180,9 @@ void RunTasks()
     break;
     
     case TASK_RESTORE:
+      prtln("Received command to restore WiFi credentials!");
       RestoreDefaultSsidAndPwd();
-      WiFiMonitorConnection(true, true); // disconnect
+      WiFiMonitorConnection(true, true); // disconnect (reconnect)
     break;
     
     case TASK_PAGE_REFRESH_REQUEST:
@@ -1829,14 +2192,93 @@ void RunTasks()
       fiveSecondTimer = 0; // this will reset the flag as a "failsafe" in 5-sec.
     break;
     
+    case TASK_MAC:
+      PutPreferenceString(EE_MAC, m_mac);
+      if (m_mac == "")
+        prtln("Restoring hardware MAC address...");
+      else if (m_mac == "rand")
+        prtln("Setting random MAC address mode...");
+      else
+        prtln("Stored new MAC address: " + m_mac);
+      WiFiMonitorConnection(true, true); // disconnect (reconnect)      
+    break;
+    
     case TASK_WIFI_CONNECT:
+    {
+      setMAC(ESP_IF_WIFI_STA);
+      
+      //String sPass = GetPreferenceString(EE_PWD, DEFAULT_PWD);
+      //prtln(sPass);
+      //prtln("strlen(sPass):" + String(strlen(sPass.c_str())));
+      //prtln("sPass.length():" + String(sPass.length()));
+      //WiFi.begin(m_ssid.c_str(), sPass.c_str());
+
       WiFi.begin(m_ssid.c_str(), GetPreferenceString(EE_PWD, DEFAULT_PWD).c_str());
+      
       prtln("\nConnecting to WiFi...");
+    }
     break;
       
+    case TASK_MIDICHAN:
+        
+      if (bWiFiConnected)
+      {
+        if (m_midiChan == MIDICHAN_OFF)
+        {
+          if (bMidiConnected)
+            stopMIDI();
+        }
+        else if (!bMidiConnected)
+          startMIDI();
+      }
+
+      PutPreference(EE_MIDICHAN, m_midiChan);
+      if (m_midiChan == MIDICHAN_OFF)
+        RTP_MIDI.setInputChannel(MIDI_CHANNEL_OFF);
+      else if (m_midiChan == MIDICHAN_ALL)
+        RTP_MIDI.setInputChannel(MIDI_CHANNEL_OMNI);
+      else
+        RTP_MIDI.setInputChannel(m_midiChan);
+      PrintMidiChan();
+    break;
+
+    case TASK_MIDINOTE_A:
+      PutPreference(EE_MIDINOTE_A, m_midiNoteA);
+      prt("A: ");
+      PrintMidiNote(m_midiNoteA);
+    break;
+
+    case TASK_MIDINOTE_B:
+      PutPreference(EE_MIDINOTE_B, m_midiNoteB);
+      prt("B: ");
+      PrintMidiNote(m_midiNoteB);
+    break;
+
     default:
     break;
   };
+}
+
+void PrintMidiNote(uint8_t note)
+{
+  String s;
+  if (note == MIDINOTE_ALL)
+    s = "ALL";
+  else
+    s = String(note);
+  prtln("Midi note set to:" + s);
+}
+
+void PrintMidiChan()
+{
+  String s;
+  if (m_midiChan == MIDICHAN_OFF)
+    s = "OFF";
+  else if (m_midiChan == MIDICHAN_ALL)
+    s = "ALL";
+  else
+    s = String(m_midiChan);
+  prtln("Midi channel set to:" + s);
 }
 
 // Flash-vars access
@@ -1857,7 +2299,7 @@ void GetPreferences(void)
   /* Start a namespace EE_PREFS_NAMESPACE
   in Read-Write mode: set second parameter to false 
   Note: Namespace name is limited to 15 chars */
-  preferences.begin(EE_PREFS_NAMESPACE, false); // flag is the read-only flag
+  preferences.begin(EE_PREFS_NAMESPACE, true); // flag is the read-only flag
 
   // if we want to remove the TASK_RELAY_A key uncomment it
   //preferences.remove("TASK_RELAY_A");
@@ -1893,14 +2335,14 @@ void GetPreferences(void)
     dutyCycleA = DUTY_CYCLE_MIN;
   else if (dutyCycleA > DUTY_CYCLE_MAX)
     dutyCycleA = DUTY_CYCLE_MAX;
-  prtln("dutyCycleA (%): " + String(dutyCycleA));
+  prtln("dutyCycleA: " + String(dutyCycleA));
   
   dutyCycleB = preferences.getUChar(EE_DC_B, DUTY_CYCLE_B_INIT);
   if (dutyCycleB < DUTY_CYCLE_MIN)
     dutyCycleB = DUTY_CYCLE_MIN;
   else if (dutyCycleB > DUTY_CYCLE_MAX)
     dutyCycleB = DUTY_CYCLE_MAX;
-  prtln("dutyCycleB (%): " + String(dutyCycleB));
+  prtln("dutyCycleB: " + String(dutyCycleB));
 
   phase = preferences.getUChar(EE_PHASE, PHASE_INIT);
   if (phase < PHASE_MIN)
@@ -1909,9 +2351,22 @@ void GetPreferences(void)
     phase = PHASE_MAX;
   prtln("phase (%): " + String(phase));
 
+  m_midiChan = preferences.getUChar(EE_MIDICHAN, MIDICHAN_INIT);
+  PrintMidiChan();
+
+  m_midiNoteA = preferences.getUChar(EE_MIDINOTE_A, MIDINOTE_A_INIT);
+  prt("A: ");
+  PrintMidiNote(m_midiNoteA);
+
+  m_midiNoteB = preferences.getUChar(EE_MIDINOTE_B, MIDINOTE_B_INIT);
+  prt("B: ");
+  PrintMidiNote(m_midiNoteB);
+
   hostName = preferences.getString(EE_HOSTNAME, DEFAULT_HOSTNAME);
   m_ssid = preferences.getString(EE_SSID, DEFAULT_SSID);
-  
+
+  m_mac = preferences.getString(EE_MAC, DEFAULT_MAC);
+
   // Close the Preferences
   preferences.end();
 }
@@ -2007,6 +2462,7 @@ uint16_t DecodePerMax(uint8_t perMax)
 //"# (off/sec/min/hrs/day/wek/mon/yrs)\n" +
 //"# (optional cycle-timing: a:40,b:50,p:20,u:0-3,m:0-9,v:0-m,\n" +
 //"# i:y include cycle-timing, c:y ...in repeat events)\n";
+// NOTE: allow for time in 24-hour format (has no am/pm)
 bool ParseIncommingTimeEvent(String sIn)
 {
   sIn.trim();
@@ -2259,6 +2715,8 @@ bool ParseDevAddressAndMode(String &s, int16_t &iDevAddr, int16_t &iDevMode)
   return true;
 }
 
+// s is passed in trimmed
+// 12:59:59pm or 23:59:59
 bool ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int16_t &iSecond)
 {
   bool bHaveHour = false;
@@ -2294,7 +2752,7 @@ bool ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int16_t &iSecond)
         else
         {
           iTemp = sOut.toInt();
-          if (iTemp >= 1 && iTemp <= 12)
+          if (iTemp >= 0 && iTemp <= 23) // allow this to be 24-hour time
           {
             iHour = iTemp;
             bHaveHour = true;
@@ -2328,24 +2786,39 @@ bool ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int16_t &iSecond)
         return false;
     }
   }
+
+  // convert time in 12-hour format to 24-hour
+  // here we have the seconds still on sOut...
   if (bHaveSecond)
   {
-    if (sOut.length() >= 4)
+    if (sOut.length() >= 4) // "59    am"
     {
        String sTemp = sOut.substring(2); // "    pm" or "am"
        sTemp.trim();
-      if (sTemp == "am" || sTemp == "pm")
+
+      // NOTE: if no am or pm we assume it's in 24-hour time already!
+      if (sTemp.length() == 0)
+        return true;
+
+      if (sTemp == "am")
       {
-        if (sTemp == "am")
-        {
-          if (iHour == 12)
-            iHour = 0;
-        }
-        else // pm
-        {
-          if (iHour != 12)
-            iHour += 12;
-        }
+        if (iHour < 1 || iHour > 12)
+          return false;
+          
+        if (iHour == 12)
+          iHour = 0;
+          
+        return true;
+      }
+
+      if (sTemp == "pm")
+      {
+        if (iHour < 1 || iHour > 12)
+          return false;
+
+        if (iHour != 12)
+          iHour += 12;
+
         return true;
       }
     }
@@ -2570,16 +3043,6 @@ String TimeSlotToString(t_event t)
 //    sRet = sRet.substring(0,31) + "...";
     
   return sRet;
-}
-
-// takes hour in 24 hour and returns 12-hour
-// and pmFlag by reference
-int Make12Hour(int iHour, bool &pmFlag)
-{
-  pmFlag = (iHour >= 12) ? true : false;
-  iHour %= 12; // 0-11 we get 0-11, for 12-23 we get 0-11
-  if (iHour == 0) iHour = 12; // the hour '0' should be '12'
-  return iHour;
 }
 
 // read time-slot info
@@ -2954,18 +3417,25 @@ String processor(const String& var)
       else
           sTemp = "(not set)";
       RefreshMaxSct();
+
+      // set random MAC for station-mode WiFi scan in AP mode - for security purposes
+      // the normal mac gets set back when AP mode exits and we reconnect in
+      // router-station mode...
+      setRandMAC(ESP_IF_WIFI_STA);
+
       sRet = "<form action='/getP1' method='get' name='fName' id='fName'>"
-             "<input type='hidden' name='hidName' id='hidName'>WiFi Name:<br>"
-             "<select name='wifiName' id='wifiName'>" + WiFiScan(sTemp) + "</select><br>"             
-             "<input type='hidden' name='hidPass' id='hidPass'>Password:<br>"
-             "<input type='password' name='wifiPass' id='wifiPass' value='" + sDummyPass + "' maxlength='64'>"
+             "<input type='hidden' name='" + String(PARAM_WIFINAME) + "' id='hidName'>WiFi Name:<br>"
+             "<input type='text' id='wifiName' list='wifiNames'>"
+             "<datalist id='wifiNames'>" + WiFiScan(sTemp) + "</datalist><br>"
+             "<input type='hidden' name='" + String(PARAM_WIFIPASS) + "' id='hidPass'>Password:<br>"
+             "<input type='password' id='wifiPass' value='" + sDummyPass + "' maxlength='64'>"
              "<input type='submit' value='Submit'></form><br>"
-             "<a href='/getP1?butRst=" + String(m_sct) + "'><button>Restore</button></a>"
+             "<a href='/getP1?neuddjs=" + String(m_sct) + "'><button>Restore</button></a>"
              "<script>"
-                "var varMaxSct = '" + String(m_sct) + "," + String(m_max) + "';"
+                "var varMaxSct = '" + String(m_sct) + "," + String(m_maxSct) + "," + String(m_minSct) + "';"
                 "$('#fName').submit(function(){"
                   "var wfn = document.getElementById('wifiName');"
-                  "document.getElementById('hidName').value = hnEncode(wfn.options[wfn.selectedIndex].text);"
+                  "document.getElementById('hidName').value = hnEncode(wfn.value);"
                   "wfn.value = '';"
                   "var wfp = document.getElementById('wifiPass');"
                   "document.getElementById('hidPass').value = hnEncode(wfp.value);"
@@ -2979,14 +3449,21 @@ String processor(const String& var)
     return sRet;
   }
   
-  if (var == PH_PERUNITS)
-    return String(perUnits);
-    
-  if (var == PH_PERMAX)
-    return String(perMax);
-    
-  if (var == PH_PERVAL)
-    return String(perVal);
+  if (var == PH_MAXSCT)
+  {
+    RefreshMaxSct();
+    return "<script>var varMaxSct='" + String(m_sct) + "," + String(m_maxSct) + "," + String(m_minSct) + "';</script>";
+  }
+  
+  if (var == PH_PERVARS)
+    return "<script>var varPerMax=" + String(perMax) +
+           ";var varPerUnits=" + String(perUnits) +
+           ";var varPerVal=" + String(perVal) + ";</script>";
+
+  if (var == PH_P1VARS)
+    return "<script>var chan=" + String(m_midiChan) +
+           ";var na=" + String(m_midiNoteA) +
+           ";var nb=" + String(m_midiNoteB) + ";</script>";
     
   if (var == PH_PHASE)
     return String(phase);
@@ -2996,23 +3473,16 @@ String processor(const String& var)
     
   if (var == PH_DC_B)
     return String(dutyCycleB);
-    
+  
   if (var == PH_HOSTNAME)
     return hostName+".local";
     
-  if (var == PH_MAXSCT)
-  {
-    RefreshMaxSct();
-    return String(m_sct) + "," + String(m_max);
-  }
-  
   if (var == PH_STATE1)
   {
     if(digitalRead(SSR_1))
       ssr1State = "ON";
     else
       ssr1State = "OFF";
-    prtln("SSR1 State:" + ssr1State);
     return ssr1State;
   }
       
@@ -3022,7 +3492,6 @@ String processor(const String& var)
       ssr2State = "ON";
     else
       ssr2State = "OFF";
-    prtln("SSR2 State:" + ssr2State);
     return ssr2State;
   }
     
@@ -3044,25 +3513,78 @@ String processor(const String& var)
   return String();
 }
 
+void PollApSwitch()
+{
+#if FORCE_AP_ON
+  bool bApSwitchOn = true;
+#else
+  bool bApSwitchOn = (digitalRead(SW_SOFT_AP) == HIGH) ? true : false;
+#endif
+
+  //prtln("bSoftAP:" + String(bSoftAP) + ", bApSwitchOn:" + String(bApSwitchOn) + ", bWiFiDisabled:" + String(bWiFiDisabled) + ", bWiFiConnected:" + String(bWiFiConnected) );
+
+  if (bSoftAP)
+  {
+    // if exiting AP mode, do that first, then connect to router
+    
+    if (bWiFiDisabled || !bApSwitchOn)
+    {
+      WiFiStartAP(true); // disconnect AP WiFi Mode
+      WiFiMonitorConnection(true); // clear bConnecting flag...
+    }
+
+    CheckWiFiConnected(bApSwitchOn, true);
+  }
+  else
+  {
+    // see if we need to disconnect from router first, then check for entering AP mode
+    CheckWiFiConnected(bApSwitchOn, false);
+
+    if (!bWiFiDisabled && bApSwitchOn)
+      WiFiStartAP(false); // connect in AP mode
+  }
+}
+
+void CheckWiFiConnected(bool bApSwitchOn, bool bEraseOldCredentials)
+{
+  if (bWiFiConnected)
+  {
+    if (bWiFiDisabled || bApSwitchOn) 
+      WiFiMonitorConnection(true, bEraseOldCredentials); // disconnect from router
+  }
+  else // not connected to router
+  {
+    if (!bWiFiDisabled && !bApSwitchOn) 
+      WiFiMonitorConnection(false, bEraseOldCredentials); // connect to router in STA mode
+  }
+}
+
 void WiFiMonitorConnection(bool bDisconnect, bool bEraseOldCredentials)
 {
   if (bSoftAP)
-    return;
+  {
+    if (bDisconnect)
+      WiFiStartAP(true, bEraseOldCredentials); // disconnect AP mode (it will reconnect)
+    else
+      return;
+  }
     
   //WiFi.status() codes
-  //WL_NO_SHIELD   255
-  //WL_IDLE_STATUS  0
-  //WL_NO_SSID_AVAIL  1
-  //WL_SCAN_COMPLETED   2
-  //WL_CONNECTED  3
-  //WL_CONNECT_FAILED   4
-  //WL_CONNECTION_LOST  5
-  //WL_DISCONNECTED   6
+  //255 WL_NO_SHIELD: assigned when no WiFi shield is present;
+  //0   WL_IDLE_STATUS: it is a temporary status assigned when WiFi.begin() is called and
+  //      remains active until the number of attempts expires (resulting in WL_CONNECT_FAILED)
+  //      or a connection is established (resulting in WL_CONNECTED);
+  //1 WL_NO_SSID_AVAIL: assigned when no SSID are available;
+  //2 WL_SCAN_COMPLETED: assigned when the scan networks is completed;
+  //3 WL_CONNECTED: assigned when connected to a WiFi network;
+  //4 WL_CONNECT_FAILED: assigned when the connection fails for all the attempts;
+  //5 WL_CONNECTION_LOST: assigned when the connection is lost;
+  //6 WL_DISCONNECTED: assigned when disconnected from a network;   // Connect to Wi-Fi
   int WiFiStatus = WiFi.status();
   
   if (bWiFiConnected)
   {
-    if (bDisconnect || WiFiStatus == WL_CONNECT_FAILED || WiFiStatus == WL_CONNECTION_LOST || WiFiStatus == WL_DISCONNECTED)
+    if (bDisconnect || WiFiStatus != WL_CONNECTED)
     {
       if (bDisconnect)
         prtln("STA Mode: Stopping mDNS, web-server and WiFi...");
@@ -3073,13 +3595,21 @@ void WiFiMonitorConnection(bool bDisconnect, bool bEraseOldCredentials)
       
       WiFi.disconnect(bEraseOldCredentials); // disconnect wifi, erase internal stored info
       bWiFiConnected = false;
+      ledMode = LEDMODE_OFF;
       fiveSecondTimer = FIVE_SECOND_TIME-2; // restart in 2-3 seconds
     }
 //    else if (!(bManualTimeWasSet || bWiFiTimeWasSet) && bResetOrPowerLoss)
 //    {
 //    }
   }
-  else if (!bDisconnect)
+  else if (bDisconnect)
+  {
+    // we set bDisconnect when calling WiFiMonitorConnection(true, true) after changing the SSID/PW
+    WiFi.disconnect(bEraseOldCredentials);  
+    ledMode = LEDMODE_OFF;
+    bWiFiConnecting = false; // clearing permits reconnection with new credentials on next call
+  }
+  else
   {
     if (WiFiStatus == WL_CONNECTED)
     {
@@ -3089,6 +3619,9 @@ void WiFiMonitorConnection(bool bDisconnect, bool bEraseOldCredentials)
       
       bWiFiConnected = true;
       bWiFiConnecting = false;
+
+      ledMode = LEDMODE_SLOWFLASH;
+      FlashSequencer(true); // start the sequence of flashing out the last octet of IP address...
     }
     else if (bWiFiConnecting)
     {
@@ -3096,10 +3629,15 @@ void WiFiMonitorConnection(bool bDisconnect, bool bEraseOldCredentials)
     }
     else if (m_ssid.length() != 0) // connect to router
     {
+      WiFi.disconnect();
       WiFi.mode(WIFI_STA);
+      
       m_taskMode = TASK_WIFI_CONNECT; // fetch pw from flash and connect
       m_taskTimer = TASK_TIME;      
+      ledMode = LEDMODE_FASTFLASH;
       bWiFiConnecting = true;
+      
+      prtln("queueing connection task: " + m_ssid);
     }
   }
 }
@@ -3119,51 +3657,118 @@ void WiFiStartAP(bool bDisconnect, bool bEraseOldCredentials)
       oldPot1Value = pot1Value;
       
       bSoftAP = false;
-      digitalWrite(ONBOARD_LED_GPIO2, LOW);
+      ledMode = LEDMODE_OFF;
       fiveSecondTimer = FIVE_SECOND_TIME-2;
     }
   }
   else if (!bSoftAP)
   {
-    prtln("Starting WiFi AP mode");
-    
-    WiFi.mode(WIFI_AP);
-    //WiFi.mode(WIFI_AP_STA);
-    //delay(1000);
     const char* apSSID     = DEFAULT_SOFTAP_SSID;
     const char* apPassword = DEFAULT_SOFTAP_PWD;
     IPAddress apIP(192,168,IP_MIDDLE,DEFAULT_SOFTAP_IP);
     IPAddress gateway(192,168,IP_MIDDLE,DEFAULT_SOFTAP_IP);
     IPAddress subnet(255,255,255,0);
  
+    prtln("Starting WiFi AP mode...");
+
+    setMAC(ESP_IF_WIFI_AP);
+
+    // order of steps below is important!!!
+    
+//    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA); // need this because we may do a scan for stations...
+
     //SSID (defined earlier): maximum of 63 characters;
     //password(defined earlier): minimum of 8 characters; set to NULL if you want the access point to be open
     //channel: Wi-Fi channel number (1-13)
     //ssid_hidden: (0 = broadcast SSID, 1 = hide SSID)
     //max_connection: maximum simultaneous connected clients (1-4)
     //WiFi.softAP(const char* ssid, const char* password, int channel, int ssid_hidden, int max_connection)
-    WiFi.softAP(apSSID, apPassword, AP_CHANNEL, 0, MAX_AP_CLIENTS); // additional parms: int channel (1-13), int ssid_hidden (0 = broadcast SSID, 1 = hide SSID), int max_connection (1-4))
-    delay(100);
-    WiFi.softAPConfig(apIP, gateway, subnet);
-    prtln("AP mode IP address:\t" + WiFi.softAPIP());
+    WiFi.softAP(apSSID, apPassword, random(1, AP_MAX_CHANNEL), 0, MAX_AP_CLIENTS); // additional parms: int channel (1-11), int ssid_hidden (0 = broadcast SSID, 1 = hide SSID), int max_connection (1-4))
     
+    //wait for SYSTEM_EVENT_AP_START
+    delay(100);
+
+    WiFi.softAPConfig(apIP, gateway, subnet);
+    
+    bSoftAP = true; // set before calling GetStringIP()
+
+    //prtln("Reconnected WiFi as access-point...");
+    //prtln("Web-Server IP: 192.168." + String(IP_MIDDLE) + "." + String(DEFAULT_SOFTAP_IP));
+    prtln(GetStringIP());
+    prtln("Access-point WiFI name: " + String(DEFAULT_SOFTAP_SSID));
+    prtln("Access-point password: " + String(DEFAULT_SOFTAP_PWD));
+
     dnsAndServerStart();
 
-    prtln("Reconnected WiFi as access-point...");
-    prtln("IP: 192.168." + String(IP_MIDDLE) + "." + String(DEFAULT_SOFTAP_IP));
-    prtln(String(DEFAULT_SOFTAP_SSID));
-    prtln(String(DEFAULT_SOFTAP_PWD));
-    
-    digitalWrite(ONBOARD_LED_GPIO2, HIGH);
+    ledMode = LEDMODE_ON;
+    FlashSequencer(true); // start the sequence of flashing out the last octet of IP address...
+
     fiveSecondTimer = FIVE_SECOND_TIME-2;
-    bSoftAP = true;
   }
+}
+
+void setMAC(wifi_interface_t macMode)
+{
+  randomSeed(esp_random());
+    
+  esp_wifi_set_vendor_ie(false, WIFI_VND_IE_TYPE_BEACON, WIFI_VND_IE_ID_0, NULL); // disabled
+        
+  // JP, US
+  //default: {.cc=”CN”, .schan=1, .nchan=13, policy=WIFI_COUNTRY_POLICY_AUTO};
+  //const wifi_country_t* country = {”USA”, 1, 11, WIFI_COUNTRY_POLICY_AUTO}; // WIFI_COUNTRY_POLICY_MANUAL
+  wifi_country_t myCountry;
+  if(esp_wifi_get_country(&myCountry) == ESP_OK)
+  {
+    strcpy(myCountry.cc, WIFI_COUNTRY);
+    myCountry.nchan = WIFI_MAX_CHANNEL;
+    esp_err_t err = esp_wifi_set_country(&myCountry);
+    if (err == ESP_OK)
+      prtln("Country Code: " + String(myCountry.cc));
+   }
+  
+  //https://en.wikipedia.org/wiki/MAC_address#Universal_vs._local_(U/L_bit)
+  //set MAC address
+  m_mac.toLowerCase();
+  if (macMode == ESP_IF_WIFI_AP || m_mac == "rand")
+    setRandMAC(macMode);
+  else if (m_mac != "")
+  {
+    uint8_t buf[6];
+    if (MacStringToByteArray(m_mac.c_str(), buf) != NULL) 
+    {
+      esp_wifi_set_mac(macMode, buf);
+      prtln("Custom MAC address: " + WiFi.macAddress());
+    }
+  }
+  else
+    prtln("Hardware MAC address: " + WiFi.macAddress());
+}
+
+// ESP_IF_WIFI_AP, ESP_IF_WIFI_STA
+void setRandMAC(wifi_interface_t macMode)
+{
+  uint8_t buf[6];
+  buf[0] = random(256) & 0xfe | 0x02; // clear multicast bit and set locally administered bit
+  buf[1] = random(256);
+  buf[2] = random(256);
+  buf[3] = random(256);
+  buf[4] = random(256);
+  buf[5] = random(256);
+  
+// wifi_set_macaddr(SOFTAP_IF, buf);
+// wifi_set_macaddr(STATION_IF, buf);
+// esp_task_wdt_reset();
+
+  esp_wifi_set_mac(macMode, buf);
+  prtln("Rand MAC address: " + WiFi.macAddress());
 }
 
 void dnsAndServerStart(bool bDisconnect)
 {
   if (bDisconnect)
   {
+    stopMIDI();
     MDNS.end();
     webServer.end();
   }
@@ -3186,40 +3791,66 @@ void dnsAndServerStart(bool bDisconnect)
     MDNS.addService("http", "tcp", 80);    
     
     prtln("Host Name: " + hostName);
+    
+    if (m_midiChan != MIDICHAN_OFF)
+      startMIDI(); // start apple-midi and control-surface libraries
   }
 }
 
-void PollApSwitch()
+void startMIDI()
 {
-#if FORCE_AP_ON
-  bool bApSwitchOn = true;
-#else
-  bool bApSwitchOn = (digitalRead(SW_SOFT_AP) == HIGH) ? true : false;
-#endif
+    AppleRTP_MIDI.setName(hostName.c_str());
+  
+    // Set up some AppleMIDI callback handles
+    AppleRTP_MIDI.setHandleConnected(onAppleMidiConnected);
+    AppleRTP_MIDI.setHandleDisconnected(onAppleMidiDisconnected);
+//    AppleRTP_MIDI.setHandleError(onAppleMidiError);
 
-  //prtln("bSoftAP:" + String(bSoftAP) + ", bApSwitchOn:" + String(bApSwitchOn) + ", bWiFiDisabled:" + String(bWiFiDisabled) + ", bWiFiConnected:" + String(bWiFiConnected) );
+    // Initialize Control Surface (also calls MIDI.begin())
+//    Control_Surface.begin();
+//    MIDI.begin(2);
+//    MIDI.begin(MIDI_CHANNEL_OMNI);
+
+    RTP_MIDI.setHandleNoteOn(OnMidiNoteOn);
+    RTP_MIDI.setHandleNoteOff(OnMidiNoteOff);
+//    MIDI.setHandleNoteOn(OnMidiNoteOn);
+//    MIDI.setHandleNoteOff(OnMidiNoteOff);
+//  MIDI.setHandleAfterTouchPoly(OnAfterTouchPoly);
+//  MIDI.setHandleControlChange(OnControlChange);
+//  MIDI.setHandleProgramChange(OnProgramChange);
+//  MIDI.setHandleAfterTouchChannel(OnAfterTouchChannel);
+//  MIDI.setHandlePitchBend(OnPitchBend);
+//  MIDI.setHandleSystemExclusive(OnSystemExclusive);
+//  MIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQuarterFrame);
+//  MIDI.setHandleSongPosition(OnSongPosition);
+//  MIDI.setHandleSongSelect(OnSongSelect);
+//  MIDI.setHandleTuneRequest(OnTuneRequest);
+//  MIDI.setHandleClock(OnClock);
+//  MIDI.setHandleStart(OnStart);
+//  MIDI.setHandleContinue(OnContinue);
+//  MIDI.setHandleStop(OnStop);
+//  MIDI.setHandleActiveSensing(OnActiveSensing);
+//  MIDI.setHandleSystemReset(OnSystemReset);
+    
+    // MIDI_CHANNEL_OMNI == MIDICHAN_ALL == 0, MIDI_CHANNEL_OFF == MIDICHAN_OFF == 17 and over
+    if (m_midiChan == MIDICHAN_ALL)
+      RTP_MIDI.begin(MIDI_CHANNEL_OMNI);
+    else
+      RTP_MIDI.begin(m_midiChan);
+      
+    // Add service to MDNS-SD
+    MDNS.addService("apple-midi", "udp", AppleRTP_MIDI.getPort());
+    
+    prtln("AppleMIDI started: " + hostName);
+}
+
+void stopMIDI()
+{
+  AppleRTP_MIDI.sendEndSession();
+  //MDNS.removeService("apple-midi", "udp");
+  mdns_service_remove("_apple-midi", "_udp");
   
-  if (bWiFiConnected)
-  {
-    if (bWiFiDisabled || bApSwitchOn) 
-      WiFiMonitorConnection(true); // disconnect from router
-  }
-  else // not connected to router
-  {
-    if (!bWiFiDisabled && !bApSwitchOn) 
-      WiFiMonitorConnection(false); // connect to router in STA mode
-  }
-  
-  if (bSoftAP)
-  {
-    if (bWiFiDisabled || !bApSwitchOn)
-      WiFiStartAP(true); // disconnect AP WiFi Mode
-  }
-  else
-  {
-    if (!bWiFiDisabled && bApSwitchOn)
-      WiFiStartAP(false); // connect in AP mode
-  }
+  prtln("AppleMIDI stopped!");
 }
 
 // esp_deep_sleep_start();
@@ -3247,6 +3878,12 @@ void print_wakeup_reason()
 
 void loop()
 {
+  // Listen to incoming notes
+  RTP_MIDI.read();
+  //Control_Surface.loop(); // handle all midi and control-surface messages
+  //MIDI.read();
+  //AppleMIDI.read();
+ 
   // return 1/4 sec. timer has not fired
   if (xSemaphoreTake(timerSemaphore, 0) != pdTRUE)
     return;
@@ -3264,12 +3901,15 @@ void loop()
     RunTasks();
 
   // read potentiometer and associated mode-switch every 1/4 second unless locked
-  if (m_lockCount == 0xff)
+  if (!IsLocked())
   {
     ReadModeSwitch(); // read center-off SPST 3-Mode switch
     ReadPot1();
   }
   
+  FlashSequencer();
+  FlashLED();
+
   if (++quarterSecondTimer < 2)
     return;
   
@@ -3277,9 +3917,6 @@ void loop()
   
   //-------- do stuff every .5 sec here
 
-  if (ledFlashTimer && --ledFlashTimer == 0)
-    digitalWrite(ONBOARD_LED_GPIO2, LOW);
-    
   // If button is pressed
   //if (digitalRead(BTN_STOP_ALARM_GPIO0) == LOW)
   //{
@@ -3405,33 +4042,16 @@ void loop()
     if (bTellP2WebPageToReload)
       bTellP2WebPageToReload = false;
     
-    // do stuff every 5 sec here
-    PollApSwitch();
+    PollApSwitch(); // also monitors WiFi connection!
   
-    // Time from router:
-    // I get the date and time from my router using client.print(“GET / HTTP/1.1\r\n Host: 192.168.1.254 \r\nConnection: close\r\n\r\n’ | nc 192.168.1.254 80” );
-    // which returns the local time.
     // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
     // https://github.com/esp8266/Arduino/blob/master/libraries/esp8266/examples/NTP-TZ-DST/NTP-TZ-DST.ino
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/system_time.html
     // https://randomnerdtutorials.com/esp32-date-time-ntp-client-server-arduino/ (gets time from the web)
     // https://en.cppreference.com/w/c/chrono/localtime
-  
     // return from loop if we re-synced!
     if (CheckForWiFiTimeSync())
       return;
-      
-    WiFiMonitorConnection();
-    
-    // if user input data
-    if(xSemaphoreTake(webInputSemaphore, 0) == pdTRUE)
-    {
-      if (inputMessage != "" && inputMessage != "No message sent" && inputParam != "" && inputParam != "none")
-      {
-        prtln("inputParam: " + inputParam);
-        prtln("inputMessage: " + inputMessage);
-      }
-    }
 
     fiveSecondTimer = 0; // reset
   }
@@ -3476,6 +4096,91 @@ time_t DoTimeSyncOneSecondStuff(time_t now)
   return now+1;
 }
 
+// NOTE: digitArray must have a 0 terminator to mark the end of sequence!
+// bStart defaults false
+void FlashSequencer(bool bStart)
+{
+  if (bStart)
+  {
+    ledFlashCounter = 0;
+    ledDigitCounter = 0;
+    ledSaveMode = ledMode; // save old led mode...
+    ledMode = LEDMODE_PAUSED;
+    ledSeqState = LEDSEQ_PAUSED;
+    digitalWrite(ONBOARD_LED_GPIO2, LOW);
+  }
+  else if (ledSeqState == LEDSEQ_ENDED)
+    return;
+    
+  if (ledSeqState == LEDSEQ_FLASHING)
+  {
+    if (ledFlashCounter >= ledFlashCount)
+    {
+      ledFlashCounter = 0;
+      ledMode = LEDMODE_PAUSED;
+      ledSeqState = LEDSEQ_PAUSED;
+    }
+  }
+  else // LEDSEQ_PAUSED
+  {
+    if (ledFlashCounter >= LED_PAUSE_COUNT)
+    {
+      ledFlashCounter = 0;
+      uint8_t digitCount = digitArray[ledDigitCounter++];
+      if (digitCount == 0) // end of digits to sequence...
+      {
+        ledMode = ledSaveMode; // return to "connected" flashing
+        ledSeqState = LEDSEQ_ENDED;
+      }
+      else
+      {
+        ledFlashCount = digitCount;
+        ledSeqState = LEDSEQ_FLASHING;
+        ledMode = LEDMODE_FASTFLASH;
+      }
+    }
+  }
+}
+
+void FlashLED()
+{
+    if (ledMode == LEDMODE_PAUSED)
+      ledFlashCounter++; // count 1/4 sec pause interval
+    else if (ledMode == LEDMODE_OFF)
+    {
+      if (digitalRead(ONBOARD_LED_GPIO2) == HIGH)
+        digitalWrite(ONBOARD_LED_GPIO2, LOW);
+      if (ledFlashTimer)
+        ledFlashTimer = 0;
+    }
+    else if (ledMode == LEDMODE_ON)
+    {
+      if (digitalRead(ONBOARD_LED_GPIO2) == LOW)
+        digitalWrite(ONBOARD_LED_GPIO2, HIGH);
+      if (ledFlashTimer)
+        ledFlashTimer = 0;
+    }
+    else if (ledFlashTimer)
+    {
+      if (--ledFlashTimer == 0)
+      {
+        if (digitalRead(ONBOARD_LED_GPIO2) == LOW)
+          digitalWrite(ONBOARD_LED_GPIO2, HIGH);
+        else
+        {
+          digitalWrite(ONBOARD_LED_GPIO2, LOW);
+          ledFlashCounter++;
+        }
+        if (ledMode == LEDMODE_SLOWFLASH)
+          ledFlashTimer = LED_SLOWFLASH_TIME;
+        else if (ledMode == LEDMODE_FASTFLASH)
+          ledFlashTimer = LED_FASTFLASH_TIME;
+      }
+    }
+    else // start off either slow or fast flash
+      ledFlashTimer = 1;
+}
+
 void DoTimeSyncOneSecondStuff(void)
 {
   prtln("Synchronizing RTC to internal timer...");
@@ -3487,7 +4192,6 @@ void DoTimeSyncOneSecondStuff(void)
   // for web-input, so leave it 0
   fiveSecondTimer = 0;
   
-  ledFlashTimer = 0;
   //clockSetDebounceTimer = 0; DON'T DO THIS HERE! this negates the debounce!
   
   ResetPeriod();
@@ -3538,6 +4242,10 @@ void SSR2On(int iPeriod)
 // return true if timers reset (need to return from loop())
 bool CheckForWiFiTimeSync()
 {
+#if TIME_SYNC_OFF
+  return false; // set TIME_SYNC_OFF false in FanController.h unless debugging!
+#endif
+
   // don't check unless wifi and time's not yet been set or if 
   // in the process of synchronizing minutes...
   if (!bWiFiConnected || bManualTimeWasSet || bWiFiTimeWasSet || bRequestWiFiTimeSync || bRequestManualTimeSync)
@@ -3558,4 +4266,109 @@ bool CheckForWiFiTimeSync()
   //else if (myYear < DEFAULT_YEAR)
   //  prtln("Y2038 Issue??? CheckForTimeSync() year: " + String(myYear) + " less than DEFAULT_YEAR: " + String(DEFAULT_YEAR));
   return false;
+}
+
+// ====================================================================================
+// Add some MIDI elements for testing
+// ====================================================================================
+
+// send Control Change Sustain On
+// AppleMIDI.controlChange(0x40, 0x7F, MIDI_CHANNEL);
+// send Control Change Sustain Off
+// AppleMIDI.controlChange(0x40, 0x00, MIDI_CHANNEL);
+// send Note On
+// AppleMIDI.noteOn(0x2b, 0x64, MIDI_CHANNEL);
+// send Note Off
+// AppleMIDI.noteOff(0x2b, 0x64, MIDI_CHANNEL);
+
+//using namespace MIDI_Notes;
+// This one works for us - good for testing! - S.S.
+// This one works for us - good for testing! - S.S.
+//NoteValueLED led = {
+//    ONBOARD_LED_GPIO2, note(C, 4),
+//};
+//NoteButton button = {
+//    0, note(C, 4),  // GPIO0 has a push button connected on most boards
+//};
+
+// ====================================================================================
+// Event handlers for incoming MIDI messages
+// ====================================================================================
+
+void onAppleMidiConnected(const ssrc_t &ssrc, const char *name) {
+  bMidiConnected  = true;
+  prtln("Apple MIDI connected to session " + String(name));
+}
+
+void onAppleMidiDisconnected(const ssrc_t &ssrc) {
+  bMidiConnected  = false;
+  prtln("Apple MIDI disconnected");
+}
+
+void onAppleMidiError(const ssrc_t &ssrc, int32_t err) {
+  prtln("AppleMidiError: " + String(err));
+}
+
+// https://github.com/FortySevenEffects/arduino_midi_library/wiki/Using-Callbacks
+// MIDI. (handlers)
+//void handleNoteOff(byte channel, byte note, byte velocity);
+//void handleNoteOn(byte channel, byte note, byte velocity);
+//void handleAfterTouchPoly(byte channel, byte note, byte pressure);
+//void handleControlChange(byte channel, byte number, byte value);
+//void handleProgramChange(byte channel, byte number);
+//void handleAfterTouchChannel(byte channel, byte pressure);
+//void handlePitchBend(byte channel, int bend);
+//void handleSystemExclusive(byte* array, unsigned size);
+//void handleTimeCodeQuarterFrame(byte data);
+//void handleSongPosition(unsigned int beats);
+//void handleSongSelect(byte songnumber);
+//void handleTuneRequest(void);
+//void handleClock(void);
+//void handleStart(void);
+//void handleContinue(void);
+//void handleStop(void);
+//void handleActiveSensing(void);
+//void handleSystemReset(void);
+
+void OnMidiNoteOn(uint8_t chan, uint8_t note, uint8_t velocity)
+{
+
+//  Serial.print(F("Incoming NoteOn from channel:"));
+//  Serial.print(chan);
+//  Serial.print(F(" note:"));
+//  Serial.print(note);
+//  Serial.print(F(" velocity:"));
+//  Serial.print(velocity);
+//  Serial.println();
+
+  if (velocity == 0)
+    OnMidiNoteOff(chan, note, velocity);
+  else
+  {
+    if (note == m_midiNoteA && nvSsrMode1 == SSR_MODE_OFF)
+      SetState(SSR_1, "ON");
+    if (note == m_midiNoteB && nvSsrMode2 == SSR_MODE_OFF)
+      SetState(SSR_2, "ON");
+  }
+}
+
+void OnMidiNoteOff(uint8_t chan, uint8_t note, uint8_t velocity)
+{
+//  Serial.print(F("Incoming NoteOff from channel:"));
+//  Serial.print(chan);
+//  Serial.print(F(" note:"));
+//  Serial.print(note);
+//  Serial.print(F(" velocity:"));
+//  Serial.print(velocity);
+//  Serial.println();
+//
+  if (note == m_midiNoteA && nvSsrMode1 == SSR_MODE_OFF)
+    SetState(SSR_1, "OFF");
+  if (note == m_midiNoteB && nvSsrMode2 == SSR_MODE_OFF)
+    SetState(SSR_2, "OFF");
+}
+
+bool IsLocked()
+{
+  return m_lockCount != 0xff;
 }

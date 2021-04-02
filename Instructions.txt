@@ -1,9 +1,17 @@
+DTS Smart Outlet - Version 1.72
+
 To enter your router's login info you must be connected in AP (Access Point) WiFi mode:
-Flip switch to AP mode. Wait 15 seconds then connect your phone's WiFi to SSID: dts7. The password is: 1234567890. Open your web-browser and type 192.168.7.7 into the address-field.The fan-controller's web-page will be displayed. Tap "Next=>>" at the top to go to the next page. Enter your WiFi router's SSID and password in the boxes and tap Submit.
+Flip switch to AP mode. Wait 15 seconds then connect your phone's WiFi to SSID: dts7. The password is: 1234567890. Open your web-browser and type 192.168.7.7 into the address-field.The fan-controller's web-page will be displayed. Tap "Next=>>" at the top to go to the next page. Select your WiFi router's SSID and enter its password in the box and tap Submit.
 
-Now flip the WiFi switch to STA mode. The Smart-Outlet should log in to your router after 15 seconds or so. Now connect your phone's WiFI to your router (you can't use your mobile-data connection). Type http://dts7.local in your web-browser's address-field.
+Now flip the WiFi switch to router-connect (STAtion) mode. The Smart-Outlet will log in to your router after 15 seconds or so. Now connect your phone to your WiFi router (you can't use your mobile-data connection). Type http://dts7.local in your web-browser's address-field (or you can enter the IP address your router has assigned).
 
-To reset to factory defaults, flip switch to AP mode and log-in as described above. In the Host Name field at the top, type: "c reset parms" (without quotes) and tap the Submit button. The WiFi connection will be reset but your phone should automatically reconnect after a delay. You will need to re-enter your router's WiFi  SSID and password and if you had entered a LOCK password that will be unset and the Smart Outlet is unlocked.
+Note: on powerup, the DTS Smart Outlet will flash out the last octet of the IP address it's been assigned by your router. At first, if in WiFi station mode, the internal light will flash fast indicating it's looking for your router. After connecting there is a pause, then the last part of the IP address is flashed out. For example, 192.168.1.345 would flash 5 times fast, pause and flash 4 times, pause and flash 3 times - then begin a slow flashing indicating that it is connected to your router.
+
+If the WiFi switch is in AP mode, the DTS Smart Outlet address is always 192.168.7.7 and its internal LED will flash 7 times then go on steadily.
+ 
+To reset to factory defaults, in the Host Name field at the top, type: "c reset parms" (without quotes) and tap the Submit button. You will need to go to AP mode as described above and re-enter your router's WiFi SSID and password and if you had entered a LOCK password that will be unset and the DTS Smart Outlet is now in the unlocked state!
+
+(Note: After using the "c reset parms" command or new from the factory, the smart outlet will try to connect to a router at SSID: MyRouter, Pass: MyRouterPass until you change the router login credentials as described above!)
 
 Host Name field special commands:
 c reset slots
@@ -14,36 +22,40 @@ c wifi disable
 c version
 c info
 c lock (lock the interface when no passphrase is set)
-c lock "passphrase" "passphrase" (set passphrase)
-c lock "old passphrase" "new passphrase" (change passphrase)
-c lock "passphrase" "" (remove the passphrase and lock - use "c unlock" to unlock)
-c lock "passphrase"
 c unlock (unlock the interface when no passphrase is set)
-c unlock "passphrase"
-c update (login: dts, pass: update)
+c lock "passphrase" (lock the interface when passphrase is set)
+c unlock "passphrase" (unlock the interface when passphrase is set)
+c lock "passphrase" "passphrase" (set a passphrase CAUTION!!! WRITE IT DOWN AND SAVE!!!)
+c lock "old passphrase" "new passphrase" (change passphrase CAUTION!!! WRITE IT DOWN AND SAVE!!!)
+c lock "passphrase" "" (remove the passphrase and lock)
+c update (select binary file for "over the air" update)
+c mac 86:0D:8E:1A:11:A0 (sets new MAC address; bit 0 of 86 is multicast, do not set, bit 1 = locally administered, 1A, 11, A0 are vendor assigned)
+c mac (resets MAC to hardware default)
+c mac rand (generate random MACs each time - make sure your router is not filtering out unknown new MAC addresses!)
 
 Main firmware update: fc.bin,
 Web-server update: fc.spiffs.bin
 
-To build the software, use the Arduino IDE.
+To build the software, download it at github.com/dxzl/esp32-fan-controller. Use the Arduino IDE to compile it.
 
 In File->Preferences, add Additional boards URLs:
 https://dl.espressif.com/dl/package_esp32_dev_index.json
 https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
 
 Go to the Boards Manager and search for "esp" and add ESP32 boards.
-Select "ESP32 Dev Module" as your board. Select Partition Scheme "Minimal SPIFFS".
+Select "ESP32 Dev Module" as your board. Select Partition Scheme "Default 4MB with spiffs".
 Select Sketch->Export Compiled Binary.
 Double-click fixname.bat. You should have the file "fc.bin", which is the main firmware update file.
 Go into the DTS_SMART_FAN_CONTROLLER\spiffs folder and double-click fcspiffs.bat to make fc.spiffs.bin.
-fc.spiffs.bin bundles all of the web-server HTML and CSS files.
+fc.spiffs.bin bundles all of the web-server HTML and CSS files. Note: fcspiffs.bat contains the command: mkspiffs.exe -p 256 -b 4096 -s 0x170000 -c ..\data fc.spiffs.bin.
 
-To reflash the software, flip the fan-controller's WiFi switch to STA mode (toward the LED lights). Assuming you already entered your router's SSID and PASS (see above), it connects.
+To reflash the software, connect your laptop or phone to your WiFi router. Unless you changed the host-name, you access the web-interface via "http://dts7.local" typed into your browser's address-field (you can also type its IP address).
 
-On PC or phone, connect to your WiFi router. Unless you changed the host-name, you access the web-interface via "http://dts7.local" typed into your browser's address-field.
+To update the firmware, have both .bin files handy on your phone or computer and in the Host Name field, enter "c update" and submit. Click on "Choose file..." and select fc.bin to flash the firmware - wait for the device update and reboot, clicking "OK" as needed. Now do the other .bin file, fc.spiffs.bin if you want to update the web-interface.
 
-To update the firmware, have both .bin files handy on your phone or computer and in the Host Name field, enter "c update" and submit. Enter Login: "dts7" and Password: "1234567890". A new box comes up. Click on "Choose file..." and select fc.bin to flash the firmware - wait for the device update and reboot, clicking "OK" as needed. Now do the other .bin file, fc.spiffs.bin if you want to update the web-interface.
+NOTE: To update the firmware when connected to a router, the web-interface must be unlocked. If you are connected through the access-point, SSID: dts7 at web-address 192.168.7.7, you can update with a locked interface and the system will be unlocked and passphrase cleared after successful reflashing.
 
+MIDI Control: The A and B outlets can be controlled by MIDI over WiFi. To use it, go to the web-interface using your browser and typing in either the IP address assigned by your router or the DNS hostname (default is "http://dts7.local"). Tap "Next=>" at the top. At the bottom you can select the MIDI channel and musical-note assignment for outlets A and B. If you have a Windows laptop, install the rtpMIDI program. Now you can control your outlets via your Digital Audio Workstation (DAW) (such as LMMS). Open rtpMIDI to see the connection for "dts7" and click "Connect".
 ----------------------------------------------
 Troubleshooting:
 If the web-interface is not working, make sure the Windows 10 firewall is not blocking Java. If you use a router and access via WiFi, or LAN for various devices - probably you want to set your network Private. To do this, right-click on Start in the lower left corner and Search for "Network status". Click WiFi and then click on the network you are connected to. Choose Private and close window.  Now search for Firewall. Click Windows Defender Firewall. Click "Allow an app through..."  scroll to Java and make sure Private is checked.

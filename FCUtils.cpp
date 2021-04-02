@@ -1,5 +1,125 @@
 #include "FanController.h"
 
+//String urldecode(String str)
+//{
+//  String s="";
+//  char c;
+//  char code0;
+//  char code1;
+//  for (int i =0; i < str.length(); i++){
+//    c=str.charAt(i);
+//    if (c == '+'){
+//      s+=' ';  
+//    }else if (c == '%'){
+//      i++;
+//      code0=str.charAt(i);
+//      i++;
+//      code1=str.charAt(i);
+//      c = (h2int(code0) << 4) | h2int(code1);
+//      s+=c;
+//    }else{        
+//      s+=c;  
+//    }
+//    
+//    yield();
+//  }
+//  
+// return s;
+//}
+
+//String urlencode(String str)
+//{
+//    String encodedString="";
+//    char c;
+//    char code0;
+//    char code1;
+//    char code2;
+//    for (int i =0; i < str.length(); i++){
+//      c=str.charAt(i);
+//      if (c == ' '){
+//        encodedString+= '+';
+//      } else if (isalnum(c)){
+//        encodedString+=c;
+//      } else{
+//        code1=(c & 0xf)+'0';
+//        if ((c & 0xf) >9){
+//            code1=(c & 0xf) - 10 + 'A';
+//        }
+//        c=(c>>4)&0xf;
+//        code0=c+'0';
+//        if (c > 9){
+//            code0=c - 10 + 'A';
+//        }
+//        code2='\0';
+//        encodedString+='%';
+//        encodedString+=code0;
+//        encodedString+=code1;
+//        //encodedString+=code2;
+//      }
+//      yield();
+//    }
+//    return encodedString;
+//    
+//}
+
+// copied this function from CodeProject's site...
+// https://www.codeproject.com/Articles/35103/Convert-MAC-Address-String-into-Bytes
+uint8_t* MacStringToByteArray(const char *pMac, uint8_t* pBuf)
+{
+  char cSep = ':';
+
+  for (int ii = 0; ii < 6; ii++)
+  {
+    unsigned int iNumber = 0;
+
+    //Convert letter into lower case.
+    char ch = tolower(*pMac++);
+
+    if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f'))
+      return NULL;
+
+    //Convert into number. 
+    // a. If chareater is digit then ch - '0'
+    // b. else (ch - 'a' + 10) it is done because addition of 10 takes correct value.
+    iNumber = isdigit(ch) ? (ch - '0') : (ch - 'a' + 10);
+    ch = tolower(*pMac);
+
+    if ((ii < 5 && ch != cSep) || (ii == 5 && ch != '\0' && !isspace(ch)))
+    {
+      pMac++;
+
+      if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f'))
+        return NULL;
+
+      iNumber <<= 4;
+      iNumber += isdigit(ch) ? (ch - '0') : (ch - 'a' + 10);
+      ch = *pMac;
+
+      if (ii < 5 && ch != cSep)
+        return NULL;
+    }
+    /* Store result.  */
+    pBuf[ii] = (uint8_t)iNumber;
+    /* Skip cSep.  */
+    pMac++;
+  }
+  return pBuf;
+}
+
+unsigned char h2int(char c)
+{
+    if (c >= '0' && c <='9'){
+        return((unsigned char)c - '0');
+    }
+    if (c >= 'a' && c <='f'){
+        return((unsigned char)c - 'a' + 10);
+    }
+    if (c >= 'A' && c <='F'){
+        return((unsigned char)c - 'A' + 10);
+    }
+    return(0);
+}
+
 String ZeroPad(byte val)
 {
   String s = (val < 10) ? "0" : "";    
@@ -17,12 +137,54 @@ String GetStringIP()
   
   IPAddress apip = WiFi.softAPIP();
   IPAddress loip = WiFi.localIP();
-  String sInfo = hostName + " (" + apip.toString() + "}";
+  String sInfo = hostName + " (" + apip.toString() + ") on channel " + String(GetWiFiChan());
+  uint16_t ipLastOctet;
   if (bSoftAP)
-    sInfo = " is an access point.";
+  {
+    ipLastOctet = apip[3];
+    sInfo += " is an access point.";
+  }
   else
-    sInfo = " connected to router " + m_ssid + " at IP " + loip.toString();
+  {
+    
+    ipLastOctet = loip[3];
+    sInfo += " connected to router " + WiFi.SSID() + " at " + loip.toString();
+  }
+  IpToArray(ipLastOctet);
   return sInfo;
+}
+
+int GetWiFiChan()
+{
+  uint8_t chan;
+  wifi_second_chan_t chan2;
+  if (esp_wifi_get_channel(&chan, &chan2) == ESP_OK)
+    return chan;
+  return -1;
+}
+
+// puts the last octet of an IP Address into an array
+// so that we can flash it out on the LED
+// For example:
+//   .8 => [0] = 8, [1] = 0
+//   .32 => [0] = 2, [1] = 3, [2] = 0
+//   .192 => [0] = 2, [1] = 9, [2] = 1, [3] = 0
+void IpToArray(uint16_t ipLastOctet)
+{
+  if (ipLastOctet == 0)
+  {
+    digitArray[0] = 0;
+    return;
+  }
+  
+  uint16_t hundreds = ipLastOctet/100;
+  ipLastOctet -= hundreds*100;
+  uint16_t tens = ipLastOctet/10;
+  ipLastOctet -= tens*10;
+  digitArray[0] = ipLastOctet; // 1s
+  digitArray[1] = tens;
+  digitArray[2] = hundreds;
+  digitArray[3] = 0; // end marker
 }
 
 void ReadPot1()
@@ -89,20 +251,23 @@ void ReadModeSwitch()
     oldSw2Value = sw2Value;
 
     // switch changes and no auto mode, force it
-    if (nvSsrMode1 != SSR_MODE_AUTO)
-    {
-      nvSsrMode1 = SSR_MODE_AUTO;
-      ResetPeriod();
-      PutPreference(EE_RELAY_A, nvSsrMode1);
-      prtln("Switch forced SSR1 mode to auto:" + SsrModeToString(nvSsrMode1));
-    }
-    if (nvSsrMode2 != SSR_MODE_AUTO)
-    {
-      nvSsrMode2 = SSR_MODE_AUTO;
-      ResetPeriod();
-      PutPreference(EE_RELAY_B, nvSsrMode2);
-      prtln("Switch forced SSR2 mode to auto:" + SsrModeToString(nvSsrMode2));
-    }
+// commented out 12/29/2020 because on init the old value is intentionally different from the
+// new to force swState to be set - having this negates the ability to save any mode-state but AUTO...
+// Original intent was to let the user with no web-interface use the mode-switch to change into AUTO mode
+//    if (nvSsrMode1 != SSR_MODE_AUTO)
+//    {
+//      nvSsrMode1 = SSR_MODE_AUTO;
+//      ResetPeriod();
+//      PutPreference(EE_RELAY_A, nvSsrMode1);
+//      prtln("Switch forced SSR1 mode to auto:" + SsrModeToString(nvSsrMode1));
+//    }
+//    if (nvSsrMode2 != SSR_MODE_AUTO)
+//    {
+//      nvSsrMode2 = SSR_MODE_AUTO;
+//      ResetPeriod();
+//      PutPreference(EE_RELAY_B, nvSsrMode2);
+//      prtln("Switch forced SSR2 mode to auto:" + SsrModeToString(nvSsrMode2));
+//    }
   }
 }
 
@@ -124,9 +289,19 @@ void PutPreference(const char* s, byte val)
   yield();
 }
 
+uint8_t GetPreferenceUChar(const char* s, const char eeDefault)
+{
+  preferences.begin(EE_PREFS_NAMESPACE, true);
+  uint8_t tmp = preferences.getUChar(s, eeDefault);
+  preferences.end();
+
+  yield();
+  return tmp;
+}
+
 String GetPreferenceString(const char* s, const char* eeDefault)
 {
-  preferences.begin(EE_PREFS_NAMESPACE, false);
+  preferences.begin(EE_PREFS_NAMESPACE, true);
   String sTemp = preferences.getString(s, eeDefault);
   preferences.end();
   
@@ -392,8 +567,6 @@ bool ErasePreferences()
   bRet = preferences.clear();
   preferences.end();
 
-  yield();
-
   return bRet;
 }
 
@@ -447,6 +620,7 @@ void SetState(byte val, String s)
   if (s == "ON")
   {
     digitalWrite(val, HIGH);
+    //prtln("ON");
 
     if (val == SSR_1)
       ssr1State = "ON";
@@ -456,6 +630,7 @@ void SetState(byte val, String s)
   else // OFF or AUTO
   {
     digitalWrite(val, LOW);
+    //prtln("OFF");
     
     if (val == SSR_1)
       ssr1State = "OFF";
@@ -602,6 +777,16 @@ bool SetTimeManually(int myYear, int myMonth, int myDay, int myHour, int myMinut
   m_prevDateTime = {0};
   bManualTimeWasSet = false; // stop processing events on manual time...
   return false;
+}
+
+// takes hour in 24 hour and returns 12-hour
+// and pmFlag by reference
+int Make12Hour(int iHour, bool &pmFlag)
+{
+  pmFlag = (iHour >= 12) ? true : false;
+  iHour %= 12; // 0-11 we get 0-11, for 12-23 we get 0-11
+  if (iHour == 0) iHour = 12; // the hour '0' should be '12'
+  return iHour;
 }
 
 // eastern  = -5
@@ -887,18 +1072,60 @@ void prt(String s)
 
 // This provides an HTML select list of available wifi networks.
 String WiFiScan(String sInit){
-  String s = "<option value='0'>" + sInit + "</option>";  
+  String s = "<option value='" + sInit + "'>";  
   int n = WiFi.scanNetworks();
+//  prtln("network scan count: " + String(n));
   if (n == 0) return s;
-  int count = 1;
   for (int ii = 0; ii < n; ++ii){
     String ssid = String(WiFi.SSID(ii));
+//    prtln("ssid: \"" + ssid + "\"");
     // skip adding current wifi router since it's added above...
     if (ssid != sInit)
-      s += "<option value='" + String(count++) + "'>" + ssid + "</option>"; // WiFi.RSSI(i), WiFi.channel(i)
+      s += "<option value='" + ssid + "'>"; // WiFi.RSSI(i), WiFi.channel(i)
   }
   return s;
 }
+
+// decode unicode hex: /u00e1, etc
+//String convertUnicode(String unicodeStr){
+//  String out = "";
+//  int len = unicodeStr.length();
+//  char iChar;
+//  char* endPtr; // will point to next char after numeric code
+//  for (int i = 0; i < len; i++){
+//     iChar = unicodeStr[i];
+//     if(iChar == '\\'){ // got escape char
+//       iChar = unicodeStr[++i];
+//       if(iChar == 'u'){ // got unicode hex
+//         char unicode[6];
+//         unicode[0] = '0';
+//         unicode[1] = 'x';
+//         for (int j = 0; j < 4; j++){
+//           iChar = unicodeStr[++i];
+//           unicode[j + 2] = iChar;
+//         }
+//         long unicodeVal = strtol(unicode, &endPtr, 16); //convert the string
+//         out += (char)unicodeVal;
+//       } else if(iChar == '/'){
+//         out += iChar;
+//       } else if(iChar == 'n'){
+//         out += '\n';
+//       }
+//     } else {
+//       out += iChar;
+//     }
+//  }
+//  return out;
+//}
+
+//bool alldigits(String sIn)
+//{
+//  int len = sIn.length();
+//  for (int ii=0; ii < len; ii++)
+//    if (!isdigit(sIn[ii]))
+//      return false;
+//  return true;    
+//}
  
 //    String encryptionTypeDescription = translateEncryptionType(WiFi.encryptionType(i));
 //    Serial.println(encryptionTypeDescription);

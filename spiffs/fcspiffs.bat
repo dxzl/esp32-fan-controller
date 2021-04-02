@@ -10,8 +10,6 @@ rem  min_spiffs.csv in documents\arduino\hardware\espressif\esp32\tools\partitio
 rem  offset: 0x3D0000, image size (-s): 0x30000,
 rem  My fan-controller .ino arduino ESP32 sketch checks for "spiffs" in file-name
 rem  then uses: Update.begin(SPIFFS.totalBytes(), U_SPIFFS)rem 
-mkspiffs.exe -p 256 -b 4096 -s 0x30000 -c ..\data fc.spiffs.bin
-rem  default_8MB.csv in documents\arduino\hardware\espressif\esp32\tools\partitions
-rem  offset: 0x670000, image size (-s): 0x190000,
-rem mkspiffs -p 256 -b 4096 -s 0x190000 -c data/ x.bin
+rem mkspiffs.exe -p 256 -b 4096 -s 0x30000 -c ..\data fc.spiffs.bin
+mkspiffs.exe -p 256 -b 4096 -s 0x170000 -c ..\data fc.spiffs.bin
 pause
