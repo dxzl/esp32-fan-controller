@@ -348,7 +348,7 @@ int FindNextFullTimeSlot(int iStart)
 
   for (int ii = iStart; ii < MAX_TIME_SLOTS; ii++)
   {
-    String sName = EE_SLOT_PREFIX + GetSlotNumAsString(ii);
+    String sName = GetSlotNumAsString(ii);
     
     int len = preferences.getBytesLength(sName.c_str()); // modified this in MyPreferences.cpp to not log an error
     
@@ -375,7 +375,7 @@ int FindFirstEmptyTimeSlot()
   preferences.begin(EE_SLOTS_NAMESPACE);
   for (int ii = 0; ii < MAX_TIME_SLOTS; ii++)
   {
-    String sName = EE_SLOT_PREFIX + GetSlotNumAsString(ii);
+    String sName = GetSlotNumAsString(ii);
     
     int len = preferences.getBytesLength(sName.c_str()); // modified this in MyPreferences.cpp to not log an error
     
@@ -410,7 +410,7 @@ int FindFirstEmptyTimeSlot()
 bool PutTimeSlot(int slotIndex, t_event &t)
 {
   // key names are 15 chars max length
-  String sName = EE_SLOT_PREFIX + GetSlotNumAsString(slotIndex);
+  String sName = GetSlotNumAsString(slotIndex);
   int bytesWritten = 0;
   
   preferences.begin(EE_SLOTS_NAMESPACE);
@@ -425,7 +425,7 @@ bool PutTimeSlot(int slotIndex, t_event &t)
 // returns true if success
 bool GetTimeSlot(int slotIndex, t_event &t)
 {
-  String sName = EE_SLOT_PREFIX + GetSlotNumAsString(slotIndex);
+  String sName = GetSlotNumAsString(slotIndex);
   int bytesRead = 0;
   
   preferences.begin(EE_SLOTS_NAMESPACE);
@@ -461,7 +461,7 @@ bool EnableTimeSlot(int slotIndex, bool bEnable)
 bool DeleteTimeSlot(int slotIndex)
 {
   bool bRet = false;
-  String sName = EE_SLOT_PREFIX + GetSlotNumAsString(slotIndex);
+  String sName = GetSlotNumAsString(slotIndex);
   
   preferences.begin(EE_SLOTS_NAMESPACE);
   bRet = preferences.remove(sName.c_str());
@@ -473,11 +473,13 @@ bool DeleteTimeSlot(int slotIndex)
     IR_RemoveIndexBySlot(slotIndex);
     m_slotCount--;
     m_taskMode = TASK_PAGE_REFRESH_REQUEST; // delay and tell P2.html to reload
-    m_taskTimer = TASK_TIME;      
+    m_taskTimer = TASK_TIME;
+
+    prtln("deleted slot " + String(slotIndex));
   }
+  else
+    prtln("delete slot " + String(slotIndex) + ", " + sName + " failed");
   
-  prtln("deleted time-slot: " + String(slotIndex));
-    
   return bRet;
 }
 
@@ -578,7 +580,7 @@ int CountFullTimeSlots()
 
   for (int ii = 0; ii < MAX_TIME_SLOTS; ii++)
   {
-    String sName = EE_SLOT_PREFIX + GetSlotNumAsString(ii);
+    String sName = GetSlotNumAsString(ii);
     
     int len = preferences.getBytesLength(sName.c_str()); // modified this in MyPreferences.cpp to not log an error
     
@@ -602,7 +604,7 @@ String GetSlotNumAsString(int val)
   if (val < 10)
     sSlotNum += '0';
   sSlotNum += String(val);
-  return sSlotNum;
+  return EE_SLOT_PREFIX + sSlotNum;
 }
 
 // ssr1State can be "OFF" or "ON"
@@ -707,7 +709,7 @@ struct tm* ReadInternalTime(time_t* pEpochSeconds, struct tm* pTm)
 // return true if success
 bool InitTimeManually()
 {
-  prtln("Initializing clock to DEFAULT_YEAR...");
+  prtln("Initializing clock to DEFAULT_YEAR: " + String(DEFAULT_YEAR));
   
   bManualTimeWasSet = false; // we are setting the "not set" time - so disable time-events!
   bWiFiTimeWasSet = false;
@@ -889,7 +891,7 @@ int InitRepeatList(int slotCount)
   if (localtime_r(&now, &timeInfo) == NULL)
     return 0;  
 
-  // check for stale events if if time has been set...
+  // check for stale events if time has been set...
   bool bCheckStale = (timeInfo.tm_year+EPOCH_YEAR != DEFAULT_YEAR);
   
   // read each record of t_event
@@ -906,29 +908,17 @@ int InitRepeatList(int slotCount)
       // repeatCount == 0 is infinite, everyCount 0 == undefined
       if (slotData.repeatMode != RPT_OFF)
       {
-        // can't go stale if set for infinite repeat???
-        // what if the device is in a closet for 10 years and you pull it out and plug
-        // it in and things start going on and off by themselves???
-        // What about if we just mark them disabled in some way and let the user review the
-        // events list?
-        
-        bool bStaleFlag;
-        if (bCheckStale)
+        bool bStaleFlag = false;
+        if (bCheckStale && slotData.repeatCount != 0) // prevent going stale if set for infinite repeat
         {
           t_time_date timeDate = CopyTmToTtimeDate(timeInfo);
           // returns 0 if match, 1 if event-time has passed by... 2 if yet to be...
-          int compareVal = CompareTimeDate(timeDate, slotData.timeDate);
-          if (compareVal == 1)
+          if (CompareTimeDate(timeDate, slotData.timeDate) == 1)
             bStaleFlag = true;
-          else
-            bStaleFlag = false;
         }
-        else
-          bStaleFlag = false;
           
         IR_Add(iFull, bStaleFlag, slotData.repeatCount, slotData.everyCount);
       }
-        
     }
     else
     {

@@ -20,19 +20,18 @@
 
 //#include <ArduinoJson.h>
 //#include <AsyncJson.h>
-
 //#include <Base64.h>
+//extern "C" {
+//  #include <crypto/base64.h>
+//}
+//#include <WiFiUdp.h>
+//#include <AsyncUDP.h>
+//#include <MIDI.h>
+
 #include <esp_system.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
 
-//extern "C" {
-//  #include <crypto/base64.h>
-//}
-
-//#include <WiFiUdp.h>
-//#include <AsyncUDP.h>
-//#include <MIDI.h>
 #include <esp_wifi.h>
 #include <AppleMIDI.h>
 USING_NAMESPACE_APPLEMIDI
@@ -374,6 +373,15 @@ void setup()
   bootCount = 0;
   clockSetDebounceTimer = 0;
 
+  uint32_t cpu_freq = getCpuFrequencyMhz();
+  prtln("Startup cpu freq is " + String(cpu_freq) + "MHz");
+
+  if (cpu_freq != CPU_FREQ)
+  {
+    prtln("Changing cpu frequency to " + String(CPU_FREQ) + "MHz");
+    setCpuFrequencyMhz(CPU_FREQ);
+  }
+
   m_midiChan = 0; // off is >= 17, omni is 0, 1-16
   m_midiNoteA = 0; // 0-127
   m_midiNoteB = 0; // 0-127
@@ -496,7 +504,7 @@ void setup()
   else
     prtln("error reading default base MAC address...");
 
-  #endif // end #if WRITE_CUSTOM_BLK3_MAC
+  #endif // end #if READ_WRITE_CUSTOM_BLK3_MAC
 
   #if WRITE_PROTECT_BLK3
   
@@ -1243,6 +1251,7 @@ void setup()
     }
     else if (m_slotCount < MAX_TIME_SLOTS)
     {
+      //if (AddTimeSlot(t, true)) // use this for debugging - has error message printout on USB
       if (AddTimeSlot(t))
         s = "Added timeslot...";
       else
@@ -1443,7 +1452,7 @@ void setup()
           if (DeleteTimeSlot(iSlotNum))
             s = "Time-slot " + String(iSlotNum) + " deleted!";
           else
-            s = "Failed to delete time-slot " + String(iSlotNum) + "...";
+            s = "Failed to delete time-slot " + String(iSlotNum) + "!";
         }
         else
           s = "Failed to send, please retry...";
@@ -1528,9 +1537,7 @@ void setup()
     prtln("Failed to set initial time!");
     
   SetupAndStartHardwareTimeInterrupt();
-  
-  prtln("Timer started... reducing cpu frequency to " + String(CPU_FREQ) + "MHz");
-  setCpuFrequencyMhz(CPU_FREQ);
+  prtln("Timer started...");
 }
 
 void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
@@ -2657,7 +2664,7 @@ bool ParseIncommingTimeEvent(String sIn)
   t.perMax = (uint8_t)iPerMax;
   t.perVal = (uint16_t)iPerVal;
   
-  return AddTimeSlot(t, false); // supress error messages but return status
+  return AddTimeSlot(t);
 }
 
 bool ParseRepeatMode(String &s, int16_t &iRepeatMode)
@@ -3204,7 +3211,7 @@ void ProcessTimeSlot(int slotIndex, t_time_date timeDate, t_event slotData)
   {
     // check to see if this event was out of date at InitRepeatList()
     // we don't want to start repeating on an event stored a year back,
-    // so just delete it...
+    // so disable it...
     if (slotData.repeatMode == RPT_OFF || IR_IsStaleBySlot(slotIndex))
     {
       if (DisableTimeSlot(slotIndex)) // disable the slot
@@ -3381,7 +3388,6 @@ String processor(const String& var)
         // Get the time-slot into slotData
         if (GetTimeSlot(ii, slotData)) // by-reference
         {
-          // option accepts: value, selected, label, disabled, id - I'm trying style
           sRet += "<option value=" + String(ii) + ">" + TimeSlotToString(slotData) + "</option>";
 
           // NO SUCCESS GETTING COLOR TO WORK (FireFox)
@@ -4013,7 +4019,7 @@ void loop()
     
       int iNZScount = InitSecondsList(m_slotCount); // call this AFTER CountFullTimeSlots()!
       prtln("Number of items with nonzero seconds: " + String(iNZScount));
-      // InitRepeatList will delete expired slots that repeat
+      // InitRepeatList will check for expired time-events if clock has been set
       int iRPTcount = InitRepeatList(m_slotCount);
       prtln("Number of items with repeat count: " + String(iRPTcount));  
     }
@@ -4242,10 +4248,6 @@ void SSR2On(int iPeriod)
 // return true if timers reset (need to return from loop())
 bool CheckForWiFiTimeSync()
 {
-#if TIME_SYNC_OFF
-  return false; // set TIME_SYNC_OFF false in FanController.h unless debugging!
-#endif
-
   // don't check unless wifi and time's not yet been set or if 
   // in the process of synchronizing minutes...
   if (!bWiFiConnected || bManualTimeWasSet || bWiFiTimeWasSet || bRequestWiFiTimeSync || bRequestManualTimeSync)

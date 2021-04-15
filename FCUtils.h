@@ -93,7 +93,7 @@ int CountFullTimeSlots();
 String GetSlotNumAsString(int val);
 bool DisableTimeSlot(int slotIndex);
 bool EnableTimeSlot(int slotIndex, bool bEnable=true);
-bool AddTimeSlot(t_event &slotData, bool bVerbose=true);
+bool AddTimeSlot(t_event &slotData, bool bVerbose=false);
 bool DeleteTimeSlot(int slotIndex);
 bool GetTimeSlot(int slotIndex, t_event &t);
 bool PutTimeSlot(int slotIndex, t_event &t);

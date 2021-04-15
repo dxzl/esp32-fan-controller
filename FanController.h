@@ -26,20 +26,16 @@
 #include "IndexRepeatList.h"
 #include "FCUtils.h"
 
-#define DTS_VERSION "Version 1.72 (March 26, 2021)"
+#define DTS_VERSION "Version 1.73 (April 14, 2021)"
 #define PRINT_ON true // set true to enable status printing to console
 #define CLEAR_PREFS false
 #define CLEAR_SLOTS false
 #define FORCE_AP_ON false // can also tie SW_SOFT_AP GPI34 to 3.3V for AP (ground it for router-mode)
-#define TIME_SYNC_OFF false
 #define USE_UPDATE_LOGIN false // set true to require password entry after typing "c update" into index.html host-name field
 
-// efuse bits are all 0 from factory and can only be set once - once set, say for a serial-number
-// (custom MAC address), then write-protect the bits that are still 0!
-#define FORCE_NEW_EFUSE_BITS_ON false // set true to force new bits to be set (if not yet write-protected)
-#define WRITE_PROTECT_BLK3 false // set true and run once to write protect BLK3 data (presently NOT write-protected!)
 // setting READ_WRITE_CUSTOM_BLK3_MAC true will write to BLK3 and permanently set efuse bits specified (presently written once).
 // set it false to use original factory base MAC from BLK1, set true to use MAC shown below as base MAC.
+// BE CAREFUL AS THESE CAN ONLY BE SET ONCE - MUST BE DIFFERENT FOR EACH ESP32 YOU HAVE!!!
 #define READ_WRITE_CUSTOM_BLK3_MAC false
 #define BLK3_VER  0x0a // version next 1a
 #define BLK3_MAC0 0xe6
@@ -48,6 +44,13 @@
 #define BLK3_MAC3 0xa3 // next ac
 #define BLK3_MAC4 0x6e
 #define BLK3_MAC5 0xb5
+
+//----------- experimental - these are relevant only if READ_WRITE_CUSTOM_BLK3_MAC is set true ----------------
+// efuse bits are all 0 from factory and can only be set once - once set, say for a serial-number (custom MAC address), then write-protect the bits that are still 0!
+// use FORCE_NEW_EFUSE_BITS_ON true one time if READ_WRITE_CUSTOM_BLK3_MAC is true and you want to set new bits that are still 0
+#define FORCE_NEW_EFUSE_BITS_ON false // set true to force new bits to be set (if not yet write-protected; you can't unset bits that are already set!)
+#define WRITE_PROTECT_BLK3 false // set true and run once to write protect BLK3 data (presently NOT write-protected!)
+//-------------------------------------------------------------------------------------------------------------
 
 #define UPLOAD_USERID  "dts7"
 #define UPLOAD_USERPW  "1234567890"
@@ -63,7 +66,7 @@
 #define MIN_SHIFT_COUNT 1
 #define MAX_SHIFT_COUNT 15
 
-#define CPU_FREQ 80 // 160 MHz standard
+#define CPU_FREQ 160 // 80MHz works ok for WiFi but may need 160MHz or 240MHz for WiFi Scans!
 
 // Data wire is plugged into pin 22 on the ESP32
 #define ONE_WIRE_BUS 22 // pin 22

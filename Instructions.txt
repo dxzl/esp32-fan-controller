@@ -1,17 +1,17 @@
-DTS Smart Outlet - Version 1.72
+DTS Smart Outlet - Version 1.73
 
 To enter your router's login info you must be connected in AP (Access Point) WiFi mode:
-Flip switch to AP mode. Wait 15 seconds then connect your phone's WiFi to SSID: dts7. The password is: 1234567890. Open your web-browser and type 192.168.7.7 into the address-field.The fan-controller's web-page will be displayed. Tap "Next=>>" at the top to go to the next page. Select your WiFi router's SSID and enter its password in the box and tap Submit.
+Flip switch to AP mode. Wait 15 seconds then connect your laptop or phone's WiFi to SSID: dts7. The password is: 1234567890. Open your web-browser and type 192.168.7.7 into the address-field.The fan-controller's web-page will be displayed. Tap "Next=>>" at the top to go to the next page. Select your WiFi router's SSID and enter its password in the box and tap Submit.
 
-Now flip the WiFi switch to router-connect (STAtion) mode. The Smart-Outlet will log in to your router after 15 seconds or so. Now connect your phone to your WiFi router (you can't use your mobile-data connection). Type http://dts7.local in your web-browser's address-field (or you can enter the IP address your router has assigned).
+Now flip the WiFi switch to router-connect (STAtion) mode. The Smart-Outlet will log in to your router after 15 seconds or so. Now connect your phone to your WiFi router. Type http://dts7.local in your web-browser's address-field (or you can enter the IP address your router has assigned).
 
 Note: on powerup, the DTS Smart Outlet will flash out the last octet of the IP address it's been assigned by your router. At first, if in WiFi station mode, the internal light will flash fast indicating it's looking for your router. After connecting there is a pause, then the last part of the IP address is flashed out. For example, 192.168.1.345 would flash 5 times fast, pause and flash 4 times, pause and flash 3 times - then begin a slow flashing indicating that it is connected to your router.
 
 If the WiFi switch is in AP mode, the DTS Smart Outlet address is always 192.168.7.7 and its internal LED will flash 7 times then go on steadily.
  
-To reset to factory defaults, in the Host Name field at the top, type: "c reset parms" (without quotes) and tap the Submit button. You will need to go to AP mode as described above and re-enter your router's WiFi SSID and password and if you had entered a LOCK password that will be unset and the DTS Smart Outlet is now in the unlocked state!
+To reset to factory defaults, in the Host Name field at the top type: "c reset parms" (without quotes) and tap the Submit button. You will then need to flip the switch and go to AP mode as described above to re-enter your router's WiFi SSID and password. NOTE: If you had a LOCK password set, it will be unset and the DTS Smart Outlet is now in the unlocked state!
 
-(Note: After using the "c reset parms" command or new from the factory, the smart outlet will try to connect to a router at SSID: MyRouter, Pass: MyRouterPass until you change the router login credentials as described above!)
+(NOTE: After using the "c reset parms" command or new from the factory, the smart outlet will try to connect to a router at SSID: MyRouter, Pass: MyRouterPass until you change the router login credentials by flipping the WiFI switch to AP mode as described above!)
 
 Host Name field special commands:
 c reset slots
@@ -44,7 +44,7 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 
 Go to the Boards Manager and search for "esp" and add ESP32 boards.
 Select "ESP32 Dev Module" as your board. Select Partition Scheme "Default 4MB with spiffs".
-Select Sketch->Export Compiled Binary.
+Select clock frequency of 160MHz. Select Sketch->Export Compiled Binary.
 Double-click fixname.bat. You should have the file "fc.bin", which is the main firmware update file.
 Go into the DTS_SMART_FAN_CONTROLLER\spiffs folder and double-click fcspiffs.bat to make fc.spiffs.bin.
 fc.spiffs.bin bundles all of the web-server HTML and CSS files. Note: fcspiffs.bat contains the command: mkspiffs.exe -p 256 -b 4096 -s 0x170000 -c ..\data fc.spiffs.bin.
