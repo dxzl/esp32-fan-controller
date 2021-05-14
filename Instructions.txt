@@ -1,4 +1,4 @@
-DTS Smart Outlet - Version 1.73
+DTS Smart Outlet/ Fan Controller
 
 To enter your router's login info you must be connected in AP (Access Point) WiFi mode:
 Flip switch to AP mode. Wait 15 seconds then connect your laptop or phone's WiFi to SSID: dts7. The password is: 1234567890. Open your web-browser and type 192.168.7.7 into the address-field.The fan-controller's web-page will be displayed. Tap "Next=>>" at the top to go to the next page. Select your WiFi router's SSID and enter its password in the box and tap Submit.
@@ -20,7 +20,7 @@ c wifi toggle
 c wifi restore
 c wifi disable
 c version
-c info
+c info (display number of times unlocked since power-on)
 c lock (lock the interface when no passphrase is set)
 c unlock (unlock the interface when no passphrase is set)
 c lock "passphrase" (lock the interface when passphrase is set)

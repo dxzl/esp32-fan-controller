@@ -16,6 +16,10 @@
   mkspiffs.exe -p 256 -b 4096 -s 1376256 -c ..\data fc.spiffs.bin
   
 *********/
+
+// PlatformIO NOTE: need to change Time.h to _Time.h in Time library
+// I prefer building with the Arduino IDE! - S.S.
+
 #include "FanController.h"
 
 //#include <ArduinoJson.h>
@@ -183,10 +187,6 @@ const char COMMAND_MAC[]     = "mac";
 const char PH_HOSTNAME[] = "HOSTNAME";
 const char PH_MAXSCT[] = "MAXSCT";
 const char PH_PERVARS[] = "PERVARS";
-const char PH_STATE1[] = "STATE1";
-const char PH_STATE2[] = "STATE2";
-const char PH_MODE1[] = "MODE1";
-const char PH_MODE2[] = "MODE2";
 // p1.html
 const char PH_ISAPMODE[] = "ISAPMODE";
 const char PH_PHASE[] = "PHASE";
@@ -197,6 +197,9 @@ const char PH_P1VARS[] = "P1VARS"; // combination script tag with vars for m_mid
 // p2.html
 const char PH_DELSTYLE[] = "DELSTYLE";
 const char PH_DELETEITEMS[] = "DELETEITEMS";
+
+// sct.js heartbeat /getHeart
+const char PARAM_HEARTBEAT[]   = "jdwoddlsxh";
 
 // index.html
 const char PARAM_HOSTNAME[]    = "hnEnc";
@@ -255,7 +258,7 @@ RTC_DATA_ATTR int bootCount;
 int m_slotCount;
 
 // three-position switch with pulldowns on the GPIO pins
-uint8_t sw1Value, sw2Value, oldSw1Value, oldSw2Value;
+uint8_t oldSw1Value, oldSw2Value;
 uint8_t nvSsrMode1, nvSsrMode2, m_taskMode, m_sct, m_minSct, m_maxSct;
 uint8_t m_midiNoteA, m_midiNoteB, m_midiChan;
 
@@ -268,13 +271,13 @@ uint8_t digitArray[4];
 uint16_t pot1Value, oldPot1Value;
 
 bool bWiFiConnected, bWiFiConnecting, bSoftAP, bWiFiDisabled;
-bool bResetOrPowerLoss, bTellP2WebPageToReload;
+bool bResetOrPowerLoss, bTellP2WebPageToReload, bOldApSwOn;
 bool bManualTimeWasSet, bWiFiTimeWasSet, bValidated;
 bool bRequestManualTimeSync, bRequestWiFiTimeSync, bMidiConnected;
 
 // timers
 uint16_t dutyCycleTimerA, dutyCycleTimerB, periodTimer, savePeriod, phaseTimer;
-uint16_t m_taskTimer, m_taskData;
+uint16_t m_taskTimer, m_taskData, m_unlockCounter;
 uint8_t quarterSecondTimer, fiveSecondTimer;
 uint8_t dutyCycleA, dutyCycleB, phase; // saved in Preferences (units are %)
 uint8_t perUnits, perMax, perVal; // perUnits and perMax are indices into selected option in index.html
@@ -285,8 +288,14 @@ uint8_t ledFlashTimer, clockSetDebounceTimer, m_lockCount;
 time_t m_prevNow;
 t_time_date m_prevDateTime;
 
+// we count "on" events up to the max interval in .5 sec units (determined by perMax and perUnits)
+// and also time duration "on" within that interval in .5 sec units which can be converted to a percentage on (duty-cycle).
+uint32_t statsHalfSecondCounter, statsHalfSecondCount;
+uint32_t statsAOnCounter, statsBOnCounter, statsDConA, statsDConB;
+uint32_t statsAOnPrevCount, statsBOnPrevCount, statsPrevDConA, statsPrevDConB;
+
 // Stores states
-String ssr1State, ssr2State, swState, hostName, m_ssid, m_mac;
+String ssr1State, ssr2State, swState, apSwState, hostName, m_ssid, m_mac;
 
 hw_timer_t * m_timer;
 volatile SemaphoreHandle_t timerSemaphore;
@@ -352,10 +361,9 @@ void setup()
   oldPot1Value = pot1Value = analogRead(POT_1);
 
   // insure "old" values for SWITCH different
-  sw1Value = digitalRead(SW_1);
-  oldSw1Value = ~sw1Value;
-  sw2Value = digitalRead(SW_2);
-  oldSw2Value = ~sw2Value;
+  oldSw1Value = ~digitalRead(SW_1);
+  oldSw2Value = ~digitalRead(SW_2);
+  bOldApSwOn = ~digitalRead(SW_SOFT_AP);
 
   fiveSecondTimer = FIVE_SECOND_TIME-2; // call PollApSwitch() in 2-3 seconds
 
@@ -389,6 +397,7 @@ void setup()
   m_taskMode = 0;
   m_taskData = 0;
   m_lockCount = 0;
+  m_unlockCounter = 0;
   m_minSct = MIN_SHIFT_COUNT;
   m_maxSct = MAX_SHIFT_COUNT;
   m_sct = m_minSct;
@@ -525,6 +534,9 @@ void setup()
   #endif
 
   GetPreferences();
+
+  // init stats counter
+  InitStats();
   
   // example using usa eastern standard/eastern daylight time
   // edt begins the second sunday in march at 0200
@@ -567,6 +579,10 @@ void setup()
 
   webServer.on("/help.html", HTTP_GET, [](AsyncWebServerRequest *request)
   {
+    // block help page if locked unless in AP mode
+    if (IsLockedAlertGet(request, WEB_PAGE_INDEX, true))
+      return;
+      
     SendWithHeaders(request, "/help.html");
   });
 
@@ -768,66 +784,79 @@ void setup()
   
   // Route to set GPIO SSR_1 to HIGH
   webServer.on("/buttons", HTTP_GET, [](AsyncWebServerRequest *request){
-    if (!IsLockedAlertGet(request, WEB_PAGE_INDEX)){
-      if (request->hasParam("A")){
-        String buttonMode = hnDecode(request->getParam("A")->value());
-        if (buttonMode == "0"){
-          if (nvSsrMode1 != SSR_MODE_OFF){
-            nvSsrMode1 = SSR_MODE_OFF;
-            SetState(SSR_1, nvSsrMode1);
-            m_taskMode = TASK_RELAY_A;
-            m_taskTimer = TASK_TIME;
-          }
-        }
-        else if (buttonMode == "1"){
-          if (nvSsrMode1 != SSR_MODE_ON){
-            nvSsrMode1 = SSR_MODE_ON;
-            SetState(SSR_1, nvSsrMode1);
-            m_taskMode = TASK_RELAY_A;
-            m_taskTimer = TASK_TIME;
-          }
-        }
-        else if (buttonMode == "2"){
-          if (nvSsrMode1 != SSR_MODE_AUTO){
-            nvSsrMode1 = SSR_MODE_AUTO;
-            SetState(SSR_1, nvSsrMode1);
-            m_taskMode = TASK_RELAY_A;
-            m_taskTimer = TASK_TIME;
-          }
+
+    if (IsLockedAlertGet(request, WEB_PAGE_INDEX))
+      return;
+      
+    if (request->hasParam("A")){
+      String buttonMode = hnDecode(request->getParam("A")->value());
+      if (buttonMode == "0"){
+        if (nvSsrMode1 != SSR_MODE_OFF){
+          nvSsrMode1 = SSR_MODE_OFF;
+          SetState(SSR_1, nvSsrMode1);
+          m_taskMode = TASK_RELAY_A;
+          m_taskTimer = TASK_TIME;
         }
       }
-      else if (request->hasParam("B")){
-        String buttonMode = hnDecode(request->getParam("B")->value());
-        if (buttonMode == "0"){
-          if (nvSsrMode2 != SSR_MODE_OFF){
-            nvSsrMode2 = SSR_MODE_OFF;
-            SetState(SSR_2, nvSsrMode2);
-            m_taskMode = TASK_RELAY_B;
-            m_taskTimer = TASK_TIME;
-          }
+      else if (buttonMode == "1"){
+        if (nvSsrMode1 != SSR_MODE_ON){
+          nvSsrMode1 = SSR_MODE_ON;
+          SetState(SSR_1, nvSsrMode1);
+          m_taskMode = TASK_RELAY_A;
+          m_taskTimer = TASK_TIME;
         }
-        else if (buttonMode == "1"){
-          if (nvSsrMode2 != SSR_MODE_ON){
-            nvSsrMode2 = SSR_MODE_ON;
-            SetState(SSR_2, nvSsrMode2);
-            m_taskMode = TASK_RELAY_B;
-            m_taskTimer = TASK_TIME;
-          }
-        }
-        else if (buttonMode == "2"){
-          if (nvSsrMode2 != SSR_MODE_AUTO){
-            nvSsrMode2 = SSR_MODE_AUTO;
-            SetState(SSR_2, nvSsrMode2);
-            m_taskMode = TASK_RELAY_B;
-            m_taskTimer = TASK_TIME;
-          }
+      }
+      else if (buttonMode == "2"){
+        if (nvSsrMode1 != SSR_MODE_AUTO){
+          nvSsrMode1 = SSR_MODE_AUTO;
+          SetState(SSR_1, nvSsrMode1);
+          m_taskMode = TASK_RELAY_A;
+          m_taskTimer = TASK_TIME;
         }
       }
     }
+    else if (request->hasParam("B")){
+      String buttonMode = hnDecode(request->getParam("B")->value());
+      if (buttonMode == "0"){
+        if (nvSsrMode2 != SSR_MODE_OFF){
+          nvSsrMode2 = SSR_MODE_OFF;
+          SetState(SSR_2, nvSsrMode2);
+          m_taskMode = TASK_RELAY_B;
+          m_taskTimer = TASK_TIME;
+        }
+      }
+      else if (buttonMode == "1"){
+        if (nvSsrMode2 != SSR_MODE_ON){
+          nvSsrMode2 = SSR_MODE_ON;
+          SetState(SSR_2, nvSsrMode2);
+          m_taskMode = TASK_RELAY_B;
+          m_taskTimer = TASK_TIME;
+        }
+      }
+      else if (buttonMode == "2"){
+        if (nvSsrMode2 != SSR_MODE_AUTO){
+          nvSsrMode2 = SSR_MODE_AUTO;
+          SetState(SSR_2, nvSsrMode2);
+          m_taskMode = TASK_RELAY_B;
+          m_taskTimer = TASK_TIME;
+        }
+      }
+    }
+
     request->send(204, "text/html", "");
 //    request->send(SPIFFS, "/index.html", String(), false, processor);
   });
   
+  // sct.js heartbeat /getHeart
+  webServer.on("/getHeart", HTTP_GET, [] (AsyncWebServerRequest *request)
+  {
+    if (request->hasParam(PARAM_HEARTBEAT))
+    {
+      String s = String(m_lockCount) + "," + String(pot1Value) + "," + apSwState + "," + swState;
+      request->send(200, "text/html", s.c_str());
+    }
+  });
+
   webServer.on("/getIndex", HTTP_GET, [] (AsyncWebServerRequest *request)
   {
     byte iStatus = 0; // status 0 = no send needed at end, 1 = OK response, 2 = fail response
@@ -838,12 +867,12 @@ void setup()
     // p2.html: hours minutes ampm onoff delete
     
     if (request->hasParam(PARAM_STATE1))
-      // this sends outlet mode and current state to javascript in our HTML web-page
-//      s = "Outlet1: <strong> " + ssr1State + ", " + SsrModeToString(nvSsrMode1) + "</strong>";
-      s = ssr1State + "," + SsrModeToString(nvSsrMode1);
+      // this sends current state, outlet mode, # times on and duty-cycle in percent to javascript in our HTML web-page as 4 comma-seperated sub-strings
+      s = ssr1State + "," + SsrModeToString(nvSsrMode1) + "," + String(statsAOnPrevCount+statsAOnCounter) + "," +
+                                               PercentOnToString(statsPrevDConA+statsDConA, statsHalfSecondCount+statsHalfSecondCounter);
     else if (request->hasParam(PARAM_STATE2))
-//      s = "Outlet2: <strong> " + ssr2State + ", " + SsrModeToString(nvSsrMode2) + "</strong>";
-      s = ssr2State + "," + SsrModeToString(nvSsrMode2);
+      s = ssr2State + "," + SsrModeToString(nvSsrMode2) + "," + String(statsBOnPrevCount+statsBOnCounter) + "," +
+                                               PercentOnToString(statsPrevDConB+statsDConB, statsHalfSecondCount+statsHalfSecondCounter);
     else if (request->hasParam(PARAM_HOSTNAME))
     {
       int errorCode;
@@ -865,7 +894,7 @@ void setup()
     }
     else
     {
-      if (IsLockedAlertGet(request, WEB_PAGE_INDEX))
+      if (IsLockedAlertGetPlain(request, false))
         return;
         
       // locked commands...  
@@ -875,6 +904,8 @@ void setup()
         if (cmd.length() > 0)
         {
           perMax = cmd.toInt();
+          if (periodTimer > 30)
+            periodTimer = 30; // force end of old period if it's over 15 sec!
           m_taskMode = TASK_PERMAX;
           m_taskTimer = TASK_TIME;
           iStatus = 1;
@@ -886,6 +917,8 @@ void setup()
         if (cmd.length() > 0)
         {
           perUnits = cmd.toInt();
+          if (periodTimer > 30)
+            periodTimer = 30; // force end of old period if it's over 15 sec!
           m_taskMode = TASK_PERUNITS;
           m_taskTimer = TASK_TIME;
           iStatus = 1;
@@ -897,6 +930,8 @@ void setup()
         if (cmd.length() > 0)
         {
           perVal = cmd.toInt();
+          if (periodTimer > 30)
+            periodTimer = 30; // force end of old period if it's over 15 sec!
           m_taskMode = TASK_PERVAL;
           m_taskTimer = TASK_TIME;
           iStatus = 1;
@@ -912,18 +947,11 @@ void setup()
       request->send(204, "text/html", "");
   });
   
-  webServer.on("/getP1", HTTP_GET, [] (AsyncWebServerRequest *request)
+  webServer.on("/altP1", HTTP_GET, [] (AsyncWebServerRequest *request)
   {
-    byte iStatus = 0; // status 0 = no send needed at end, 1 = OK response
-    
-    String s = ""; // if this in not empty later, we send it as code 200 to the client
-    // index.html: hostName perMax perVal perUnits
-    // p1.html: (via %ISAPMODE% we send wifiName wifiPass if in AP wifi mode) phaseSlider dcASlider dcBSlider
-    // p2.html: hours minutes ampm onoff delete
-    
-    if (IsLockedAlertGet(request, WEB_PAGE_P1))
+    if (IsLockedAlertGetPlain(request, false))
       return;
-      
+
     if (request->hasParam(PARAM_PHASE))
     {
       String cmd = hnDecode(request->getParam(PARAM_PHASE)->value());
@@ -936,7 +964,6 @@ void setup()
           phase = PHASE_MAX;
         m_taskMode = TASK_PHASE;
         m_taskTimer = TASK_TIME;
-        iStatus = 1;
       }
     }
     else if (request->hasParam(PARAM_DC_A))
@@ -951,7 +978,6 @@ void setup()
           dutyCycleA = DUTY_CYCLE_MAX;
         m_taskMode = TASK_DCA;
         m_taskTimer = TASK_TIME;
-        iStatus = 1;
       }
     }
     else if (request->hasParam(PARAM_DC_B))
@@ -966,7 +992,6 @@ void setup()
           dutyCycleB = DUTY_CYCLE_MAX;
         m_taskMode = TASK_DCB;
         m_taskTimer = TASK_TIME;
-        iStatus = 1;
       }
     }
     else if (request->hasParam(PARAM_MIDICHAN))
@@ -977,7 +1002,6 @@ void setup()
         m_midiChan = cmd.toInt();
         m_taskMode = TASK_MIDICHAN;
         m_taskTimer = TASK_TIME;
-        iStatus = 1; // send ok but no data back
       }
     }
     else if (request->hasParam(PARAM_MIDINOTE_A))
@@ -991,7 +1015,6 @@ void setup()
           m_midiNoteA = tmp;
           m_taskMode = TASK_MIDINOTE_A;
           m_taskTimer = TASK_TIME;
-          iStatus = 1; // send ok but no data back
         }
       }
     }
@@ -1006,11 +1029,27 @@ void setup()
           m_midiNoteB = tmp;
           m_taskMode = TASK_MIDINOTE_B;
           m_taskTimer = TASK_TIME;
-          iStatus = 1; // send ok but no data back
         }
       }
     }
-    else if (request->hasParam(PARAM_BUTRST))
+    
+    // 204 = OK but No Content
+    request->send(204, "text/html", "");
+  });
+  
+  webServer.on("/getP1", HTTP_GET, [] (AsyncWebServerRequest *request)
+  {
+    byte iStatus = 0; // status 0 = no send needed at end, 1 = OK response
+    
+    String s = ""; // if this in not empty later, we send it as code 200 to the client
+    // index.html: hostName perMax perVal perUnits
+    // p1.html: (via %ISAPMODE% we send wifiName wifiPass if in AP wifi mode) phaseSlider dcASlider dcBSlider
+    // p2.html: hours minutes ampm onoff delete
+    
+    if (IsLockedAlertGet(request, WEB_PAGE_P1))
+      return;
+
+    if (request->hasParam(PARAM_BUTRST))
     {
       if (bSoftAP && request->getParam(PARAM_BUTRST)->value() == String(m_sct))
       {
@@ -1429,7 +1468,7 @@ void setup()
     }
     else
     {
-      if (IsLockedAlertGet(request, WEB_PAGE_P2))
+      if (IsLockedAlertGetPlain(request), false)
         return;
         
       // these commands can be locked out...
@@ -1504,7 +1543,7 @@ void setup()
     // 200 = OK
     // 204 = OK but No Content
     if (iStatus == 2)
-      s = "<script>alert('Send failed, please retry...');location.href = '" + String(WEB_PAGE_P2) + "';</script>";
+      s = "Send failed, please retry...";
     if (s != "")
       request->send(200, "text/html", s.c_str());
     else if (iStatus == 1)
@@ -1712,6 +1751,7 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
         if (!bResetPwd && subSubCommand.length() == 0 && (currentPass == LOCKPASS_INIT || currentPass == subCommand))
         {
           m_lockCount = 0xff;
+          m_unlockCounter++;
           PutPreference(EE_LOCKCOUNT, m_lockCount);
           s = "<script>alert('Interface unlocked!');";
         }
@@ -1724,6 +1764,12 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
 
     if (bPrintUsage)
       s = "<script>alert('c lock, c lock \"pass\" (lock), c lock \"pass\" \"pass\" (set pw), c lock \"pass\" \"\" (remove pw), c lock \"pass\" \"newpass\" (change pw)');";
+  }
+  else if (cmd == COMMAND_INFO)
+  {
+    String sInfo = "Unlocked " + String(m_unlockCounter) + " times since power applied!";
+    //prtln(sInfo);        
+    s = "<script>alert('" + sInfo + "');";
   }
   else if (IsLocked())
   {
@@ -1739,7 +1785,7 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd)
   {
     request->send(200, "text/html", "<script>window.open('/loginIndex', '_self');</script>"); // special case to send here...
   }
-  else if (cmd == COMMAND_VERSION || cmd == COMMAND_INFO)
+  else if (cmd == COMMAND_VERSION)
   {
     String sInfo = String(VERSION_STR) + ", " + GetStringIP();
     //prtln(sInfo);        
@@ -1875,6 +1921,20 @@ void SendWithHeaders(AsyncWebServerRequest *request, String s)
   request->send(r);
 }
 
+// set sReloadUrl to WEB_PAGE_P2 Etc.
+bool IsLockedAlertGetPlain(AsyncWebServerRequest *request, bool bAllowInAP)
+{
+  if (bAllowInAP && bSoftAP)
+    return false;
+    
+  if (IsLocked())
+  {
+    request->send(200, "text/html", "System is locked!");
+    return true;
+  }
+  return false;
+}
+  
 // set sReloadUrl to WEB_PAGE_P2 Etc.
 bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bAllowInAP)
 {
@@ -2313,16 +2373,43 @@ void GetPreferences(void)
 
   m_lockCount = preferences.getUChar(EE_LOCKCOUNT, LOCKCOUNT_INIT);
   
-  perVal = preferences.getUChar(EE_PERVAL, PERVAL_INIT);
-  prtln("period value " + String(perVal));
   perUnits = preferences.getUChar(EE_PERUNITS, PERUNITS_INIT);
   prtln("period units: " + String(perUnits));
   perMax = preferences.getUChar(EE_PERMAX, PERMAX_INIT);
   prtln("max period: " + String(perMax));
+
+  perVal = preferences.getUChar(EE_PERVAL, PERIOD_INIT);
+  if (perVal < PERIOD_MIN)
+    perVal = PERIOD_MIN;
+  else if (perVal > PERIOD_MAX)
+    perVal = PERIOD_MAX;
+  String sTemp = (perVal == 0) ? "random" : String(perVal) + "%";
+  prtln("period: " + sTemp);
   
   savePeriod = ComputePeriod(perVal, perMax, perUnits);
   prtln("period (.5 sec units): " + String(savePeriod));
   
+  dutyCycleA = preferences.getUChar(EE_DC_A, DUTY_CYCLE_A_INIT);
+  if (dutyCycleA < DUTY_CYCLE_MIN)
+    dutyCycleA = DUTY_CYCLE_MIN;
+  else if (dutyCycleA > DUTY_CYCLE_MAX)
+    dutyCycleA = DUTY_CYCLE_MAX;
+  prtln("A duty-cycle:" + String(dutyCycleA) + "%");
+  
+  dutyCycleB = preferences.getUChar(EE_DC_B, DUTY_CYCLE_B_INIT);
+  if (dutyCycleB < DUTY_CYCLE_MIN)
+    dutyCycleB = DUTY_CYCLE_MIN;
+  else if (dutyCycleB > DUTY_CYCLE_MAX)
+    dutyCycleB = DUTY_CYCLE_MAX;
+  prtln("B duty-cycle: " + String(dutyCycleB) + "%");
+
+  phase = preferences.getUChar(EE_PHASE, PHASE_INIT);
+  if (phase < PHASE_MIN)
+    phase = PHASE_MIN;
+  else if (phase > PHASE_MAX)
+    phase = PHASE_MAX;
+  prtln("phase: " + String(phase) + "%");
+
   nvSsrMode1 = preferences.getUChar(EE_RELAY_A, SSR1_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
   SetState(SSR_1, nvSsrMode1);
 #if PRINT_ON
@@ -2337,27 +2424,6 @@ void GetPreferences(void)
   Serial.println(nvSsrMode2, HEX);
 #endif
   
-  dutyCycleA = preferences.getUChar(EE_DC_A, DUTY_CYCLE_A_INIT);
-  if (dutyCycleA < DUTY_CYCLE_MIN)
-    dutyCycleA = DUTY_CYCLE_MIN;
-  else if (dutyCycleA > DUTY_CYCLE_MAX)
-    dutyCycleA = DUTY_CYCLE_MAX;
-  prtln("dutyCycleA: " + String(dutyCycleA));
-  
-  dutyCycleB = preferences.getUChar(EE_DC_B, DUTY_CYCLE_B_INIT);
-  if (dutyCycleB < DUTY_CYCLE_MIN)
-    dutyCycleB = DUTY_CYCLE_MIN;
-  else if (dutyCycleB > DUTY_CYCLE_MAX)
-    dutyCycleB = DUTY_CYCLE_MAX;
-  prtln("dutyCycleB: " + String(dutyCycleB));
-
-  phase = preferences.getUChar(EE_PHASE, PHASE_INIT);
-  if (phase < PHASE_MIN)
-    phase = PHASE_MIN;
-  else if (phase > PHASE_MAX)
-    phase = PHASE_MAX;
-  prtln("phase (%): " + String(phase));
-
   m_midiChan = preferences.getUChar(EE_MIDICHAN, MIDICHAN_INIT);
   PrintMidiChan();
 
@@ -2378,19 +2444,106 @@ void GetPreferences(void)
   preferences.end();
 }
 
-uint16_t ComputePeriod(uint8_t perVal, uint8_t perMax, uint8_t perUnits)
+// call every .5 second to update stats
+void StatisticsMonitor()
+{
+  if (++statsHalfSecondCounter > statsHalfSecondCount)
+  {
+    statsAOnPrevCount = statsAOnCounter; 
+    statsBOnPrevCount = statsBOnCounter;
+    statsPrevDConA = statsDConA; 
+    statsPrevDConB = statsDConB; 
+    ClearStatCounters();
+  }
+
+  // we simply count time in .5 sec units when a channel is on
+  // these get copied to statsPrevDConA/B when monitor interval
+  // rolls over
+  if (ssr1State == "ON")
+    statsDConA++;
+  if (ssr2State == "ON")
+    statsDConB++;
+}
+
+// call this on powerup and if perMax or perUnits changes
+// -1 value means "not yet set" and we can display dashes
+void InitStats()
+{
+  // Struggling with this - user can set a wide range of max period from 25*.5sec to 1000*365days, and
+  // the slider-value on the index.html web-page will go from 0 (random) up to that max range...
+  // So this interval is hard to grasp... seems to make more sense to simply report "time on during the past full hour".
+  //statsHalfSecondCount = 2*ComputeMaxPeriod(perMax, perUnits);
+  statsHalfSecondCount = GetTimeInterval(perMax, perUnits);
+
+  statsAOnPrevCount = 0;
+  statsBOnPrevCount = 0;
+  statsPrevDConA = 0;
+  statsPrevDConB = 0;
+  ClearStatCounters();
+}
+
+void ClearStatCounters()
+{
+  statsHalfSecondCounter = 0;
+  statsAOnCounter = 0;
+  statsBOnCounter = 0;
+  statsDConA = 0; 
+  statsDConB = 0;
+}
+
+ // We return a simple time for now of 2*60*60 in half-second units
+ // so the user isn't confused by a complex, varying statistics interval...
+ // Keep in mind the statistic % on also includes manual on/off interactions... but
+ // if we set the auto on/off cycling to some large interval in many hours, this
+ // number is too small... except for just showing a dependable "time on over past hour plus current fraction of an hour" 
+ uint32_t GetTimeInterval(uint8_t perMax, uint8_t perUnits)
+ {
+   return T_ONE_HOUR;
+ }
+ 
+ //uint32_t ComputeMaxPeriod(uint8_t perMax, uint8_t perUnits)
+//{
+//  // perUnits is 0=.5 sec resolution, 1=sec, 2=min, 3=hrs
+//  // perMax is 0=15, 1=30, 2=60, 3=120, 4=240, 5=480, 6=960, 7=1920, 8=3840, 9=7680 (max limit of period slider on index.html)
+//  // perVal is slider's value 0-100% of perMax
+//  uint32_t iPerMax = DecodePerMax(perMax);
+//  
+//  uint32_t iTmp;
+//  
+//  switch(perUnits)
+//  {
+//    case 0: // .5 sec
+//      iTmp = iPerMax;
+//    break;
+//    
+//    case 1: // sec
+//    default:
+//      iTmp = iPerMax*2;
+//    break;
+//    
+//    case 2: // min
+//      iTmp = iPerMax*2*60;
+//    break;
+//    
+//    case 3: // hrs
+//      iTmp = iPerMax*T_ONE_HOUR;
+//    break;
+//  }
+//
+//  return iTmp;
+//}
+
+// returns a time in .5 second units
+uint32_t ComputePeriod(uint8_t perVal, uint8_t perMax, uint8_t perUnits)
 {
   // perUnits is 0=.5 sec resolution, 1=sec, 2=min, 3=hrs
-  // perMax is 0=10, 1=20, 2=30... 9=100 (max limit of period slider on index.html)
-  // perVal is slider's value 0-perMax
+  // perMax is 0=15, 1=30, 2=60, 3=120, 4=240, 5=480, 6=960, 7=1920, 8=3840, 9=7680 (max limit of period slider on index.html)
+  // perVal is slider's value 0-100% of perMax
+  uint32_t iPerMax = DecodePerMax(perMax);
   
-  // we have permax as an index representing maximums of a slider widget on p2.html
-  // the user can pick 10, 20, 30, etc. up to 100. perVal is a number from 0-10, 0-20, etc
-  uint16_t iPerMax = DecodePerMax(perMax);
-  
-  uint16_t iPerVal = (perVal == 0) ? random(1, iPerMax) : perVal;
+  uint32_t iPerVal = (perVal == 0) ? random(1, iPerMax) : (float)(perVal*iPerMax)/100.0;
 
-  uint16_t iTmp;
+  uint32_t iTmp;
   
   switch(perUnits)
   {
@@ -2408,7 +2561,7 @@ uint16_t ComputePeriod(uint8_t perVal, uint8_t perMax, uint8_t perUnits)
     break;
     
     case 3: // hrs
-      iTmp = iPerVal*2*60*60;
+      iTmp = iPerVal*T_ONE_HOUR;
     break;
   }
 
@@ -2418,43 +2571,43 @@ uint16_t ComputePeriod(uint8_t perVal, uint8_t perMax, uint8_t perUnits)
 // perMax index from index.html:
 //  <label for="perMax">max period</label>
 //  <select name="perMax" id="perMax">
-//  <option value="0">25</option>
-//  <option value="1">50</option>
-//  <option value="2">75</option>
-//  <option value="3">100</option>
-//  <option value="4">150</option>
-//  <option value="5">200</option>
-//  <option value="6">400</option>
-//  <option value="7">600</option>
-//  <option value="8">800</option>
-//  <option value="9">1000</option>
+//  <option value="0">15</option>
+//  <option value="1">30</option>
+//  <option value="2">60</option>
+//  <option value="3">120</option>
+//  <option value="4">240</option>
+//  <option value="5">480</option>
+//  <option value="6">960</option>
+//  <option value="7">1920</option>
+//  <option value="8">3840</option>
+//  <option value="9">7680</option>
 //  </select>
-uint16_t DecodePerMax(uint8_t perMax)
+uint32_t DecodePerMax(uint8_t perMax)
 {
   switch(perMax)
   {
     case 0:
-      return 25;
+      return 15;
     case 1:
-      return 50;
+      return 30;
     case 2:
-      return 75;
+      return 60;
     case 3:
-      return 100;
+      return 120;
     case 4:
-      return 150;
+      return 240;
     case 5:
-      return 200;
+      return 480;
     case 6:
-      return 400;
+      return 960;
     case 7:
-      return 600;
+      return 1920;
     case 8:
-      return 800;
+      return 3840;
     case 9:
-      return 1000;
+      return 7680;
     default:
-      return 50;
+      return 60;
   }
 }
 
@@ -2517,7 +2670,7 @@ bool ParseIncommingTimeEvent(String sIn)
   int iCount = 0;
 
   // optional - user can add any or all they want, in any order
-  iDcA = iDcB = iPhase = iPerUnits  = iPerMax = iPerVal = -1; // unused on init...
+  iDcA = iDcB = iPhase = iPerUnits = iPerMax = iPerVal = -1; // unused on init...
   
   for (int ii = 0 ; ii <= len ; ii++) // allow ii to go past eof on purpose!
   {
@@ -3483,49 +3636,13 @@ String processor(const String& var)
   if (var == PH_HOSTNAME)
     return hostName+".local";
     
-  if (var == PH_STATE1)
-  {
-    if(digitalRead(SSR_1))
-      ssr1State = "ON";
-    else
-      ssr1State = "OFF";
-    return ssr1State;
-  }
-      
-  if (var == PH_STATE2)
-  {
-    if(digitalRead(SSR_2))
-      ssr2State = "ON";
-    else
-      ssr2State = "OFF";
-    return ssr2State;
-  }
-    
-  if (var == PH_MODE1)
-  {
-    String s = SsrModeToString(nvSsrMode1);
-    prtln("SSR1 Mode:" + s);
-    return s;
-  }
-    
-  if (var == PH_MODE2)
-  {
-    String s = SsrModeToString(nvSsrMode2);
-    prtln("SSR2 Mode:" + s);
-    return s;
-  }
-    
   prtln("Unknown:" + var);
   return String();
 }
 
 void PollApSwitch()
 {
-#if FORCE_AP_ON
-  bool bApSwitchOn = true;
-#else
-  bool bApSwitchOn = (digitalRead(SW_SOFT_AP) == HIGH) ? true : false;
-#endif
+  bool bApSwitchOn = ReadApSwitch();
 
   //prtln("bSoftAP:" + String(bSoftAP) + ", bApSwitchOn:" + String(bApSwitchOn) + ", bWiFiDisabled:" + String(bWiFiDisabled) + ", bWiFiConnected:" + String(bWiFiConnected) );
 
@@ -3960,13 +4077,14 @@ void loop()
   if (periodTimer && --periodTimer == 0)
   {
     // do this before setting duty-cycle and phase timers!
+    // (remember that random values might be being used to create this new period!)
     periodTimer = ComputePeriod(perVal, perMax, perUnits);
-    
+
     // random mode is > 98
     if (phase >= 98)
-      phaseTimer = random(PHASE_MIN, PHASE_MAX)*(float)periodTimer/100.0;
+      phaseTimer = (float)(random(PHASE_MIN, PHASE_MAX)*periodTimer)/100.0;
     else
-      phaseTimer = phase*(float)periodTimer/100.0;
+      phaseTimer = (float)(phase*periodTimer)/100.0;
       
     // phaseTimer can compute to 0 - turn on both at same time
     if (phaseTimer == 0)  
@@ -3979,7 +4097,9 @@ void loop()
     
   if (phaseTimer && --phaseTimer == 0)
     SSR2On(savePeriod);
-    
+
+  StatisticsMonitor();
+  
   //----------------------------------------------
   // Read RTC every .5 seconds of the hardware-timer - if it's changed
   // since the last sample, an RTC second's elapsed...

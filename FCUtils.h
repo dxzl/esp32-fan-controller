@@ -74,10 +74,12 @@ void IpToArray(uint16_t ipLastOctet);
 
 void ReadPot1();
 void ReadModeSwitch();
+bool ReadApSwitch();
 
 void RestoreDefaultSsidAndPwd();
 void ToggelOldSsidAndPwd();
 
+String PercentOnToString(uint32_t totalDCon, uint32_t totalTime);
 String SsrModeToString(byte ssrMode);
 void SetState(byte val, String s);
 void SetState(byte val, byte ssrMode);

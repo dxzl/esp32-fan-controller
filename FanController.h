@@ -26,7 +26,7 @@
 #include "IndexRepeatList.h"
 #include "FCUtils.h"
 
-#define DTS_VERSION "Version 1.73 (April 14, 2021)"
+#define DTS_VERSION "Version 1.75 (May 13, 2021)"
 #define PRINT_ON true // set true to enable status printing to console
 #define CLEAR_PREFS false
 #define CLEAR_SLOTS false
@@ -174,16 +174,21 @@
 #define LEDMODE_FASTFLASH  3
 #define LEDMODE_PAUSED     4
 
-#define SSR1_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
-#define SSR2_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
+#define PERIOD_MIN              0 // %
+#define PERIOD_MAX              100 // 0 = random mode
 #define PHASE_MIN               0 // %
 #define PHASE_MAX               100 // 0 = random mode
-#define PHASE_INIT              50 // percent offset of period (0-100)
 #define DUTY_CYCLE_MIN          0 // %
 #define DUTY_CYCLE_MAX          100 // 0 = random mode
 #define MIN_RAND_PERCENT_DUTY_CYCLE 20 // smallest time-on is 20% of period when in random mode!
+
+#define PERUNITS_INIT           1 // 0= 1/2 sec, 1=sec, 2=min, 3=hrs
+#define PERMAX_INIT             2 // 0=15, 1=30, 2=60, 3=120... 9=7,680
+#define PERIOD_INIT             50 // percent offset of period (0-100)
+#define PHASE_INIT              50 // percent offset of period (0-100)
 #define DUTY_CYCLE_A_INIT       50 // percent on (0-100)
 #define DUTY_CYCLE_B_INIT       50 // percent on (0-100)
+
 #define LOCKCOUNT_INIT          -1 // unlocked
 #define LOCKPASS_INIT           "****"
 #define MIDICHAN_INIT           MIDICHAN_OFF // off
@@ -192,10 +197,8 @@
 #define MIDINOTE_ALL            128 // all notes
 #define MIDICHAN_ALL            0 // all channels
 #define MIDICHAN_OFF            255 // no channels
-
-#define PERUNITS_INIT           1 // 0= 1/2 sec, 1=sec, 2=min, 3=hrs
-#define PERMAX_INIT             6 // 0=reserved, 1=10, 2=20, 3=30... 10=100
-#define PERVAL_INIT             ((PERMAX_INIT*10)/2) // slider at center...
+#define SSR1_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
+#define SSR2_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
 
 #define LED_EEPROM_FLASH_TIME   3 // .5 sec units (indicated a value saved to eeprom)
 
@@ -228,6 +231,8 @@
 #define EE_PREFS_NAMESPACE "dts-fc01"
 #define EE_SLOTS_NAMESPACE "dts-fc02"
 
+#define T_ONE_HOUR (2*60*60)
+
 // function prototypes
 void IRAM_ATTR onTimer();
 void FlashSequencer(bool bStart=false);
@@ -246,14 +251,19 @@ void SetupAndStartHardwareTimeInterrupt();
 void HardwareTimerRestart(hw_timer_t * timer);
 time_t DoTimeSyncOneSecondStuff(time_t now);
 void DoTimeSyncOneSecondStuff(void);
-uint16_t ComputePeriod(uint8_t perVal, uint8_t perMax, uint8_t perUnits);
-uint16_t DecodePerMax(uint8_t perMax);
+void InitrStats();
+void ClearStatCounters();
+uint32_t GetTimeInterval(uint8_t perMax, uint8_t perUnits);
+uint32_t ComputePeriod(uint8_t perVal, uint8_t perMax, uint8_t perUnits);
+//uint32_t ComputeMaxPeriod(uint8_t perMax, uint8_t perUnits);
+uint32_t DecodePerMax(uint8_t perMax);
 bool CheckEventSpecificTimeCycleParameters(t_event* slotData);
 bool ParseIncommingTimeEvent(String sIn);
 bool ParseRepeatMode(String &s, int16_t &iRepeatMode);
 bool ParseDevAddressAndMode(String &s, int16_t &iDevAddr, int16_t &iDevMode);
 bool ParseDate(String &s, int16_t &iMonth, int16_t &iDay, int16_t &iYear);
 bool ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int16_t &iSecond);
+bool IsLockedAlertGetPlain(AsyncWebServerRequest *request, bool bAllowInAP=false);
 bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bAllowInAP=false);
 bool IsLockedAlertPost(AsyncWebServerRequest *request, bool bAllowInAP=false);
 bool IsLocked();
@@ -272,7 +282,7 @@ extern uint8_t sw1Value, sw2Value, oldSw1Value, oldSw2Value;
 extern uint8_t nvSsrMode1, nvSsrMode2, m_taskMode;
 extern uint8_t digitArray[];
 extern uint16_t pot1Value, oldPot1Value;
-extern bool bManualTimeWasSet, bWiFiTimeWasSet, bSoftAP;
+extern bool bManualTimeWasSet, bWiFiTimeWasSet, bSoftAP, bOldApSwOn;
 extern bool bRequestManualTimeSync, bRequestWiFiTimeSync;
 extern uint16_t dutyCycleTimerA, dutyCycleTimerB, periodTimer, savePeriod, phaseTimer;
 extern uint16_t m_taskTimer, m_taskData;
@@ -281,5 +291,6 @@ extern uint8_t perUnits, perMax, perVal; // perUnits and perMax are indexes to i
 extern uint8_t ledFlashTimer, clockSetDebounceTimer, m_lockCount;
 extern time_t m_prevNow;
 extern t_time_date m_prevDateTime;
-extern String ledState, ssr1State, ssr2State, swState, inputMessage, inputParam, hostName, m_ssid;
+extern String ledState, ssr1State, ssr2State, swState, apSwState, inputMessage, inputParam, hostName, m_ssid;
 extern Preferences preferences;
+extern uint32_t statsAOnCounter, statsBOnCounter;

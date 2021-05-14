@@ -207,8 +207,8 @@ void ReadPot1()
     
     if (swState == "0")
     {
-      // period range: 0 - perMax
-      perVal = (int)(percent*(float)perMax);
+      // period range: 0 - 100% (of perMax)
+      perVal = (int)percent;
       m_taskMode = TASK_PERVAL;
       m_taskTimer = TASK_TIME;
     }
@@ -234,8 +234,8 @@ void ReadPot1()
 
 void ReadModeSwitch()
 {
-  sw1Value = digitalRead(SW_1);
-  sw2Value = digitalRead(SW_2);
+  uint8_t sw1Value = digitalRead(SW_1);
+  uint8_t sw2Value = digitalRead(SW_2);
   if (sw1Value != oldSw1Value || sw2Value != oldSw2Value)
   {
     if (sw1Value > 0)
@@ -269,6 +269,23 @@ void ReadModeSwitch()
 //      prtln("Switch forced SSR2 mode to auto:" + SsrModeToString(nvSsrMode2));
 //    }
   }
+}
+
+bool ReadApSwitch()
+{
+#if FORCE_AP_ON
+  bool bApSwOn = true;
+#else
+  bool bApSwOn = (digitalRead(SW_SOFT_AP) == HIGH) ? true : false;
+#endif
+
+  if (bApSwOn != bOldApSwOn)
+  {
+    apSwState = bApSwOn ? "1" : "0";
+    prtln("ApSwState:" + apSwState);
+    bOldApSwOn = bApSwOn;
+  }
+  return bApSwOn;
 }
 
 void PutPreference(const char* s, byte val)
@@ -621,9 +638,14 @@ void SetState(byte val, String s)
 {
   if (s == "ON")
   {
-    digitalWrite(val, HIGH);
-    //prtln("ON");
-
+    if (digitalRead(val) == LOW)
+    {
+      digitalWrite(val, HIGH);
+      if (val == SSR_1)
+        statsAOnCounter++;
+      else if (val == SSR_2)
+        statsBOnCounter++;
+    }
     if (val == SSR_1)
       ssr1State = "ON";
     else if (val == SSR_2)
@@ -632,8 +654,6 @@ void SetState(byte val, String s)
   else // OFF or AUTO
   {
     digitalWrite(val, LOW);
-    //prtln("OFF");
-    
     if (val == SSR_1)
       ssr1State = "OFF";
     else if (val == SSR_2)
@@ -641,16 +661,22 @@ void SetState(byte val, String s)
   }
 }
 
+String PercentOnToString(uint32_t totalDCon, uint32_t totalTime)
+{
+  uint8_t pOn = (uint8_t)(100.0*totalDCon/(float)totalTime);
+  return String(pOn);
+}
+ 
 // ssr1Mode can be "OFF, "ON" or "AUTO"
 String SsrModeToString(byte ssrMode)
 {
   if (ssrMode == SSR_MODE_OFF)
-    return("OFF");
+    return "OFF";
   if (ssrMode == SSR_MODE_ON)
-    return("ON");
+    return "ON";
   if (ssrMode == SSR_MODE_AUTO)
-    return("AUTO");
-  return("");
+    return "AUTO";
+  return "";
 }
  
 void ToggelOldSsidAndPwd()
