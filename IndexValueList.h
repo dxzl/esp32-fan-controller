@@ -2,6 +2,7 @@
 #define IndexValueListH
 
 #include <Arduino.h>
+#include <vector>
 
 typedef struct {int index; uint16_t value;} t_indexValue;
 

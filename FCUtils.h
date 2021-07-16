@@ -2,7 +2,8 @@
 #define FCUtilsH
 
 #include <Arduino.h>
-#include "esp_wifi.h"
+#include <esp_wifi.h>
+#include <esp_wifi_types.h>
 
 // returns ESP_OK
 // esp_err_t rc = esp_efuse_read_block(EFUSE_BLK3, &fuse3, 0, sizeof(fuse3)*8); // size in bits = sizeof(fuse3) * 8
@@ -64,7 +65,7 @@ typedef struct
 } t_event;
 
 uint8_t* MacStringToByteArray(const char *pMac, uint8_t* pbyAddress);
-
+String MacArrayToString(uint8_t* pMacArray);
 //String urlencode(String str);
 //String urldecode(String str);
 unsigned char h2int(char c);

@@ -163,7 +163,21 @@ int GetWiFiChan()
   return -1;
 }
 
-// puts the last octet of an IP Address into an array
+String MacArrayToString(uint8_t* pMacArray)
+{
+  String s;
+  char cbuf[3];
+  for(int ii = 0; ii < 6; ii++)
+  {
+    sprintf(cbuf,"%02X", *pMacArray++);
+    s += String(cbuf);  
+    if (ii < 5)
+      s += ":";
+  }
+  return s;
+}
+
+// puts the last octet of an IP Address into a global array
 // so that we can flash it out on the LED
 // For example:
 //   .8 => [0] = 8, [1] = 0

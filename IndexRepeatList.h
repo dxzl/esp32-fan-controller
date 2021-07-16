@@ -2,6 +2,7 @@
 #define IndexRepeatListH
 
 #include <Arduino.h>
+#include <vector>
 
 typedef struct {int index; bool bStale; uint16_t rptCount; uint16_t rptCounter; uint16_t everyCount; uint16_t everyCounter;} t_indexRepeat;
 

@@ -37,6 +37,7 @@
 #include <esp_efuse_table.h>
 
 #include <esp_wifi.h>
+#include <esp_wifi_types.h>
 #include <AppleMIDI.h>
 USING_NAMESPACE_APPLEMIDI
 
@@ -44,7 +45,7 @@ USING_NAMESPACE_APPLEMIDI
 // Using the flash-string function to conserve SRAM
 // client.println(F("<H3>Arduino with Ethernet Shield</H2>"));
 
-// web-server reference
+// references:
 // https://esp32developer.com
 // https://github.com/cs8425/ESPAsyncWebServer
 // https://github.com/me-no-dev/ESPAsyncWebServer
@@ -67,6 +68,7 @@ USING_NAMESPACE_APPLEMIDI
 // https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/system/system_time.html
 // https://circuits4you.com/2019/03/21/esp8266-url-encode-decode-example/
 // https://randomnerdtutorials.com/esp32-external-wake-up-deep-sleep/
+// Get WiFi event info: https://techtutorialsx.com/2019/08/15/esp32-arduino-getting-wifi-event-information/
 
 // The ESP32 has 8kB SRAM on the RTC part, called RTC fast memory. The data saved here is not erased
 // during deep sleep. However, it is erased when you press the reset button (the button labeled EN on the ESP32 board).
@@ -1565,6 +1567,11 @@ void setup()
   // Create webInputSemaphore
 //  webInputSemaphore = xSemaphoreCreateBinary();
 
+  // needed to detect a disconnect...
+//  WiFi.onEvent(WiFiStationConnected, SYSTEM_EVENT_STA_CONNECTED);
+  WiFi.onEvent(WiFiStationDisconnected, SYSTEM_EVENT_STA_DISCONNECTED);
+//  WiFi.onEvent(WiFiEvent);
+  
   // need this before configTime!
   WiFi.mode(WIFI_STA);
   
@@ -3713,13 +3720,7 @@ void WiFiMonitorConnection(bool bDisconnect, bool bEraseOldCredentials)
         prtln("STA Mode: Stopping mDNS, web-server and WiFi...");
       else
         prtln("Connection failed, lost or disconnected...");
-        
-      dnsAndServerStart(true); // stop dns and webserver
-      
-      WiFi.disconnect(bEraseOldCredentials); // disconnect wifi, erase internal stored info
-      bWiFiConnected = false;
-      ledMode = LEDMODE_OFF;
-      fiveSecondTimer = FIVE_SECOND_TIME-2; // restart in 2-3 seconds
+      WiFiDisconnect(bEraseOldCredentials);
     }
 //    else if (!(bManualTimeWasSet || bWiFiTimeWasSet) && bResetOrPowerLoss)
 //    {
@@ -3764,6 +3765,182 @@ void WiFiMonitorConnection(bool bDisconnect, bool bEraseOldCredentials)
     }
   }
 }
+
+// enum wifi_err_reason_t (reasons for disconnect)
+//    WIFI_REASON_UNSPECIFIED              = 1,
+//    WIFI_REASON_AUTH_EXPIRE              = 2,
+//    WIFI_REASON_AUTH_LEAVE               = 3,
+//    WIFI_REASON_ASSOC_EXPIRE             = 4,
+//    WIFI_REASON_ASSOC_TOOMANY            = 5,
+//    WIFI_REASON_NOT_AUTHED               = 6,
+//    WIFI_REASON_NOT_ASSOCED              = 7,
+//    WIFI_REASON_ASSOC_LEAVE              = 8,
+//    WIFI_REASON_ASSOC_NOT_AUTHED         = 9,
+//    WIFI_REASON_DISASSOC_PWRCAP_BAD      = 10,
+//    WIFI_REASON_DISASSOC_SUPCHAN_BAD     = 11,
+//    WIFI_REASON_IE_INVALID               = 13,
+//    WIFI_REASON_MIC_FAILURE              = 14,
+//    WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT   = 15,
+//    WIFI_REASON_GROUP_KEY_UPDATE_TIMEOUT = 16,
+//    WIFI_REASON_IE_IN_4WAY_DIFFERS       = 17,
+//    WIFI_REASON_GROUP_CIPHER_INVALID     = 18,
+//    WIFI_REASON_PAIRWISE_CIPHER_INVALID  = 19,
+//    WIFI_REASON_AKMP_INVALID             = 20,
+//    WIFI_REASON_UNSUPP_RSN_IE_VERSION    = 21,
+//    WIFI_REASON_INVALID_RSN_IE_CAP       = 22,
+//    WIFI_REASON_802_1X_AUTH_FAILED       = 23,
+//    WIFI_REASON_CIPHER_SUITE_REJECTED    = 24,
+//
+//    WIFI_REASON_BEACON_TIMEOUT           = 200, happens repeatedly after a 201
+//    WIFI_REASON_NO_AP_FOUND              = 201, happens once when router (AP) unplugged
+//    WIFI_REASON_AUTH_FAIL                = 202,
+//    WIFI_REASON_ASSOC_FAIL               = 203,
+//    WIFI_REASON_HANDSHAKE_TIMEOUT        = 204,
+//    WIFI_REASON_CONNECTION_FAIL          = 205,
+//    WIFI_REASON_AP_TSF_RESET             = 206,
+void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
+{
+  if (info.disconnected.reason > WIFI_REASON_BEACON_TIMEOUT && bWiFiConnected)
+  {
+    WiFiDisconnect(false);
+
+    Serial.print("WiFi lost connection. Reason: ");
+    Serial.println(info.disconnected.reason); // 201 = router unplugged, 200 = idle 1 sec. heartbeat
+    Serial.println(MacArrayToString(info.sta_disconnected.mac));     
+//    Serial.println("Trying to Reconnect");
+//    WiFi.begin(ssid, password);}
+  }
+}
+
+void WiFiDisconnect(bool bEraseOldCredentials)
+{
+  dnsAndServerStart(true); // stop dns and webserver
+  WiFi.disconnect(bEraseOldCredentials); // disconnect wifi, erase internal stored info
+  bWiFiConnected = false;
+  ledMode = LEDMODE_OFF;
+  fiveSecondTimer = FIVE_SECOND_TIME-2; // restart in 2-3 seconds
+}
+
+//void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info)
+//{
+//    Serial.println("Connected to router!");
+// 
+//    Serial.print("SSID Length: ");
+//    Serial.println(info.connected.ssid_len);
+// 
+//    Serial.print("SSID: ");
+//    for(int i=0; i<info.connected.ssid_len; i++){
+//      Serial.print((char) info.connected.ssid[i]);
+//    }
+// 
+//    Serial.print("\nBSSID: ");
+//    for(int i=0; i<6; i++){
+//      Serial.printf("%02X", info.connected.bssid[i]);
+// 
+//      if(i<5){
+//        Serial.print(":");
+//      }
+//    }
+//     
+//    Serial.print("\nChannel: ");
+//    Serial.println(info.connected.channel);
+// 
+//    Serial.print("Auth mode: ");
+//    Serial.println(info.connected.authmode);  
+//} 
+
+//void WiFiEvent(WiFiEvent_t event)
+//{
+//  printWiFiEventDetails(event);
+//  if (event == SYSTEM_EVENT_STA_DISCONNECTED) {
+//    // handle your specific event here
+//  }
+//}
+//
+//void printWiFiEventDetails(WiFiEvent_t event)
+//{
+//  Serial.printf("[WiFi-event] event: %d\n", event);
+//
+//  switch (event) {
+//    case SYSTEM_EVENT_WIFI_READY:
+//      Serial.println("WiFi interface ready");
+//      break;
+//    case SYSTEM_EVENT_SCAN_DONE:
+//      Serial.println("Completed scan for access points");
+//      break;
+//    case SYSTEM_EVENT_STA_START:
+//      Serial.println("WiFi client started");
+//      break;
+//    case SYSTEM_EVENT_STA_STOP:
+//      Serial.println("WiFi clients stopped");
+//      break;
+//    case SYSTEM_EVENT_STA_CONNECTED:
+//      Serial.println("Connected to access point");
+//      break;
+//    case SYSTEM_EVENT_STA_DISCONNECTED: // this keeps printing every second until connected...
+//      Serial.println("Disconnected from WiFi access point");
+//      break;
+//    case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
+//      Serial.println("Authentication mode of access point has changed");
+//      break;
+//    case SYSTEM_EVENT_STA_GOT_IP:
+//      Serial.print("Obtained IP address: ");
+//      Serial.println(WiFi.localIP());
+//      break;
+//    case SYSTEM_EVENT_STA_LOST_IP:
+//      Serial.println("Lost IP address and IP address is reset to 0");
+//      break;
+//    case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
+//      Serial.println("WiFi Protected Setup (WPS): succeeded in enrollee mode");
+//      break;
+//    case SYSTEM_EVENT_STA_WPS_ER_FAILED:
+//      Serial.println("WiFi Protected Setup (WPS): failed in enrollee mode");
+//      break;
+//    case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:
+//      Serial.println("WiFi Protected Setup (WPS): timeout in enrollee mode");
+//      break;
+//    case SYSTEM_EVENT_STA_WPS_ER_PIN:
+//      Serial.println("WiFi Protected Setup (WPS): pin code in enrollee mode");
+//      break;
+//    case SYSTEM_EVENT_AP_START:
+//      Serial.println("WiFi access point started");
+//      break;
+//    case SYSTEM_EVENT_AP_STOP:
+//      Serial.println("WiFi access point  stopped");
+//      break;
+//    case SYSTEM_EVENT_AP_STACONNECTED:
+//      Serial.println("Client connected");
+//      break;
+//    case SYSTEM_EVENT_AP_STADISCONNECTED:
+//      Serial.println("Client disconnected");
+//      break;
+//    case SYSTEM_EVENT_AP_STAIPASSIGNED:
+//      Serial.println("Assigned IP address to client");
+//      break;
+//    case SYSTEM_EVENT_AP_PROBEREQRECVED:
+//      Serial.println("Received probe request");
+//      break;
+//    case SYSTEM_EVENT_GOT_IP6:
+//      Serial.println("IPv6 is preferred");
+//      break;
+//    case SYSTEM_EVENT_ETH_START:
+//      Serial.println("Ethernet started");
+//      break;
+//    case SYSTEM_EVENT_ETH_STOP:
+//      Serial.println("Ethernet stopped");
+//      break;
+//    case SYSTEM_EVENT_ETH_CONNECTED:
+//      Serial.println("Ethernet connected");
+//      break;
+//    case SYSTEM_EVENT_ETH_DISCONNECTED:
+//      Serial.println("Ethernet disconnected");
+//      break;
+//    case SYSTEM_EVENT_ETH_GOT_IP:
+//      Serial.println("Obtained IP address");
+//      break;
+//    default: break;
+//  }
+//}
 
 void WiFiStartAP(bool bDisconnect, bool bEraseOldCredentials)
 {
