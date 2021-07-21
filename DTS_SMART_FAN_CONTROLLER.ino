@@ -261,7 +261,7 @@ int m_slotCount;
 
 // three-position switch with pulldowns on the GPIO pins
 uint8_t oldSw1Value, oldSw2Value;
-uint8_t nvSsrMode1, nvSsrMode2, m_taskMode, m_sct, m_minSct, m_maxSct;
+uint8_t nvSsrMode1, nvSsrMode2, m_taskMode;
 uint8_t m_midiNoteA, m_midiNoteB, m_midiChan;
 
  // used to flash the ip address least-signifigant digit first, 4th (last) number
@@ -271,6 +271,9 @@ uint8_t digitArray[4];
 
 // variable for storing the potentiometer value
 uint16_t pot1Value, oldPot1Value;
+
+// counters for web-page hnDecode() routine
+int16_t m_sct, m_minSct, m_maxSct;
 
 bool bWiFiConnected, bWiFiConnecting, bSoftAP, bWiFiDisabled;
 bool bResetOrPowerLoss, bTellP2WebPageToReload, bOldApSwOn;
@@ -1979,10 +1982,16 @@ bool IsLockedAlertPost(AsyncWebServerRequest *request, bool bAllowInAP)
 String hnDecode(String sIn)
 {
   int errorCode;
-  String s = hnDecode(sIn, errorCode);
+  String sOut = hnDecode(sIn, errorCode);
   if (errorCode < 0)
     prtln("hnDecode error: " + String(errorCode));
-  return s;
+
+  //print("hnDecode sIn: "); 
+  //println(sIn); 
+  //print("hnDecode sOut: "); 
+  //println(sOut); 
+
+  return sOut;
 }
 
 String hnDecode(String sIn, int &errorCode)
@@ -2007,14 +2016,14 @@ String hnDecode(String sIn, int &errorCode)
     return "";
   }
 
-  uint16_t tempSct = m_sct;
+  int16_t tempSct = m_sct;
   uint16_t cs = 0; // checksum
   
   char charArray[arrLen]; // room for chars plus null, minus checksum
   for(int i = 0; i < arrLen-1; i++)
   {
     uint16_t c = (uint16_t)arr[i];
-    for (uint16_t j = 0; j < tempSct; j++)
+    for (int16_t j = 0; j < tempSct; j++)
     {
       bool lsbSet = (c & 1) ? true : false;
       c >>= 1;
