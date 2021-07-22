@@ -1070,10 +1070,18 @@ void setup()
       if (bSoftAP)
       {
         int errorCodeN, errorCodeP;
-        String valN = hnDecode(request->getParam(PARAM_WIFINAME)->value(), errorCodeN);
+        String sN = request->getParam(PARAM_WIFINAME)->value();
+        String valN = hnDecode(sN, errorCodeN);
         int lenN = valN.length();
-        String valP = hnDecode(request->getParam(PARAM_WIFIPASS)->value(), errorCodeP);
+        String sP = request->getParam(PARAM_WIFIPASS)->value();
+        String valP = hnDecode(sP, errorCodeP);
         int lenP = valP.length();
+
+        //!!!!!!!!!!!!!!!!!!!!!!!!
+        //prtln("sN: \"" + sN + "\"");
+        //prtln("valN: \"" + valN + "\"");
+        //prtln("sP: \"" + sP + "\"");
+        //prtln("valP: \"" + valP + "\"");
 
         if (errorCodeN < -1 || errorCodeP < -1)
         {
@@ -1986,11 +1994,6 @@ String hnDecode(String sIn)
   if (errorCode < 0)
     prtln("hnDecode error: " + String(errorCode));
 
-  //print("hnDecode sIn: "); 
-  //println(sIn); 
-  //print("hnDecode sOut: "); 
-  //println(sOut); 
-
   return sOut;
 }
 
@@ -2060,7 +2063,7 @@ String hnDecode(String sIn, int &errorCode)
     return ""; // no good...
   }
     
-  if (cs == 0)
+  if (cs != 0)
   {
     prtln("bad checksum on encoded string!");
     errorCode = -6;
@@ -2076,82 +2079,6 @@ String hnDecode(String sIn, int &errorCode)
   }
   
   return sOut; // trim off first two chars which are ascii two-digit shift-count
-}
-
-// input string can contain decimal numbers representing unprintable unicode chars,
-// The form is &#12345;&#67890; We need to parse these
-// returns 0 if no error
-int gleanEscapes(String sIn, std::vector<uint16_t>* p)
-{
-  if (!p)
-    return false;
-
-  p->resize(0);
-  
-  int strLen = sIn.length();
-  String sEsc;
-  bool bStartEsc = false;
-  bool bIsHex = false;
-
-  //prtln("gleanEscapes(): \"" + sIn + "\"");
-  
-  for (int i = 0; i < strLen; i++)
-  {
-    char c = sIn[i];
-    if (bStartEsc)
-    {
-      if (c == ';')
-      {
-        bStartEsc = false;
-        if (sEsc.length() > 0)
-        {        
-          uint16_t u;
-          if (bIsHex)
-          {
-            u = (uint16_t)strtol(sEsc.c_str(), NULL, 16); //convert hex string to decimal
-            bIsHex = false;
-          }
-          else
-            u = (uint16_t)sEsc.toInt();
-          p->push_back(u); // add unicode char
-        }
-        else // abort
-        {
-          p->resize(0);
-          return -2; // string has unknown escape!
-        }
-      }
-      else if (isDigit(c) || (bIsHex && isHex(c)))
-        sEsc += c;
-      else // abort
-      {
-        p->resize(0);
-        return -3; // string has unknown escape!
-      }
-    }
-    else if (c == '&')
-    {
-      if (i+1 < strLen && sIn[i+1] == '#')
-      {
-        if (i+2 < strLen && sIn[i+2] == 'x')
-        {
-          bIsHex = true;
-          i++;
-        }
-        bStartEsc = true;
-        i++;
-        sEsc = "";
-      }
-    }
-    else
-      p->push_back((uint16_t)c); // ansi 8-bit char
-  }
-  return 0;
-}
-
-bool isHex(char c)
-{
-  return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
 void RefreshMaxSct()

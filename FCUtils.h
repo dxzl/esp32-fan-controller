@@ -64,6 +64,8 @@ typedef struct
   bool bEnable, bIncludeCycleTiming, bCycleTimingInRepeats; // true if enabled
 } t_event;
 
+bool isHex(char c);
+int gleanEscapes(String sIn, std::vector<uint16_t>* p);
 uint8_t* MacStringToByteArray(const char *pMac, uint8_t* pbyAddress);
 String MacArrayToString(uint8_t* pMacArray);
 //String urlencode(String str);

@@ -26,7 +26,7 @@
 #include "IndexRepeatList.h"
 #include "FCUtils.h"
 
-#define DTS_VERSION "Version 1.78 (July 21, 2021)"
+#define DTS_VERSION "Version 1.79 (July 21, 2021)"
 #define PRINT_ON true // set true to enable status printing to console
 #define CLEAR_PREFS false
 #define CLEAR_SLOTS false

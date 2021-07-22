@@ -62,6 +62,82 @@
 //    
 //}
 
+// input string can contain decimal numbers representing unprintable unicode chars,
+// The form is &#12345;&#67890; We need to parse these
+// returns 0 if no error
+int gleanEscapes(String sIn, std::vector<uint16_t>* p)
+{
+  if (!p)
+    return false;
+
+  p->resize(0);
+  
+  int strLen = sIn.length();
+  String sEsc;
+  bool bStartEsc = false;
+  bool bIsHex = false;
+
+  //prtln("gleanEscapes(): \"" + sIn + "\"");
+  
+  for (int i = 0; i < strLen; i++)
+  {
+    char c = sIn[i];
+    if (bStartEsc)
+    {
+      if (c == ';')
+      {
+        bStartEsc = false;
+        if (sEsc.length() > 0)
+        {        
+          uint16_t u;
+          if (bIsHex)
+          {
+            u = (uint16_t)strtol(sEsc.c_str(), NULL, 16); //convert hex string to decimal
+            bIsHex = false;
+          }
+          else
+            u = (uint16_t)sEsc.toInt();
+          p->push_back(u); // add unicode char
+        }
+        else // abort
+        {
+          p->resize(0);
+          return -2; // string has unknown escape!
+        }
+      }
+      else if (isDigit(c) || (bIsHex && isHex(c)))
+        sEsc += c;
+      else // abort
+      {
+        p->resize(0);
+        return -3; // string has unknown escape!
+      }
+    }
+    else if (c == '&')
+    {
+      if (i+1 < strLen && sIn[i+1] == '#')
+      {
+        if (i+2 < strLen && sIn[i+2] == 'x')
+        {
+          bIsHex = true;
+          i++;
+        }
+        bStartEsc = true;
+        i++;
+        sEsc = "";
+      }
+    }
+    else
+      p->push_back((uint16_t)c); // ansi 8-bit char
+  }
+  return 0;
+}
+
+bool isHex(char c)
+{
+  return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
 // copied this function from CodeProject's site...
 // https://www.codeproject.com/Articles/35103/Convert-MAC-Address-String-into-Bytes
 uint8_t* MacStringToByteArray(const char *pMac, uint8_t* pBuf)
