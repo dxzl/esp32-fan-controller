@@ -26,7 +26,7 @@
 #include "IndexRepeatList.h"
 #include "FCUtils.h"
 
-#define DTS_VERSION "Version 1.79 (July 21, 2021)"
+#define DTS_VERSION "Version 1.82 (Jan 26, 2022)"
 #define PRINT_ON true // set true to enable status printing to console
 #define CLEAR_PREFS false
 #define CLEAR_SLOTS false
@@ -242,9 +242,10 @@ void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd);
 void WiFiMonitorConnection(bool bDisconnect=false, bool bEraseOldCredentials=false);
 void WiFiDisconnect(bool bEraseOldCredentials);
 void WiFiStartAP(bool bDisconnect=false, bool bEraseOldCredentials=false);
-void printWiFiEventDetails(WiFiEvent_t event);
+//void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info);
 //void WiFiEvent(WiFiEvent_t event);
+//void printWiFiEventDetails(WiFiEvent_t event);
 void dnsAndServerStart(bool bDisconnect=false);
 void GetPreferences();
 //String hnDecode(String sIn, int &errorCode);

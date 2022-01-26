@@ -4,9 +4,10 @@
   
   Thanks to Rui Santos for his great tutorials and examples!
   
-  WiFi Smart Fan Controller is by Scott Swift, Christian.
-  
-  NOTE: Use the Arduino->Tools->Partition Scheme Minimal SPIFFS (1.9MB APP with OTA, 190Kb SPIFFS)
+  WiFi Smart Fan Controller is by Scott Swift, Christian - Jesus is Lord!
+
+  NOTE: Build with ESP32 for Arduino 2.02 or higher
+  NOTE: Use the Arduino->Tools->Partition Scheme: Default 4MB with spiffs(1.2MB APP/1.5MB SPIFFS)
 
   I use Sketch->Export Compiled Binary then run FixName.bat to change the .bin file to fc.bin
   Next, I run the ESP32 utility "mkspiffs.exe" via fcspiffs.bat
@@ -16,9 +17,6 @@
   mkspiffs.exe -p 256 -b 4096 -s 1376256 -c ..\data fc.spiffs.bin
   
 *********/
-
-// PlatformIO NOTE: need to change Time.h to _Time.h in Time library
-// I prefer building with the Arduino IDE! - S.S.
 
 #include "FanController.h"
 
@@ -1579,9 +1577,9 @@ void setup()
 //  webInputSemaphore = xSemaphoreCreateBinary();
 
   // needed to detect a disconnect...
-//  WiFi.onEvent(WiFiStationConnected, SYSTEM_EVENT_STA_CONNECTED);
-  WiFi.onEvent(WiFiStationDisconnected, SYSTEM_EVENT_STA_DISCONNECTED);
-//  WiFi.onEvent(WiFiEvent);
+//  WiFi.ony7Event(WiFiEvent);
+  WiFi.onEvent(WiFiStationDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+//  WiFi.onEvent(WiFiGotIP, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
   
   // need this before configTime!
   WiFi.mode(WIFI_STA);
@@ -2215,7 +2213,8 @@ void RunTasks()
     
     case TASK_WIFI_CONNECT:
     {
-      setMAC(ESP_IF_WIFI_STA);
+      setMAC(WIFI_IF_STA);
+//      setMAC(ESP_IF_WIFI_STA);
       
       //String sPass = GetPreferenceString(EE_PWD, DEFAULT_PWD);
       //prtln(sPass);
@@ -3523,7 +3522,9 @@ String processor(const String& var)
       // set random MAC for station-mode WiFi scan in AP mode - for security purposes
       // the normal mac gets set back when AP mode exits and we reconnect in
       // router-station mode...
-      setRandMAC(ESP_IF_WIFI_STA);
+      
+      setRandMAC(WIFI_IF_STA);
+//      setRandMAC(ESP_IF_WIFI_STA);
 
       sRet = "<form action='/getP1' method='get' name='fName' id='fName'>"
              "<input type='hidden' name='" + String(PARAM_WIFINAME) + "' id='hidName'>WiFi Name:<br>"
@@ -3702,57 +3703,40 @@ void WiFiMonitorConnection(bool bDisconnect, bool bEraseOldCredentials)
   }
 }
 
-// enum wifi_err_reason_t (reasons for disconnect)
-//    WIFI_REASON_UNSPECIFIED              = 1,
-//    WIFI_REASON_AUTH_EXPIRE              = 2,
-//    WIFI_REASON_AUTH_LEAVE               = 3,
-//    WIFI_REASON_ASSOC_EXPIRE             = 4,
-//    WIFI_REASON_ASSOC_TOOMANY            = 5,
-//    WIFI_REASON_NOT_AUTHED               = 6,
-//    WIFI_REASON_NOT_ASSOCED              = 7,
-//    WIFI_REASON_ASSOC_LEAVE              = 8,
-//    WIFI_REASON_ASSOC_NOT_AUTHED         = 9,
-//    WIFI_REASON_DISASSOC_PWRCAP_BAD      = 10,
-//    WIFI_REASON_DISASSOC_SUPCHAN_BAD     = 11,
-//    WIFI_REASON_IE_INVALID               = 13,
-//    WIFI_REASON_MIC_FAILURE              = 14,
-//    WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT   = 15,
-//    WIFI_REASON_GROUP_KEY_UPDATE_TIMEOUT = 16,
-//    WIFI_REASON_IE_IN_4WAY_DIFFERS       = 17,
-//    WIFI_REASON_GROUP_CIPHER_INVALID     = 18,
-//    WIFI_REASON_PAIRWISE_CIPHER_INVALID  = 19,
-//    WIFI_REASON_AKMP_INVALID             = 20,
-//    WIFI_REASON_UNSUPP_RSN_IE_VERSION    = 21,
-//    WIFI_REASON_INVALID_RSN_IE_CAP       = 22,
-//    WIFI_REASON_802_1X_AUTH_FAILED       = 23,
-//    WIFI_REASON_CIPHER_SUITE_REJECTED    = 24,
-//
-//    WIFI_REASON_BEACON_TIMEOUT           = 200, happens repeatedly after a 201
-//    WIFI_REASON_NO_AP_FOUND              = 201, happens once when router (AP) unplugged
-//    WIFI_REASON_AUTH_FAIL                = 202,
-//    WIFI_REASON_ASSOC_FAIL               = 203,
-//    WIFI_REASON_HANDSHAKE_TIMEOUT        = 204,
-//    WIFI_REASON_CONNECTION_FAIL          = 205,
-//    WIFI_REASON_AP_TSF_RESET             = 206,
+// https://github.com/espressif/arduino-esp32/blob/master/libraries/WiFi/src/WiFiGeneric.h
+// https://github.com/espressif/esp-idf/blob/master/components/esp_wifi/include/esp_wifi_types.h
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
 {
-  if (info.disconnected.reason > WIFI_REASON_BEACON_TIMEOUT && bWiFiConnected)
+  if (bWiFiConnected)
+//  if (info.disconnected.reason > WIFI_REASON_BEACON_TIMEOUT && bWiFiConnected)
   {
     WiFiDisconnect(false);
 
+    //uint8_t ssid[32];         /**< SSID of disconnected AP */
+    //uint8_t ssid_len;         /**< SSID length of disconnected AP */
+    //uint8_t bssid[6];         /**< BSSID of disconnected AP */
+    //uint8_t reason; 
     Serial.print("WiFi lost connection. Reason: ");
-    Serial.println(info.disconnected.reason); // 201 = router unplugged, 200 = idle 1 sec. heartbeat
-    Serial.println(MacArrayToString(info.sta_disconnected.mac));     
+    Serial.println(info.wifi_sta_disconnected.reason); // 201 = router unplugged, 200 = idle 1 sec. heartbeat
+    Serial.println(MacArrayToString(info.wifi_sta_disconnected.bssid));     
 //    Serial.println("Trying to Reconnect");
 //    WiFi.begin(ssid, password);}
   }
 }
+
+//void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
+//{
+//    Serial.println("WiFi connected");
+//    Serial.println("IP address: ");
+//    Serial.println(IPAddress(info.got_ip.ip_info.ip.addr));
+//}
 
 void WiFiDisconnect(bool bEraseOldCredentials)
 {
   dnsAndServerStart(true); // stop dns and webserver
   WiFi.disconnect(bEraseOldCredentials); // disconnect wifi, erase internal stored info
   bWiFiConnected = false;
+  bWiFiConnecting = false;
   ledMode = LEDMODE_OFF;
   fiveSecondTimer = FIVE_SECOND_TIME-2; // restart in 2-3 seconds
 }
@@ -3788,94 +3772,101 @@ void WiFiDisconnect(bool bEraseOldCredentials)
 //void WiFiEvent(WiFiEvent_t event)
 //{
 //  printWiFiEventDetails(event);
-//  if (event == SYSTEM_EVENT_STA_DISCONNECTED) {
+//  if (event == ARDUINO_EVENT_STA_DISCONNECTED) {
 //    // handle your specific event here
 //  }
 //}
-//
+
 //void printWiFiEventDetails(WiFiEvent_t event)
 //{
-//  Serial.printf("[WiFi-event] event: %d\n", event);
+//    Serial.printf("[WiFi-event] event: %d\n", event);
 //
-//  switch (event) {
-//    case SYSTEM_EVENT_WIFI_READY:
-//      Serial.println("WiFi interface ready");
-//      break;
-//    case SYSTEM_EVENT_SCAN_DONE:
-//      Serial.println("Completed scan for access points");
-//      break;
-//    case SYSTEM_EVENT_STA_START:
-//      Serial.println("WiFi client started");
-//      break;
-//    case SYSTEM_EVENT_STA_STOP:
-//      Serial.println("WiFi clients stopped");
-//      break;
-//    case SYSTEM_EVENT_STA_CONNECTED:
-//      Serial.println("Connected to access point");
-//      break;
-//    case SYSTEM_EVENT_STA_DISCONNECTED: // this keeps printing every second until connected...
-//      Serial.println("Disconnected from WiFi access point");
-//      break;
-//    case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
-//      Serial.println("Authentication mode of access point has changed");
-//      break;
-//    case SYSTEM_EVENT_STA_GOT_IP:
-//      Serial.print("Obtained IP address: ");
-//      Serial.println(WiFi.localIP());
-//      break;
-//    case SYSTEM_EVENT_STA_LOST_IP:
-//      Serial.println("Lost IP address and IP address is reset to 0");
-//      break;
-//    case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
-//      Serial.println("WiFi Protected Setup (WPS): succeeded in enrollee mode");
-//      break;
-//    case SYSTEM_EVENT_STA_WPS_ER_FAILED:
-//      Serial.println("WiFi Protected Setup (WPS): failed in enrollee mode");
-//      break;
-//    case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:
-//      Serial.println("WiFi Protected Setup (WPS): timeout in enrollee mode");
-//      break;
-//    case SYSTEM_EVENT_STA_WPS_ER_PIN:
-//      Serial.println("WiFi Protected Setup (WPS): pin code in enrollee mode");
-//      break;
-//    case SYSTEM_EVENT_AP_START:
-//      Serial.println("WiFi access point started");
-//      break;
-//    case SYSTEM_EVENT_AP_STOP:
-//      Serial.println("WiFi access point  stopped");
-//      break;
-//    case SYSTEM_EVENT_AP_STACONNECTED:
-//      Serial.println("Client connected");
-//      break;
-//    case SYSTEM_EVENT_AP_STADISCONNECTED:
-//      Serial.println("Client disconnected");
-//      break;
-//    case SYSTEM_EVENT_AP_STAIPASSIGNED:
-//      Serial.println("Assigned IP address to client");
-//      break;
-//    case SYSTEM_EVENT_AP_PROBEREQRECVED:
-//      Serial.println("Received probe request");
-//      break;
-//    case SYSTEM_EVENT_GOT_IP6:
-//      Serial.println("IPv6 is preferred");
-//      break;
-//    case SYSTEM_EVENT_ETH_START:
-//      Serial.println("Ethernet started");
-//      break;
-//    case SYSTEM_EVENT_ETH_STOP:
-//      Serial.println("Ethernet stopped");
-//      break;
-//    case SYSTEM_EVENT_ETH_CONNECTED:
-//      Serial.println("Ethernet connected");
-//      break;
-//    case SYSTEM_EVENT_ETH_DISCONNECTED:
-//      Serial.println("Ethernet disconnected");
-//      break;
-//    case SYSTEM_EVENT_ETH_GOT_IP:
-//      Serial.println("Obtained IP address");
-//      break;
-//    default: break;
-//  }
+//    switch (event)
+//    {
+//        case ARDUINO_EVENT_WIFI_READY: 
+//            Serial.println("WiFi interface ready");
+//            break;
+//        case ARDUINO_EVENT_WIFI_SCAN_DONE:
+//            Serial.println("Completed scan for access points");
+//            break;
+//        case ARDUINO_EVENT_WIFI_STA_START:
+//            Serial.println("WiFi client started");
+//            break;
+//        case ARDUINO_EVENT_WIFI_STA_STOP:
+//            Serial.println("WiFi clients stopped");
+//            break;
+//        case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+//            Serial.println("Connected to access point");
+//            break;
+//        case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+//            Serial.println("Disconnected from WiFi access point");
+//            break;
+//        case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
+//            Serial.println("Authentication mode of access point has changed");
+//            break;
+//        case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+//            Serial.print("Obtained IP address: ");
+//            Serial.println(WiFi.localIP());
+//            break;
+//        case ARDUINO_EVENT_WIFI_STA_LOST_IP:
+//            Serial.println("Lost IP address and IP address is reset to 0");
+//            break;
+//        case ARDUINO_EVENT_WPS_ER_SUCCESS:
+//            Serial.println("WiFi Protected Setup (WPS): succeeded in enrollee mode");
+//            break;
+//        case ARDUINO_EVENT_WPS_ER_FAILED:
+//            Serial.println("WiFi Protected Setup (WPS): failed in enrollee mode");
+//            break;
+//        case ARDUINO_EVENT_WPS_ER_TIMEOUT:
+//            Serial.println("WiFi Protected Setup (WPS): timeout in enrollee mode");
+//            break;
+//        case ARDUINO_EVENT_WPS_ER_PIN:
+//            Serial.println("WiFi Protected Setup (WPS): pin code in enrollee mode");
+//            break;
+//        case ARDUINO_EVENT_WIFI_AP_START:
+//            Serial.println("WiFi access point started");
+//            break;
+//        case ARDUINO_EVENT_WIFI_AP_STOP:
+//            Serial.println("WiFi access point  stopped");
+//            break;
+//        case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+//            Serial.println("Client connected");
+//            break;
+//        case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
+//            Serial.println("Client disconnected");
+//            break;
+//        case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:
+//            Serial.println("Assigned IP address to client");
+//            break;
+//        case ARDUINO_EVENT_WIFI_AP_PROBEREQRECVED:
+//            Serial.println("Received probe request");
+//            break;
+//        case ARDUINO_EVENT_WIFI_AP_GOT_IP6:
+//            Serial.println("AP IPv6 is preferred");
+//            break;
+//        case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
+//            Serial.println("STA IPv6 is preferred");
+//            break;
+//        case ARDUINO_EVENT_ETH_GOT_IP6:
+//            Serial.println("Ethernet IPv6 is preferred");
+//            break;
+//        case ARDUINO_EVENT_ETH_START:
+//            Serial.println("Ethernet started");
+//            break;
+//        case ARDUINO_EVENT_ETH_STOP:
+//            Serial.println("Ethernet stopped");
+//            break;
+//        case ARDUINO_EVENT_ETH_CONNECTED:
+//            Serial.println("Ethernet connected");
+//            break;
+//        case ARDUINO_EVENT_ETH_DISCONNECTED:
+//            Serial.println("Ethernet disconnected");
+//            break;
+//        case ARDUINO_EVENT_ETH_GOT_IP:
+//            Serial.println("Obtained IP address");
+//            break;
+//        default: break;
+//    }
 //}
 
 void WiFiStartAP(bool bDisconnect, bool bEraseOldCredentials)
@@ -3907,7 +3898,8 @@ void WiFiStartAP(bool bDisconnect, bool bEraseOldCredentials)
  
     prtln("Starting WiFi AP mode...");
 
-    setMAC(ESP_IF_WIFI_AP);
+    setMAC(WIFI_IF_AP);
+//    setMAC(ESP_IF_WIFI_AP);
 
     // order of steps below is important!!!
     
@@ -3922,7 +3914,7 @@ void WiFiStartAP(bool bDisconnect, bool bEraseOldCredentials)
     //WiFi.softAP(const char* ssid, const char* password, int channel, int ssid_hidden, int max_connection)
     WiFi.softAP(apSSID, apPassword, random(1, AP_MAX_CHANNEL), 0, MAX_AP_CLIENTS); // additional parms: int channel (1-11), int ssid_hidden (0 = broadcast SSID, 1 = hide SSID), int max_connection (1-4))
     
-    //wait for SYSTEM_EVENT_AP_START
+    //wait for ARDUINO_EVENT_AP_START
     delay(100);
 
     WiFi.softAPConfig(apIP, gateway, subnet);
@@ -3966,7 +3958,8 @@ void setMAC(wifi_interface_t macMode)
   //https://en.wikipedia.org/wiki/MAC_address#Universal_vs._local_(U/L_bit)
   //set MAC address
   m_mac.toLowerCase();
-  if (macMode == ESP_IF_WIFI_AP || m_mac == "rand")
+  if (macMode == WIFI_IF_AP || m_mac == "rand")
+//  if (macMode == ESP_IF_WIFI_AP || m_mac == "rand")
     setRandMAC(macMode);
   else if (m_mac != "")
   {
@@ -3981,7 +3974,8 @@ void setMAC(wifi_interface_t macMode)
     prtln("Hardware MAC address: " + WiFi.macAddress());
 }
 
-// ESP_IF_WIFI_AP, ESP_IF_WIFI_STA
+// ESP_IF_WIFI_AP, ESP_IF_WIFI_STA - 1.0.4
+// WIFI_IF_AP, WIFI_IF_STA - 2.0.2
 void setRandMAC(wifi_interface_t macMode)
 {
   uint8_t buf[6];
