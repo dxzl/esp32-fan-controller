@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <esp_wifi.h>
 #include <esp_wifi_types.h>
+#include <ESPmDNS.h>
 
 // returns ESP_OK
 // esp_err_t rc = esp_efuse_read_block(EFUSE_BLK3, &fuse3, 0, sizeof(fuse3)*8); // size in bits = sizeof(fuse3) * 8
@@ -29,7 +30,7 @@
 //[in] size_bits: The number of bits required to write.
 
 // one-time programmable PROM for storing custom MAC and version
-//typedef struct {
+//typedef struct{
 //uint8_t crc;
 //uint8_t macAddr[6];
 //uint8_t reserved[16];
@@ -41,96 +42,112 @@
 // esp_err_t esp_efuse_write_field_blob(const esp_efuse_desc_t *field[], const void *src, size_t src_size_bits)
 // void esp_efuse_burn_new_values(void)
 
-typedef struct
-{
-  uint8_t dayOfWeek; // 0=Sunday, 1=Monday... 6=Saturday
-  uint8_t hour;
-  uint8_t minute;
-  uint8_t second;
-  uint8_t day;
-  uint8_t month;
-  uint16_t year;
-} t_time_date;
+//template <class T,class U> U* Int2Hex(T lnumber, U* buffer){
+//    const char* ref = "0123456789ABCDEF";
+//    T hNibbles = (lnumber >> 4);
+//
+//    unsigned char* b_lNibbles = (unsigned char*)&lnumber;
+//    unsigned char* b_hNibbles = (unsigned char*)&hNibbles;
+//
+//    U* pointer = buffer + (sizeof(lnumber) << 1); // need 2 chars per decimal digit, so mult. by 2
+//
+//    *pointer = 0;
+//    do {
+//        *--pointer = ref[(*b_lNibbles++) & 0xF];
+//        *--pointer = ref[(*b_hNibbles++) & 0xF];
+//    } while (pointer > buffer);
+//
+//    return buffer;
+//}
 
-typedef struct
-{
-  // off=0,sec,min,hrs,day,wek,mon,yrs; OFF, ON, AUTO; A, B, AB
-  uint8_t repeatMode, deviceMode, deviceAddr; // 0xff = unset
-  // dutyCycleA, dutyCycleB, phase are 0-100%
-  // 0xff = unset (perUnits and perMax are indicies to html select widget!)
-  uint8_t dutyCycleA, dutyCycleB, phase, perUnits, perMax;
-  uint16_t repeatCount, everyCount, perVal; // 0xffff = unset
-  t_time_date timeDate;
-  bool bEnable, bIncludeCycleTiming, bCycleTimingInRepeats; // true if enabled
-} t_event;
-
-bool isHex(char c);
-int gleanEscapes(String sIn, std::vector<uint16_t>* p);
-uint8_t* MacStringToByteArray(const char *pMac, uint8_t* pbyAddress);
-String MacArrayToString(uint8_t* pMacArray);
+bool alldigits(String &sIn);
 //String urlencode(String str);
 //String urldecode(String str);
-unsigned char h2int(char c);
 String ZeroPad(byte val);
 String GetStringIP();
 void IpToArray(uint16_t ipLastOctet);
+String GetPerUnitsString(int perUnitsIndex);
+String GetPhaseString(int phase);
+String GetPerDCString(int iVal);
 
 void ReadPot1();
 void ReadModeSwitch();
-bool ReadApSwitch();
-
-void RestoreDefaultSsidAndPwd();
-void ToggelOldSsidAndPwd();
+void ReadWiFiSwitch();
 
 String PercentOnToString(uint32_t totalDCon, uint32_t totalTime);
-String SsrModeToString(byte ssrMode);
-void SetState(byte val, String s);
-void SetState(byte val, byte ssrMode);
+String SsrModeToString(uint8_t ssrMode);
+void SetSSR(uint8_t val, bool bSsrOn);
+void SetSSRMode(uint8_t val, uint8_t ssrMode);
 
-String hnDecode(String sIn);
-String hnDecode(String sIn, int &errorCode);
+uint8_t* MacStringToByteArray(const char* pMac, uint8_t* pbyAddress);
+String MacArrayToString(uint8_t* pMacArray);
+bool isHex(char c);
 
-//String convertUnicode(String unicodeStr);
-//bool alldigits(String sIn);
-
-bool EraseTimeSlots();
-int CountFullTimeSlots();
-String GetSlotNumAsString(int val);
-bool DisableTimeSlot(int slotIndex);
-bool EnableTimeSlot(int slotIndex, bool bEnable=true);
-bool AddTimeSlot(t_event &slotData, bool bVerbose=false);
-bool DeleteTimeSlot(int slotIndex);
-bool GetTimeSlot(int slotIndex, t_event &t);
-bool PutTimeSlot(int slotIndex, t_event &t);
-int FindFirstEmptyTimeSlot();
-int FindNextFullTimeSlot(int iStart);
-
-bool ErasePreferences();
-void PutPreferenceU16(const char* s, uint16_t val);
-void PutPreferenceString(const char* s, String val);
-uint8_t GetPreferenceUChar(const char* s, const char eeDefault);
-String GetPreferenceString(const char* s, const char* eeDefault);
-void PutPreference(const char* s, byte val);
-
+String TimeToString();
 bool SetTimeManually(int myYear, int myMonth, int myDay, int myHour, int myMinute, int mySecond);
 bool InitTimeManually();
 struct tm* ReadInternalTime(time_t* pEepochSeconds, struct tm* pTm);
 int Make12Hour(int iHour, bool &pmFlag);
-void printLocalTime(struct tm &timeInfo);
-int CompareTimeDate(t_time_date &timeDate, t_time_date &slotTimeDate);
-t_time_date CopyTmToTtimeDate(struct tm &tm);
 void ResetPeriod();
+void LimitPeriod();
 //void WiFiApInfo();
 String WiFiScan(String sInit);
 int GetWiFiChan();
 String translateEncryptionType(wifi_auth_mode_t encryptionType);
+void StartNewRandomToken();
 
-int InitSecondsList(int slotCount);
-int InitRepeatList(int slotCount);
-
-int MyDayOfWeek(int d, int m, int y);
-
+void printLocalTime(struct tm &timeInfo);
+void PrintSpiffs(String sFile);
+void PrintMidiChan();
+void PrintMidiNote(uint8_t note);
+void PrintSsrMode(uint8_t ssrMode);
+void PrintPreferences();
+void PrintPulseFeaturePreferences();
 void prtln(String s);
 void prt(String s);
+
+void twiddle(String& s);
+void RefreshSct();
+int GetSct(int &minSct, int &maxSct);
+
+int ComputeTimeToOnOrOffA();
+int ComputeTimeToOnOrOffB();
+
+void CheckMasterStatus();
+
+bool IsLockedAlertGetPlain(AsyncWebServerRequest *request, bool bAllowInAP=false);
+bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bAllowInAP=false);
+bool IsLockedAlertPost(AsyncWebServerRequest *request, bool bAllowInAP=false);
+bool IsLocked();
+
+String SyncFlagStatus();
+
+void FlashSequencerInit(uint8_t postFlashMode);
+void FlashSequencerStop();
+void FlashSequencer();
+void FlashLED();
+
+String genRandMessage(int iMin, int iMax);
+//String genRandPositioning(String sIn, int iMin, int iMax);
+
+//String AddThreeDigitBase10Checksum(String sIn);
+String AddTwoDigitBase16Checksum(String sIn);
+//String SubtractThreeDigitBase10Checksum(String sIn);
+String SubtractTwoDigitBase16Checksum(String sIn);
+
+String MyEncodeStr(String s, int table, int token, int context);
+String MyDecodeStr(String s, int table, int token, int context);
+String MyEncodeNum(unsigned int uiIn, int table, int token, int context);
+int MyDecodeNum(String s, int table, int token, int context);
+
+void InitMAC();
+
+void TaskProcessPulseOffFeatureTiming();
+void TaskSetPulseOffFeatureVars();
+void TaskStatisticsMonitor();
+
+int SendText(String sIP, String sText);
+int SendText(String sText);
+int SendText(int idx, String sText);
 
 #endif

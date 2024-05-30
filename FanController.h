@@ -1,37 +1,125 @@
-#ifndef FanControllerH
-#define FanControllerH
+//#ifndef FanControllerH
+//#define FanControllerH
+#pragma once
+
+// links for additional boards in Arduino IDE Preferences
+// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
 
 #include <Arduino.h>
 
-// Import required libraries
-#include <WiFi.h>
+#include <esp_system.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 
+// Import required libraries
+#include <ESPmDNS.h>
+#include <MyPreferences.h>
+#include <Update.h>
+#include <AppleMIDI.h>
+
+// note: AsyncTCP_SSL is available, AsyncHTTPSRequest_Generic is available and esp32_https_server is at
+// https://github.com/fhessel/esp32_https_server 
+// ESPAsyncWebServer has no working SSL version at this time... October 3, 2022
+//#include <WiFiUdp.h>
+//#include <AsyncUDP.h>
+//#include <MIDI.h>
 //#include <AsyncTCP.h>
 //#include <WiFiClient.h>
 //#include <WebServer.h>
-#include <ESPmDNS.h>
 //#include <OneWire.h>
 //#include <DallasTemperature.h>
-
-// I modified preferences to add usedEntries (zip is in the "stuff" folder,
-// put it in Arduino libraries folder
-#include <MyPreferences.h>
-#include <Update.h>
-
-// Import library headers
+//#define ARDUINOJSON_DECODE_UNICODE 0 // don't decode unicode escape sequences
+//#include <ArduinoJson.h> // define before MsgPack.h
+//#include <AsyncJson.h>
 //#include "FS.h" // add file-system functions https://arduino-esp8266.readthedocs.io/en/latest/filesystem.html
+
 #include "SPIFFS.h"
 #include "ESPAsyncWebServer.h"
-#include "IndexValueList.h"
-#include "IndexRepeatList.h"
-#include "FCUtils.h"
 
-#define DTS_VERSION "Version 1.82 (Jan 26, 2022)"
+#include "CipherClass.h" // aes32-Encrypt library requires Seed_Arduino_mbedtls library
+#include "B64Class.h"
+#include "ValueListClass.h"
+#include "RepeatListClass.h"
+#include "MdnsListClass.h"
+#include "PrefsClass.h"
+#include "TimeSlotsClass.h"
+#include "HttpMsgClass.h"
+
+#include "FCUtils.h"
+#include "FCWiFI.h"
+#include "WSHandlers.h"
+#include "HttpClientHandlers.h"
+#include "Cmd.h"
+#include "Tasks.h"
+#include "Tests.h"
+
+USING_NAMESPACE_APPLEMIDI
+
+#define DTS_VERSION "Version 2.48 (January 26, 2024)"
 #define PRINT_ON true // set true to enable status printing to console
-#define CLEAR_PREFS false
-#define CLEAR_SLOTS false
-#define FORCE_AP_ON false // can also tie SW_SOFT_AP GPI34 to 3.3V for AP (ground it for router-mode)
+#define RESET_PREFS false // set true to force clear on boot, then set back to false and rebuild...
+#define RESET_WIFI  false // ""
+#define RESET_SLOTS false // ""
+#define FORCE_DEF_CIPHER_KEY false
+#define FORCE_AP_ON false
+#define FORCE_STA_ON false
+#define HTTP_CLIENT_TEST_MODE false // send random HTTP strings to each mDNS-discovered remote unit
+#define DISABLE_POTENTIOMETER true // prevent a system with no potentiometer present from causing value-changes
+
 #define USE_UPDATE_LOGIN false // set true to require password entry after typing "c update" into index.html host-name field
+#define UPDATE_USERID "dts7" // only when USE_UPDATE_LOGIN is true!
+#define UPDATE_USERPW "1234567890" // only when USE_UPDATE_LOGIN is true!
+
+#define WIFI_COUNTRY "US" // JP, CN
+#define WIFI_MIN_CHANNEL 1
+#define WIFI_MAX_CHANNEL 11 // 1-13 possible but max is 11 in USA!
+// NOTE: see PrefsClass.h for WIFI_MAX_POWER_INIT
+
+#define DEF_SSID "MyRouter"
+#define DEF_PWD "MyRouterPass"
+#define DEF_HOSTNAME "dts7"
+
+// log directely into this device via access-point mode at 192.168.7.7
+#define DEF_AP_SSID DEF_HOSTNAME
+#define DEF_AP_PWD "1234567890"
+#define DEF_AP_IP "192.168.7.7"
+#define DEF_AP_GATEWAY "192.168.7.7"
+#define DEF_AP_SUBNET_MASK "255.255.255.0"
+#define MIN_AP_CHANNEL 1
+#define MAX_AP_CHANNEL 11 // // 1-13 possible but max is 11 in USA!
+#define MAX_AP_CLIENTS 1 // 1-4 allowed but for security allow only one
+#define HIDE_AP_SSID 0 // set to 1 to hide
+// also see the top of FanController.cpp for constant default strings!!!!!!!
+
+#define MDNS_SVC "dts"
+#define MDNS_SVCU "_dts"
+
+#define FAILSAFE_TOKEN_1 2 // MAC from HTTP client send to the remote web-server
+#define FAILSAFE_TOKEN_2 4 // CanRx Decode fail
+#define FAILSAFE_TOKEN_3 5 // CanRx fail, text fail, param fail...
+#define FAILSAFE_TOKEN_4 6 // IP address string
+#define FAILSAFE_TOKEN_5 7 // MAC response from web-server to HTTP client callback
+
+// most signifigant byte bit 0 is multicast bit - do not set
+// most signifigant byte bit 1 is locally administered bit - set this.
+// least signifigant three bytes are unique to manufacturer
+#define DEF_MAC "" // not set we use chip's MAC... format 42:ad:f2:23:d0
+
+// https://en.wikipedia.org/wiki/Year_2038_problem this esp32 system won't work past 2035 sometime it appears!
+// Unix epoch is 00:00:00 UTC on 1 January 1970
+// NOTE: we will just have to have this fixed and rebuild the code by 2034!!!!!!!!!!!!!
+// time_t needs to be changed or the system-wide EPOCH year of 1900...
+#define MAX_YEAR    2034 // June 20, 2035 is as high as works... so set to 2034
+#define EPOCH_YEAR  1900
+// this serves as a flag that "time has not been set"
+// years less than this serves as a flag that Y2038 happened!
+// I give two years to "live in the past" - for whatever reason... (this is 2020)!
+#define DEF_YEAR    2016 // (note: don't think someone made a mistake and failed to set this!) I've seen this year - filled in by the system before...
+
+// NOTE: if you want custom security for your particular implementation, you can change the order of letters in _HttpCommandTable[]
+// in HttpMsgClass.h and you can change ENCODE_TABLE2 and ENCODE_TABLE3 in B64Class.h
+// You will also want to change TOKEN_INIT in PrefsClass.h! Also change HTTP_ASYNCREQ and HTTP_PARAM_COMMAND in WSHandlers.cpp.
 
 // setting READ_WRITE_CUSTOM_BLK3_MAC true will write to BLK3 and permanently set efuse bits specified (presently written once).
 // set it false to use original factory base MAC from BLK1, set true to use MAC shown below as base MAC.
@@ -52,92 +140,84 @@
 #define WRITE_PROTECT_BLK3 false // set true and run once to write protect BLK3 data (presently NOT write-protected!)
 //-------------------------------------------------------------------------------------------------------------
 
-#define UPLOAD_USERID  "dts7"
-#define UPLOAD_USERPW  "1234567890"
+// at some point, these limits might go up to 64 and 128...
+#define MAXSSID     32
+#define MAXPASS     64
+#define MAXAPSSID   32
+#define MAXAPPASS   64
+#define MAXHOSTNAME 32
 
-#define ERASE_DATA_CONFIRM "hsi83NSehaL9Wht"
+// limit length of text sent via CMtxt command!
+#define MAXTXTLEN 80
 
-#define WIFI_COUNTRY "US" // JP, CN
-#define WIFI_MAX_CHANNEL 11 // max is 11 in USA!
-#define AP_MAX_CHANNEL 11 // 1-13
-#define MAX_AP_CLIENTS 1 // 1-4 allowed but for security allow only one
-
-// used for hnDecode() for web-pages
+// used for hnEncode()/hnDecode() for web-pages
 #define MIN_SHIFT_COUNT 1
-#define MAX_SHIFT_COUNT 15
+#define MAX_SHIFT_COUNT 10
 
 #define CPU_FREQ 160 // 80MHz works ok for WiFi but may need 160MHz or 240MHz for WiFi Scans!
 
-// Data wire is plugged into pin 22 on the ESP32
-#define ONE_WIRE_BUS 22 // pin 22
+// Data wire is plugged into GPIO 22 on the ESP32
+#define GPIO22_ONE_WIRE_BUS    22 // pin 22
 //#define MY_INPUT_PULLDOWN 0x09
 
 // Reset SSID and PWD to defaults if GPIO0 pressed on powerup (same as BOOT button)
 // (User LED is GPIO2 - turn that on and off if we restored ssid/pwd)
 // (Power LED "might" be on GPIO1)
 //#define BTN_RESTORE_SSID_PWD    0 // NOTE: sadly, I can't get this pin to work - it's tied in as BOOT
-#define ONBOARD_LED_GPIO2       2
+#define GPIO2_ONBOARD_LED       2
 
 // Input only pins (on left top as usb port faces down, second pin down on left is GPI36)
-#define POT_1                   36 // ADC1_0 (2)
-#define POT_2                   39 // ADC1_3 (3)
-// POT_3 is being used as a switch to boot in softAP mode using
-// SPDT no-center-off switch with outer pins tied to 3V3 and ground
-// In future, make this a center off DPDT tied to two other GPIO pins - the POT
-// pins are input only and I had trouble adding internal pullup/pulldown!
-//#define POT_3                   34 // ADC1_6 (4)
-#define SW_SOFT_AP              34
-#define POT_4                   35 // ADC1_7 (5)
+#define GPIO36_POT_1            36 // ADC1_0 (2)
+#define GPIO39_POT_2            39 // ADC1_3 (3)
+// the POT_3 center-pin on the custom PC-board is being used to solder a wire for a SPST POT-Mode switch...
+//#define GPIO34_POT_3               34 // ADC1_6 (4)
+#define GPIO34_POT_MODE         34 // ADC1_6 (4)
+#define GPIO35_POT_4            35 // ADC1_7 (5)
 
-// Inputs with pulldowns (3-states 0,0 1,0 0,1)
-#define SW_1                    18
-#define SW_2                    19
+// Inputs with pulldowns (3-states 00,01,10)
+#define GPIO18_WIFI_AP          18 // Set pin to Vcc for WiFi AP mode
+#define GPIO19_WIFI_STA         19 // Set pin to Vcc for WiFi STA mode
 
-#define ONE_WIRE_BUS_GPIO27     27
+#define WIFI_SW_MODE_OFF        0
+#define WIFI_SW_MODE_AP         1
+#define WIFI_SW_MODE_STA        2
+
+#define GPIO27_ONE_WIRE_BUS     27
 
 // Outputs
-#define SSR_1                   32
-#define SSR_2                   23
+#define GPIO32_SSR_1            32
+#define GPIO23_SSR_2            23
 
 #define SERVER_PORT             80
 
 #define TIME_SYNC_WAIT_TIME     10000 // time to wait for NTP time after connecting to wifi
 
+#define MIN_PERIOD_TIMER        10 // 5 seconds
+
 #define MANUAL_CLOCK_SET_DEBOUNCE_TIME 3 // 1 second units
 
-#define LED_EEPROM_FLASH_TIME   3 // .5 sec units (indicated a value saved to eeprom)
-#define FIVE_SECOND_TIME        5 // one second units
-#define ONE_MINUTE_TIME         (60/FIVE_SECOND_TIME) // 5-second units (12)
-#define TASK_TIME               2 // .25 second (.25 sec incerments)
-#define POT_DEBOUNCE            100 // range 0-4095 (0V - 3.3V)
+#define SEND_HTTP_TIME_MIN      10 // 1-second resolution
+#define SEND_HTTP_TIME_MAX      30
 
-#define TASK_PERMAX       0
-#define TASK_PERUNITS     1
-#define TASK_PERVAL       2
-#define TASK_PHASE        3
-#define TASK_DCA          4
-#define TASK_DCB          5
-#define TASK_DCA_DCB      6
-#define TASK_RELAY_A      7
-#define TASK_RELAY_B      8
-#define TASK_HOSTNAME     9
-#define TASK_RECONNECT    10
-#define TASK_MAC          11
-#define TASK_RESET_PARMS  12
-#define TASK_RESET_SLOTS  13
-#define TASK_TOGGLE       14
-#define TASK_RESTORE      15
-#define TASK_PAGE_REFRESH_REQUEST 16
-#define TASK_WIFI_CONNECT 17
-#define TASK_MIDICHAN     18
-#define TASK_MIDINOTE_A   19
-#define TASK_MIDINOTE_B   20
-#define TASK_REBOOT       21
+// we pick a random time from range below...
+#define SEND_DEF_TOKEN_TIME_MIN (60*12) // 1-minute resolution 16-bits - 0.5 days
+#define SEND_DEF_TOKEN_TIME_MAX (60*36) // 1-minute resolution 16-bits - 1.5 days
+
+#define LED_EEPROM_FLASH_TIME   3   // .5 sec units (indicated a value saved to eeprom)
+#define FIVE_SECOND_TIME        5   // one second units
+#define THIRTY_SECOND_TIME      30  // one second units
+#define POT_DEBOUNCE            150 // range 0-4095 (0V - 3.3V)
 
 // this order can't change unless you change p2.html!
 #define SSR_MODE_OFF  0
 #define SSR_MODE_ON   1
 #define SSR_MODE_AUTO 2
+
+// independant cycle that pulses the relay off if on, on if off, or both
+#define PULSE_MODE_OFF       0
+#define PULSE_MODE_OFF_IF_ON 1
+#define PULSE_MODE_ON_IF_OFF 2
+#define PULSE_MODE_ON_OR_OFF 3
 
 // repeat modes (set on p2.html web-page)
 #define RPT_OFF      0
@@ -155,147 +235,123 @@
 #define TIMER_2 2
 #define TIMER_3 3
 
-// ledFlashTimer .25ms resolution
+// g8_ledFlashTimer .25ms resolution
 #define LED_FASTFLASH_TIME 1
 #define LED_SLOWFLASH_TIME 4
 
-// ledFlashCounter
+// g8_ledFlashCounter
 #define LED_PAUSE_COUNT    10 // pause time between digit flash-sequences
 
-// ledSeqState
+// g8_ledSeqState
 #define LEDSEQ_ENDED       0
 #define LEDSEQ_FLASHING    1
 #define LEDSEQ_PAUSED      2
 
-// ledMode, ledSaveMode
-#define LEDMODE_OFF        0
-#define LEDMODE_ON         1
-#define LEDMODE_SLOWFLASH  2
-#define LEDMODE_FASTFLASH  3
-#define LEDMODE_PAUSED     4
-
-#define PERIOD_MIN              0 // %
-#define PERIOD_MAX              100 // 0 = random mode
-#define PHASE_MIN               0 // %
-#define PHASE_MAX               100 // 0 = random mode
-#define DUTY_CYCLE_MIN          0 // %
-#define DUTY_CYCLE_MAX          100 // 0 = random mode
-#define MIN_RAND_PERCENT_DUTY_CYCLE 20 // smallest time-on is 20% of period when in random mode!
-
-#define PERUNITS_INIT           1 // 0= 1/2 sec, 1=sec, 2=min, 3=hrs
-#define PERMAX_INIT             2 // 0=15, 1=30, 2=60, 3=120... 9=7,680
-#define PERIOD_INIT             50 // percent offset of period (0-100)
-#define PHASE_INIT              50 // percent offset of period (0-100)
-#define DUTY_CYCLE_A_INIT       50 // percent on (0-100)
-#define DUTY_CYCLE_B_INIT       50 // percent on (0-100)
-
-#define LOCKCOUNT_INIT          -1 // unlocked
-#define LOCKPASS_INIT           "****"
-#define MIDICHAN_INIT           MIDICHAN_OFF // off
-#define MIDINOTE_A_INIT         60 // middle C
-#define MIDINOTE_B_INIT         62 // middle D
-#define MIDINOTE_ALL            128 // all notes
-#define MIDICHAN_ALL            0 // all channels
-#define MIDICHAN_OFF            255 // no channels
-#define SSR1_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
-#define SSR2_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
+// g8_ledMode, g8_ledSaveMode
+#define g8_ledMode_OFF        0
+#define g8_ledMode_ON         1
+#define g8_ledMode_SLOWFLASH  2
+#define g8_ledMode_FASTFLASH  3
+#define g8_ledMode_PAUSED     4
 
 #define LED_EEPROM_FLASH_TIME   3 // .5 sec units (indicated a value saved to eeprom)
 
 #define MAX_TIME_SLOTS          100 // EE_SLOT_xxx (xxx is 000 to 099)
-#define MAX_RECORD_SIZE         300 
+#define MAX_RECORD_SIZE         300
 #define MAX_FILE_SIZE           (2*MAX_TIME_SLOTS*MAX_RECORD_SIZE) // upper limit for incoming text-file; allow for comment-lines!\r\n"
 #define EVENT_LENGTH_SEC        29 // "umtrdssttX2020-06-05T23:59:59"
 #define EVENT_LENGTH_NOSEC      26 // "umtrdssttX2020-06-05T23:59"
 #define MAX_LOCKPASS_LENGTH     32
 
-// https://en.wikipedia.org/wiki/Year_2038_problem this esp32 system won't work past 2035 sometime it appears!
-// Unix epoch is 00:00:00 UTC on 1 January 1970
-// NOTE: we will just have to have this fixed and rebuild the code by 2034!!!!!!!!!!!!!
-// time_t needs to be changed or the system-wide EPOCH year of 1900...
-#define MAX_YEAR                2034 // June 20, 2035 is as high as works... so set to 2034
-#define EPOCH_YEAR              1900
-// this serves as a flag that "time has not been set"
-// years less than this serves as a flag that Y2038 happened!
-// I give two years to "live in the past" - for whatever reason... (this is 2020)!
-#define DEFAULT_YEAR            2016 // (note: don't think someone made a mistake and failed to set this!) I've seen this year - filled in by the system before...
-
 // not used at present - way to sleep for X seconds then reset, keeping RTC variables
 #define uS_TO_S_FACTOR 1000000  //Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP  5        //Time ESP32 will go to sleep (in seconds)// this is when we don't hook into a router from here, but rather
 
-// log directely into this device
-#define DEFAULT_SOFTAP_IP       7 // 192.168.7.7 - (1 part)
-#define IP_MIDDLE               7 // 192.168.7.7 - (4 part)
-
-#define EE_PREFS_NAMESPACE "dts-fc01"
-#define EE_SLOTS_NAMESPACE "dts-fc02"
-
 #define T_ONE_HOUR (2*60*60)
 
+#define SER_IN_MAX             200
+
+// NOTE: "spiffs" in the filename differentiates a SPIFFS data .bin file from a main-program .bin file
+// during "over-the-air" programming! The web-server HTML files and javascript are in the fc.spiffs.bin file
+// and the main program is in fc.bin (or it might be in DTS_SMART_FAN_CONTROLLER.ino.esp32.bin)
+#define OTA_UPDATE_SPIFFS_VS_PGM_ID "spiffs"
+
+struct PerVals {
+  uint8_t dutyCycleA = 0xff, dutyCycleB = 0xff, phase = 0xff; // saved in Preferences (units are %)
+  uint8_t perUnits = 0xff, perVal = 0xff; // perUnits is an index to index.html select options
+  uint16_t perMax = 0xffff;
+};
+
+// we count "on" events up to the max interval in .5 sec units (determined by perMax and perUnits)
+// and also time duration "on" within that interval in .5 sec units which can be converted to a percentage on (duty-cycle).
+struct Stats {
+  uint32_t HalfSecondCounter, HalfSecondCount;
+  uint32_t AOnCounter, BOnCounter, DConA, DConB;
+  uint32_t AOnPrevCount, BOnPrevCount, PrevDConA, PrevDConB;
+};
+
 // function prototypes
+void SSR1On(uint32_t iPeriod);
+void SSR2On(uint32_t iPeriod);
+void serialEvent(); // event hndler for Serial
 void IRAM_ATTR onTimer();
-void FlashSequencer(bool bStart=false);
-void FlashLED();
-void SetWiFiHostName(AsyncWebServerRequest* &request, String &s, String &cmd);
-void ProcessCommand(AsyncWebServerRequest* &request, String &s, String &cmd);
-void WiFiMonitorConnection(bool bDisconnect=false, bool bEraseOldCredentials=false);
-void WiFiDisconnect(bool bEraseOldCredentials);
-void WiFiStartAP(bool bDisconnect=false, bool bEraseOldCredentials=false);
-//void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
-void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info);
-//void WiFiEvent(WiFiEvent_t event);
-//void printWiFiEventDetails(WiFiEvent_t event);
-void dnsAndServerStart(bool bDisconnect=false);
-void GetPreferences();
-//String hnDecode(String sIn, int &errorCode);
+String SetTimeDate(String sVal);
+void dnsAndServerStart();
+void dnsAndServerStop();
 void print_wakeup_reason();
 void notFound(AsyncWebServerRequest *request);
-String processor(const String& var);
 void SetupAndStartHardwareTimeInterrupt();
 void HardwareTimerRestart(hw_timer_t * timer);
 time_t DoTimeSyncOneSecondStuff(time_t now);
 void DoTimeSyncOneSecondStuff(void);
-void InitrStats();
+String getSctMinMaxAsJS();
+void InitStats();
 void ClearStatCounters();
-uint32_t GetTimeInterval(uint8_t perMax, uint8_t perUnits);
-uint32_t ComputePeriod(uint8_t perVal, uint8_t perMax, uint8_t perUnits);
-//uint32_t ComputeMaxPeriod(uint8_t perMax, uint8_t perUnits);
-uint32_t DecodePerMax(uint8_t perMax);
-bool CheckEventSpecificTimeCycleParameters(t_event* slotData);
-bool ParseIncommingTimeEvent(String sIn);
-bool ParseRepeatMode(String &s, int16_t &iRepeatMode);
-bool ParseDevAddressAndMode(String &s, int16_t &iDevAddr, int16_t &iDevMode);
-bool ParseDate(String &s, int16_t &iMonth, int16_t &iDay, int16_t &iYear);
-bool ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int16_t &iSecond);
-bool IsLockedAlertGetPlain(AsyncWebServerRequest *request, bool bAllowInAP=false);
-bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bAllowInAP=false);
-bool IsLockedAlertPost(AsyncWebServerRequest *request, bool bAllowInAP=false);
-bool IsLocked();
+uint32_t ComputePeriod(uint8_t perVal, uint16_t perMax, uint8_t perUnits);
+uint32_t ComputePhase();
+uint32_t GetTimeInterval(uint16_t perMax, uint8_t perUnits);
+void stopMIDI();
+void startMIDI();
+bool SendHttpReq(int idx);
+void TaskMidiChan(); // has to be in FanController.ino!
+//#endif
 
-#endif
+extern int g_slotCount, g_prevMdnsCount;
+extern int g_defToken, g_pendingDefToken, g_oldDefToken;
+extern int g_sct, g_minSct, g_maxSct;
+extern uint8_t g8_oldSw1Value, g8_oldSw2Value, g8_maxPower, g8_nvSsrMode1, g8_nvSsrMode2, g8_midiNoteA, g8_midiNoteB, g8_midiChan;
+extern uint8_t g8_ledFlashCount, g8_ledFlashCounter, g8_ledDigitCounter, g8_ledSaveMode, g8_ledMode, g8_ledSeqState;
+extern uint8_t g8_quarterSecondTimer, g8_fiveSecondTimer, g8_thirtySecondTimer, g8_ledFlashTimer, g8_clockSetDebounceTimer, g8_lockCount;
+extern uint8_t g8_modeSwState, g8_wifiSwState, g8_digitArray[];
+extern uint16_t g16_pot1Value, g16_oldpot1Value; // variable for storing the potentiometer value
+extern uint16_t g16_oldMacLastTwo, g16_unlockCounter, g16_tokenSyncTimer, g16_sendDefTokenTimer;
+extern uint16_t g16_sendDefTokenTime, g16_sendHttpTimer, g16_asyncHttpIndex, g16_oddEvenCounter;
+extern uint32_t g32_periodTimer, g32_savePeriod, g32_dutyCycleTimerA, g32_dutyCycleTimerB, g32_phaseTimer, g32_nextPhase;
+extern String g_sHostName, g_sSSID, g_sApSSID, g_sKey, g_sMac, g_sLabelA, g_sLabelB, g_sSerIn, g_text;
 
-//extern const char TIMEZONE[], NTP_SERVER1[], NTP_SERVER2[], VERSION_STR[], WEB_PAGE_INDEX[], WEB_PAGE_P1[], WEB_PAGE_P2[], DEFAULT_MYUSERID[], DEFAULT_MYUSERPWD[];
-// these are 15 chars max!
-extern const char EE_SLOT_PREFIX[], EE_PERMAX[], EE_PERUNITS[], EE_PERVAL[], EE_DC_A[], EE_DC_B[], EE_PHASE[], EE_RELAY_A[], EE_RELAY_B[];
-extern const char EE_HOSTNAME[], EE_SSID[], EE_OLDSSID[], EE_PWD[], EE_OLDPWD[], EE_LOCKCOUNT[], EE_LOCKPASS[];
+extern bool g_bWiFiConnected, g_bWiFiConnecting, g_bSoftAP, g_bMdnsOn, g_bWiFiDisabled, g_bResetOrPowerLoss, g_bTellP2WebPageToReload, g_bOldModeSwOn;
+extern bool g_bManualTimeWasSet, g_bWiFiTimeWasSet, g_bValidated, g_bRequestManualTimeSync, g_bRequestWiFiTimeSync, g_bMidiConnected;
+extern bool g_bSsr1On, g_bSsr2On, g_bOldSsr1On, g_bOldSsr2On, g_bTest;
+extern bool g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncToken, g_bSyncTime, g_bSyncEncrypt, g_bSyncMaster;
 
-extern const char DEFAULT_SOFTAP_SSID[], DEFAULT_SOFTAP_PWD[], DEFAULT_HOSTNAME[], DEFAULT_SSID[], DEFAULT_PWD[], OBFUSCATE_STR[];
+// cycle pulse-off
+extern uint8_t g8_pulseModeA, g8_pulseModeB;
+extern uint8_t g8_pulseWidthTimerA, g8_pulseWidthA, g8_pulseMinWidthA, g8_pulseMaxWidthA;
+extern uint8_t g8_pulseWidthTimerB, g8_pulseWidthB, g8_pulseMinWidthB, g8_pulseMaxWidthB;
+extern uint16_t g16_pulsePeriodTimerA, g16_pulsePeriodA, g16_pulseMinPeriodA, g16_pulseMaxPeriodA;
+extern uint16_t g16_pulsePeriodTimerB, g16_pulsePeriodB, g16_pulseMinPeriodB, g16_pulseMaxPeriodB;
 
-extern int m_slotCount;
-extern uint8_t sw1Value, sw2Value, oldSw1Value, oldSw2Value;
-extern uint8_t nvSsrMode1, nvSsrMode2, m_taskMode;
-extern uint8_t digitArray[];
-extern uint16_t pot1Value, oldPot1Value;
-extern bool bManualTimeWasSet, bWiFiTimeWasSet, bSoftAP, bOldApSwOn;
-extern bool bRequestManualTimeSync, bRequestWiFiTimeSync;
-extern uint16_t dutyCycleTimerA, dutyCycleTimerB, periodTimer, savePeriod, phaseTimer;
-extern uint16_t m_taskTimer, m_taskData;
-extern uint8_t dutyCycleA, dutyCycleB, phase; // saved in Preferences (units are %)
-extern uint8_t perUnits, perMax, perVal; // perUnits and perMax are indexes to index.html select options
-extern uint8_t ledFlashTimer, clockSetDebounceTimer, m_lockCount;
-extern time_t m_prevNow;
-extern t_time_date m_prevDateTime;
-extern String ledState, ssr1State, ssr2State, swState, apSwState, inputMessage, inputParam, hostName, m_ssid;
-extern Preferences preferences;
-extern uint32_t statsAOnCounter, statsBOnCounter;
+extern time_t g_prevNow;
+extern Preferences PF;
+extern t_time_date g_prevDateTime;
+extern IPAddress g_httpTxIP;
+extern PerVals g_perVals, g_oldPerVals;
+extern Stats g_stats;
+
+extern const char EE_SLOT_PREFIX[], EE_HOSTNAME[], EE_MAC[], EE_SSID[], EE_OLDSSID[], EE_PWD[], EE_OLDPWD[], EE_APSSID[], EE_OLDAPSSID[], EE_APPWD[], EE_OLDAPPWD[], EE_LOCKPASS[], EE_LOCKCOUNT[];
+extern const char EE_PERMAX[], EE_PERUNITS[], EE_PERVAL[], EE_DC_A[], EE_DC_B[], EE_PHASE[], EE_RELAY_A[], EE_RELAY_B[], EE_MIDICHAN[], EE_MIDINOTE_A[], EE_MIDINOTE_B[];
+extern const char EE_SYNC[], EE_WIFI_DIS[], EE_LABEL_A[], EE_LABEL_B[], EE_TOKEN[], EE_MAX_POWER[], EE_CIPKEY[];
+extern const char EE_PULSE_OFF_MODE_A[], EE_PULSE_MINWID_A[], EE_PULSE_MAXWID_A[], EE_PULSE_MINPER_A[], EE_PULSE_MAXPER_A[];
+extern const char EE_PULSE_OFF_MODE_B[], EE_PULSE_MINWID_B[], EE_PULSE_MAXWID_B[], EE_PULSE_MINPER_B[], EE_PULSE_MAXPER_B[];
+
+extern const char OBFUSCATE_STR[], SC_MAC_RANDOM[];
