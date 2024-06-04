@@ -1,0 +1,46 @@
+Libraries needed:
+
+https://github.com/dvarrel/AsyncTCP
+https://github.com/lathoub/Arduino-AppleMidi-Library
+https://github.com/FortySevenEffects/arduino_midi_library
+https://github.com/khoih-prog/AsyncHTTPRequest_Generic
+https://www.arduino.cc/reference/en/libraries/wifi/
+https://github.com/me-no-dev/ESPAsyncWebServer
+// NOTE: MyPreferences has my custom modifications to Preferences (below)...
+
+// libraries built-in for version 2.0.17
+Path: C:\Users\YOURNAME\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.17\libraries
+https://github.com/espressif/arduino-esp32/tree/master/libraries/SPIFFS
+https://github.com/espressif/arduino-esp32/tree/master/libraries/ESPmDNS
+https://github.com/espressif/arduino-esp32/tree/master/libraries/Update
+https://github.com/espressif/arduino-esp32/tree/master/libraries/Preferences
+
+// Includes in FanController.h
+#include <Arduino.h>
+#include <esp_system.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
+#include <ESPmDNS.h>
+#include <MyPreferences.h>
+#include <Update.h>
+#include <AppleMIDI.h>
+#include "SPIFFS.h"
+#include "ESPAsyncWebServer.h"
+
+// My classes/header files
+#include "CipherClass.h" // aes32-Encrypt library requires Seed_Arduino_mbedtls library
+#include "B64Class.h"
+#include "ValueListClass.h"
+#include "RepeatListClass.h"
+#include "MdnsListClass.h"
+#include "PrefsClass.h"
+#include "TimeSlotsClass.h"
+#include "HttpMsgClass.h"
+#include "FCUtils.h"
+#include "FCWiFI.h"
+#include "WSHandlers.h"
+#include "HttpClientHandlers.h"
+#include "Cmd.h"
+#include "Tasks.h"
+#include "Tests.h"
+
