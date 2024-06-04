@@ -374,8 +374,9 @@ bool MdnsListClass::CheckMdnsSearchResult(){
   // size_t txt_count - number of txt items
   // mdns_ip_addr_t *addr - linked list of IP addresses found
   mdns_result_t* result = NULL;
+  uint8_t mdns_count = 0;
   //bool mdns_query_async_get_results(mdns_search_once_t* search, uint32_t timeout, mdns_result_t ** results, uint8_t * num_results);
-  if (!mdns_query_async_get_results(g_pMdnsSearch, 0, &result)) // 0 is infinite timeout? timeout is in ms
+  if (!mdns_query_async_get_results(g_pMdnsSearch, 0, &result, &mdns_count)) // 0 is infinite timeout? timeout is in ms
     return false;
 
   if (result){

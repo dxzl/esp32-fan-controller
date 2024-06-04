@@ -56,7 +56,7 @@
 
 USING_NAMESPACE_APPLEMIDI
 
-#define DTS_VERSION "Version 2.48 (January 26, 2024)"
+#define DTS_VERSION "Version 3.00 (June 4, 2024)"
 #define PRINT_ON true // set true to enable status printing to console
 #define RESET_PREFS false // set true to force clear on boot, then set back to false and rebuild...
 #define RESET_WIFI  false // ""
@@ -229,11 +229,9 @@ USING_NAMESPACE_APPLEMIDI
 #define RPT_MONTHLY  6
 #define RPT_YEARS    7
 
-// hardware timers (only 0 used)
-#define TIMER_0 0
-#define TIMER_1 1
-#define TIMER_2 2
-#define TIMER_3 3
+// hardware timer
+#define HW_TIMER_FREQ 1000000 // 1MHz
+#define HW_TIMER_PERIOD (1000000/4) // .25 sec
 
 // g8_ledFlashTimer .25ms resolution
 #define LED_FASTFLASH_TIME 1
@@ -301,7 +299,7 @@ void dnsAndServerStop();
 void print_wakeup_reason();
 void notFound(AsyncWebServerRequest *request);
 void SetupAndStartHardwareTimeInterrupt();
-void HardwareTimerRestart(hw_timer_t * timer);
+void HardwareTimerStart(hw_timer_t * timer);
 time_t DoTimeSyncOneSecondStuff(time_t now);
 void DoTimeSyncOneSecondStuff(void);
 String getSctMinMaxAsJS();

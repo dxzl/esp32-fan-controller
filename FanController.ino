@@ -2,6 +2,15 @@
 #include "FanController.h"
 
 /*********
+  ------------------------------------------------------------------------ 
+  NOTE: 6/3/2024 the last esp tools release that works "as is" is 2.0.17.
+  This project won't compile with 3.0.0. Changes needed to use with
+  3.x.x appear to be:
+      1) Mods to the ESPAsyncWebServer library.
+      2) Changes to the hardware timer API calls
+      3) other possible changes - I quit trying!
+  ------------------------------------------------------------------------
+  
   Install instructions:
   https://github.com/espressif/arduino-esp32/blob/master/docs/arduino-ide/windows.md
 
@@ -1164,22 +1173,20 @@ void SetupAndStartHardwareTimeInterrupt(){
   // Create semaphore to inform us when the timer has fired
   timerSemaphore = xSemaphoreCreateBinary();
 
-  // Use 1st timer of 4 (counted from zero).
-  // The frequency of the base signal used by the ESP32 counters is 80 MHz. If we divide this value
-  // by 80 (using 80 as the prescaler value), we will get a signal with a 1 MHz frequency that will
-  // increment the timer counter 1,000,000 times per second.
-  // hw_timer_t * timerBegin(uint8_t num, uint16_t divider, bool countUp);
-  g_HwTimer = timerBegin(TIMER_0, 80, true); // Set 80 divider for prescaler, count up
+  // hw_timer_t * timerBegin(uint32_t frequency);
+  g_HwTimer = timerBegin(HW_TIMER_FREQ); // 1MHz
 
   // Attach onTimer function to our timer.
-  timerAttachInterrupt(g_HwTimer, &onTimer, true);
+  // void timerAttachInterrupt(hw_timer_t * timer, void (*userFunc)(void));
+  timerAttachInterrupt(g_HwTimer, &onTimer);
 
   // Set alarm to call onTimer function every 1/4 second (value in microseconds).
   // Repeat the alarm (third parameter)
   g_prevNow = DoTimeSyncOneSecondStuff(time(0));
 
-  // Start timer-interrupt
-  timerAlarmEnable(g_HwTimer);
+  // Start timer
+//  timerAlarmEnable(g_HwTimer);
+  HardwareTimerStart(g_HwTimer);
 }
 
 time_t DoTimeSyncOneSecondStuff(time_t now){
@@ -1208,20 +1215,17 @@ void DoTimeSyncOneSecondStuff(void){
 
   ResetPeriod();
 
-  HardwareTimerRestart(g_HwTimer);
+  HardwareTimerStart(g_HwTimer);
 }
 
 // call this when the internal clock is changed or set
 // FYI: C:\Users\Scott\Documents\Arduino\hardware\espressif\esp32\cores\esp32\esp32-hal-timer.h
-void HardwareTimerRestart(hw_timer_t * timer){
-  prtln("Restarting hardware timer...");
+void HardwareTimerStart(hw_timer_t * timer){
+  prtln("Starting hardware timer...");
 
   // Set alarm to call onTimer function every 1/4 second (value in microseconds).
-  // Repeat the alarm (third parameter)
-  // void timerAlarmWrite(hw_timer_t *timer, uint64_t alarm_value, bool autoreload);
-  //  timerAlarmWrite(timer, 1000000, true); // 1 second
-  //  timerAlarmWrite(timer, 1000000, false); // disable (may then need yield() before re-enabling!)
-  timerAlarmWrite(timer, 1000000/4, true); // .25 sec
+  // void timerAlarm(hw_timer_t * timer, uint64_t alarm_value, bool autoreload, uint64_t reload_count);
+  timerAlarm(timer, HW_TIMER_PERIOD, true, 0); // .25 sec
 }
 
 void SSR1On(uint32_t iPeriod){
