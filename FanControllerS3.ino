@@ -3,7 +3,7 @@
 
 /*********
   ------------------------------------------------------------------------ 
-  NOTE: 6/4/2024 Compile with ESP32 build-tools 3.0.0 and up
+  NOTE: 6/18/2024 Compile with ESP32 build-tools 3.0.1 and up
 
   NOTE: you must use my custom-modified "MyPreferences.zip" library
   and also, the web-server had to be modified to work with the latest

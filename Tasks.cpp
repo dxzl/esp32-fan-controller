@@ -370,12 +370,6 @@ void TaskHttpCallback(int& iSpare, int& httpCode, String& sRsp, String& sMac, St
     return;
   }
 
-  // clear bCanRxInProgress
-  if (IML.GetCanRxInProgFlag(ipIdx)){
-    IML.SetCanRxInProgFlag(ipIdx, false);
-    prtln("TASK_HTTPCALLBACK: cleared bCanRxInProgress for IP: " + sTxIp);
-  }
-
   prtln("TASK_HTTPCALLBACK: custom response header IP: " + sTxIp);
 
   if (!IML.GetLinkOkFlag(ipIdx)){

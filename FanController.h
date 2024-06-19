@@ -56,7 +56,7 @@
 
 USING_NAMESPACE_APPLEMIDI
 
-#define DTS_VERSION "Version 3.04 (June 17, 2024)"
+#define DTS_VERSION "Version 3.05 (June 18, 2024)"
 #define ESP32_S3 false // set true if using ESP32 S3 board
 #define PRINT_ON true // set true to enable status printing to console
 #define RESET_PREFS false // set true to force clear on boot, then set back to false and rebuild...

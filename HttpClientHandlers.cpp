@@ -41,9 +41,7 @@ void ClearLinkOk(int code){
 
 bool SendHttpCanRxReq(int idx){
   if (!g_bWiFiConnected || idx < 0)
-    return false;  
-
-  IML.SetCanRxInProgFlag(idx, true); // prevent send to remote IP until CanRx request is answered...
+    return false;
 
   if (asyncHttpreq.readyState() != readyStateUnsent && asyncHttpreq.readyState() != readyStateDone)
     return false;
@@ -91,10 +89,6 @@ bool SendHttpReq(int idx){
   }
   if (!IML.GetLinkOkFlag(idx)){
     prtln("DEBUG: SendHttpReq() Can't send because linkOK flag is false!");
-    return true; // advance index to next mDNS entry
-  }
-  if (IML.GetCanRxInProgFlag(idx)){
-    prtln("DEBUG: SendHttpReq() Can't send because \"Can Rx?\" request in-progress!");
     return true; // advance index to next mDNS entry
   }
   
@@ -228,9 +222,8 @@ void HttpClientCallback(void* optParm, AsyncHTTPRequest* request, int readyState
     String sRemIP;
     if (request->respHeaderExists(HTTP_SERVER_IP_HEADER_NAME)){
       String sIp = request->respHeaderValue(HTTP_SERVER_IP_HEADER_NAME);
-      if (!sIp.isEmpty()){
+      if (!sIp.isEmpty())
         sRemIP = sIp;
-      }
     }
 
     String sMac;
