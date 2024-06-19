@@ -1213,17 +1213,17 @@ void TimeSlotsClass::ProcessEvent(int slotIndex, t_event slotData){
 void TimeSlotsClass::DoEvent(uint8_t deviceAddr, uint8_t deviceMode){
   // Addr 2 is "both"
   if (deviceAddr == 0 || deviceAddr == 2){
-    if (g8_nvSsrMode1 != deviceMode){
-      g8_nvSsrMode1 = deviceMode;
-      SetSSRMode(GPIO32_SSR_1, g8_nvSsrMode1);
+    if (g8_ssr1ModeFromWeb != deviceMode){
+      g8_ssr1ModeFromWeb = deviceMode;
+      SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
       ResetPeriod();
     }
   }
   // Addr 2 is "both"
   if (deviceAddr == 1 || deviceAddr == 2){
-    if (g8_nvSsrMode2 != deviceMode){
-      g8_nvSsrMode2 = deviceMode;
-      SetSSRMode(GPIO23_SSR_2, g8_nvSsrMode2);
+    if (g8_ssr2ModeFromWeb != deviceMode){
+      g8_ssr2ModeFromWeb = deviceMode;
+      SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
       ResetPeriod();
     }
   }

@@ -106,18 +106,14 @@ String CipherClass::getInitializationVector(){
 // Private methods -------------------------------------------------------------------
 
 String CipherClass::encryptDecryptString(String sIn, bool bDecrypt, int token, int context){
-  int dataLen = -1;
-  uint8_t* p = cyphBufFromString(sIn, dataLen);
+  uint8_t* p = cyphBufFromString(sIn);
+  
   if (!p)
     return "";
-  if (!dataLen){
-    free(p);
-    return "";
-  }
   
-//prtln("1:encryptDecryptString(): \"" + String((char*)p) + "\", dataLen=" + String(dataLen));
+//prtln("1:encryptDecryptString(): \"" + String((char*)p) + "\", sIn.length()=" + String(sIn.length()));
 
-  int retVal = encryptDecryptBuf(p, dataLen, bDecrypt, token, context);
+  int retVal = encryptDecryptBuf(p, sIn.length(), bDecrypt, token, context);
 
   if (retVal < 0){
     free(p);
@@ -126,7 +122,7 @@ String CipherClass::encryptDecryptString(String sIn, bool bDecrypt, int token, i
   
   // NOTE: if encrypting, we need to retain the size as a multiple of 16,
   // but when decrypting, we need to trim off any excess '\0' chars.
-  String sOut = bDecrypt ? String((char*)p) : String((char*)p, dataLen);
+  String sOut = bDecrypt ? String((char*)p) : String((char*)p, sIn.length());
   
 //prtln("2:encryptDecryptString(): \"" + sOut + "\", sOut.length()=" + String(sOut.length()));
 
@@ -238,30 +234,23 @@ void CipherClass::generateInitializationVector(){
 
 // returns pointer to buffer created from string
 // returns NULL if error creating buffer
-// returns dataLen by reference if success
-// dataLen is a multiple of CIPBUF_SIZE bytes (does not include the terminating null char!)
 // call "free(pBuf)" to delete when finished!!!!
-uint8_t* CipherClass::cyphBufFromString(String sIn, int &dataLen){
+uint8_t* CipherClass::cyphBufFromString(String sIn){
   int len = sIn.length();
-  if (!len){
-    dataLen = 0;
+  if (!len)
     return NULL;
-  }
   int numBlocks = len/CIPBUF_SIZE;
   int rem = len%CIPBUF_SIZE;
   if (rem)
     numBlocks++;
   int bufLen = (numBlocks*CIPBUF_SIZE)+1;
   uint8_t* bufInOut = (uint8_t*)malloc(bufLen);
-  if (bufInOut){
-    int ii;
-    for (ii=0; ii<len; ii++)
-      bufInOut[ii] = sIn[ii];
-    for (; ii<bufLen; ii++)
-      bufInOut[ii] = '\0';
-    dataLen = ii;
-  }
-  else
-    dataLen = 0;
+  if (!bufInOut)
+    return NULL;
+  int ii;
+  for (ii=0; ii<len; ii++)
+    bufInOut[ii] = sIn[ii];
+  for (; ii<bufLen; ii++)
+    bufInOut[ii] = '\0';
   return bufInOut;
 }

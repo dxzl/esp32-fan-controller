@@ -309,18 +309,26 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
     // if locked...
     // allow update while unlocked if in AP mode... successful update in AP mode resets parms...
     if (g_bSoftAP && (cmd == COMMAND_UPDATE || cmd == COMMAND_UPLOAD)){
-      if (request)
+      if (request){
         // special case to send...
-        request->send(200, "text/html", "<script>window.open('" + String(LOGIN_FILENAME) + "', '_self');</script>");
+        // (NOTE: sOut will be returned empty which tells calling method NOT to send...)
+        String s = "{\"a\":\"\", \"l\":\"\", \"o\":\"" + String(LOGIN_FILENAME) + "\"}";
+        request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s));
+//        request->send(HTTPCODE_OK, "text/html", "<script>window.open('" + String(LOGIN_FILENAME) + "', '_self');</script>");
+      }
     }
     else
       // this far and no farther! (interface is locked)
       sOut = "Interface is locked! (" + String(VERSION_STR) + ")";
   }
   else if (cmd == COMMAND_UPDATE || cmd == COMMAND_UPLOAD){
-    if (request)
+    if (request){
       // special case to send...
-      request->send(200, "text/html", "<script>window.open('" + String(LOGIN_FILENAME) + "', '_self');</script>");
+      // (NOTE: sOut will be returned empty which tells calling method NOT to send...)
+      String s = "{\"a\":\"\", \"l\":\"\", \"o\":\"" + String(LOGIN_FILENAME) + "\"}";
+      request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s));
+      //request->send(HTTPCODE_OK, "text/html", "<script>window.open('" + String(LOGIN_FILENAME) + "', '_self');</script>");
+    }
   }
   else if (cmd == COMMAND_PREFS){
     QueueTask(TASK_PRINT_PREFERENCES);
@@ -508,9 +516,9 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
     remCommand.toLowerCase();
     if (subCommand == SC_RELAY_1){
       if (remCommand == SSC_RELAY_ON){
-        if (g8_nvSsrMode1 != SSR_MODE_ON){
-          g8_nvSsrMode1 = SSR_MODE_ON;
-          SetSSRMode(GPIO32_SSR_1, g8_nvSsrMode1);
+        if (g8_ssr1ModeFromWeb != SSR_MODE_ON){
+          g8_ssr1ModeFromWeb = SSR_MODE_ON;
+          SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
           sOut = "Relay 1: on!";
         }
@@ -518,9 +526,9 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
           sOut = "Relay 1 already on!";
       }
       else if (remCommand == SSC_RELAY_OFF){
-        if (g8_nvSsrMode1 != SSR_MODE_OFF){
-          g8_nvSsrMode1 = SSR_MODE_OFF;
-          SetSSRMode(GPIO32_SSR_1, g8_nvSsrMode1);
+        if (g8_ssr1ModeFromWeb != SSR_MODE_OFF){
+          g8_ssr1ModeFromWeb = SSR_MODE_OFF;
+          SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
           sOut = "Relay 1: off!";
         }
@@ -528,9 +536,9 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
           sOut = "Relay 1 already off!";
       }
       else if (remCommand == SSC_RELAY_AUTO){
-        if (g8_nvSsrMode1 != SSR_MODE_AUTO){
-          g8_nvSsrMode1 = SSR_MODE_AUTO;
-          SetSSRMode(GPIO32_SSR_1, g8_nvSsrMode1);
+        if (g8_ssr1ModeFromWeb != SSR_MODE_AUTO){
+          g8_ssr1ModeFromWeb = SSR_MODE_AUTO;
+          SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
           sOut = "Relay 1: auto!";
         }
@@ -540,14 +548,14 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
       else{
         // print the relay's mode
         String sSsr1On = g_bSsr1On ? "ON" : "OFF";
-        sOut = "Relay 1 mode: " + SsrModeToString(g8_nvSsrMode1) + ", state: " + sSsr1On;
+        sOut = "Relay 1 mode: " + SsrModeToString(g8_ssr1ModeFromWeb) + ", state: " + sSsr1On;
       }
     }
     else if (subCommand == SC_RELAY_2){
       if (remCommand == SSC_RELAY_ON){
-        if (g8_nvSsrMode2 != SSR_MODE_ON){
-          g8_nvSsrMode2 = SSR_MODE_ON;
-          SetSSRMode(GPIO23_SSR_2, g8_nvSsrMode2);
+        if (g8_ssr2ModeFromWeb != SSR_MODE_ON){
+          g8_ssr2ModeFromWeb = SSR_MODE_ON;
+          SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
           sOut = "Relay 2: on!";
         }
@@ -555,9 +563,9 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
           sOut = "Relay 2 already on!";
       }
       else if (remCommand == SSC_RELAY_OFF){
-        if (g8_nvSsrMode2 != SSR_MODE_OFF){
-          g8_nvSsrMode2 = SSR_MODE_OFF;
-          SetSSRMode(GPIO23_SSR_2, g8_nvSsrMode2);
+        if (g8_ssr2ModeFromWeb != SSR_MODE_OFF){
+          g8_ssr2ModeFromWeb = SSR_MODE_OFF;
+          SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
           sOut = "Relay 2: off!";
         }
@@ -565,9 +573,9 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
           sOut = "Relay 2 already off!";
       }
       else if (remCommand == SSC_RELAY_AUTO){
-        if (g8_nvSsrMode2 != SSR_MODE_AUTO){
-          g8_nvSsrMode2 = SSR_MODE_AUTO;
-          SetSSRMode(GPIO23_SSR_2, g8_nvSsrMode2);
+        if (g8_ssr2ModeFromWeb != SSR_MODE_AUTO){
+          g8_ssr2ModeFromWeb = SSR_MODE_AUTO;
+          SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
           sOut = "Relay 2: auto!";
         }
@@ -577,7 +585,7 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
       else{
         // print the relay's mode
         String sSsr2On = g_bSsr2On ? "ON" : "OFF";
-        sOut = "Relay 2 mode: " + SsrModeToString(g8_nvSsrMode2) + ", state: " + sSsr2On;
+        sOut = "Relay 2 mode: " + SsrModeToString(g8_ssr2ModeFromWeb) + ", state: " + sSsr2On;
       }
     }
   }
@@ -1256,6 +1264,6 @@ void ProcessSerialCommand(String cmd){
     s = "Interface is locked!";
   else
     s = "Bad Command!";
-    
+
   prtln(s);
 }

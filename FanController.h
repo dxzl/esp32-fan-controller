@@ -56,7 +56,8 @@
 
 USING_NAMESPACE_APPLEMIDI
 
-#define DTS_VERSION "Version 3.00 (June 4, 2024)"
+#define DTS_VERSION "Version 3.04 (June 17, 2024)"
+#define ESP32_S3 false // set true if using ESP32 S3 board
 #define PRINT_ON true // set true to enable status printing to console
 #define RESET_PREFS false // set true to force clear on boot, then set back to false and rebuild...
 #define RESET_WIFI  false // ""
@@ -95,11 +96,13 @@ USING_NAMESPACE_APPLEMIDI
 #define MDNS_SVC "dts"
 #define MDNS_SVCU "_dts"
 
-#define FAILSAFE_TOKEN_1 2 // MAC from HTTP client send to the remote web-server
-#define FAILSAFE_TOKEN_2 4 // CanRx Decode fail
-#define FAILSAFE_TOKEN_3 5 // CanRx fail, text fail, param fail...
-#define FAILSAFE_TOKEN_4 6 // IP address string
-#define FAILSAFE_TOKEN_5 7 // MAC response from web-server to HTTP client callback
+// technically these can be 0-63 but better to keep them small for less processing overhead...
+// and 0 is probably not advised...
+#define FAILSAFE_TOKEN_1 4 // MAC from HTTP client send to the remote web-server
+#define FAILSAFE_TOKEN_2 1 // CanRx Decode fail
+#define FAILSAFE_TOKEN_3 3 // CanRx fail, text fail, param fail...
+#define FAILSAFE_TOKEN_4 5 // IP address string
+#define FAILSAFE_TOKEN_5 2 // MAC response from web-server to HTTP client callback
 
 // most signifigant byte bit 0 is multicast bit - do not set
 // most signifigant byte bit 1 is locally administered bit - set this.
@@ -119,13 +122,12 @@ USING_NAMESPACE_APPLEMIDI
 
 // NOTE: if you want custom security for your particular implementation, you can change the order of letters in _HttpCommandTable[]
 // in HttpMsgClass.h and you can change ENCODE_TABLE2 and ENCODE_TABLE3 in B64Class.h
-// You will also want to change TOKEN_INIT in PrefsClass.h! Also change HTTP_ASYNCREQ and HTTP_PARAM_COMMAND in WSHandlers.cpp.
+// You will also want to change TOKEN_INIT in PrefsClass.h! Also change HTTP_ASYNCREQ and HTTP_ASYNCREQ_PARAM_COMMAND in WSHandlers.cpp.
 
 // setting READ_WRITE_CUSTOM_BLK3_MAC true will write to BLK3 and permanently set efuse bits specified (presently written once).
 // set it false to use original factory base MAC from BLK1, set true to use MAC shown below as base MAC.
 // BE CAREFUL AS THESE CAN ONLY BE SET ONCE - MUST BE DIFFERENT FOR EACH ESP32 YOU HAVE!!!
 #define READ_WRITE_CUSTOM_BLK3_MAC false
-#define BLK3_VER  0x0a // version next 1a
 #define BLK3_MAC0 0xe6
 #define BLK3_MAC1 0xcd
 #define BLK3_MAC2 0x43 // next 47
@@ -140,7 +142,7 @@ USING_NAMESPACE_APPLEMIDI
 #define WRITE_PROTECT_BLK3 false // set true and run once to write protect BLK3 data (presently NOT write-protected!)
 //-------------------------------------------------------------------------------------------------------------
 
-// at some point, these limits might go up to 64 and 128...
+// at some point, these character-string limits might go up to 64 and 128...
 #define MAXSSID     32
 #define MAXPASS     64
 #define MAXAPSSID   32
@@ -152,41 +154,80 @@ USING_NAMESPACE_APPLEMIDI
 
 // used for hnEncode()/hnDecode() for web-pages
 #define MIN_SHIFT_COUNT 1
-#define MAX_SHIFT_COUNT 10
+#define MAX_SHIFT_COUNT 12
 
-#define CPU_FREQ 160 // 80MHz works ok for WiFi but may need 160MHz or 240MHz for WiFi Scans!
+#if ESP32_S3
+  // left side (USB at bottom)
+  // Pin 1 = 3.3V out
+  // Pin 21 = 5V in
+  // Pin 22 = Ground
+
+  // right side (USB at bottom)
+  // Pin 23, 24, 44 = Ground
+  // Pin 31 = boot (MUST BE TIED TO 3.3V)!!!!!
+  
+  // don't use GPIO 15, 16, 19, 20, 43, 44 (3 USB ports)
+  // GPIO 0, 3, 45, 46 (system bootstrap)
+
+  #define LED_GREEN 50 // 0-255 (for tri-color built-in LED)
+  #define CPU_FREQ 240 // 80MHz works ok for WiFi but may need 160MHz or 240MHz for WiFi Scans!
+
+  // Solid-state relay outputs
+  #define GPOUT_SSR1    1 // (pin 41 right) GPIO01 ADC1_0
+  #define GPOUT_SSR2    2 // (pin 40 right) GPIO02 ADC1_1
+  
+  // Analog Input
+  #define GPAIN_POT1    4 // (pin 4 left) GPIO04 ADC1_3
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_POT_MODE_SW1 5 // (pin 5/44 left) GPIO05 ADC1_4 Set pin to Vcc for POT1 Mode 1
+  #define GPIN_POT_MODE_SW2 6 // (pin 6/44 left) GPIO06 ADC1_5 Set pin to Vcc for POT1 Mode 2
+  
+  #define GPBD_ONE_WIRE_BUS_DATA  8  // (pin 12) GPIO08 ADC1_7
+  #define GPOUT_ONE_WIRE_BUS_CLK   9 // (pin 15) GPIO09 ADC1_8
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_WIFI_AP_SW      7 // (pin 7/44) GPIO07 ADC1_6 Set pin to Vcc for WiFi AP mode
+  #define GPIN_WIFI_STA_SW    10 // (pin 16/44) GPIO10 ADC1_9 Set pin to Vcc for WiFi STA mode
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_SSR1_MODE_SW_MAN   11 // (pin 17/44) Set pin to Vcc for SSR_1 Manual ON
+  #define GPIN_SSR1_MODE_SW_AUT   12 // (pin 18/44) Set pin to Vcc for SSR_1 Auto ON
+  
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_SSR2_MODE_SW_MAN   13 // (pin 19/44) Set pin to Vcc for SSR_2 Manual ON
+  #define GPIN_SSR2_MODE_SW_AUT   14 // (pin 20/44) Set pin to Vcc for SSR_2 Auto ON
+
+  #define GPOUT_SSR1_LED  35 // (pin 32 right) GPIO35
+  #define GPOUT_SSR2_LED  36 // (pin 33 right) GPIO36
+#else
+  #define CPU_FREQ 160 // 80MHz works ok for WiFi but may need 160MHz or 240MHz for WiFi Scans!
+  #define GPOUT_ONBOARD_LED 2
+
+  // Solid-state relay outputs
+  #define GPOUT_SSR1    32
+  #define GPOUT_SSR2    23
+
+  // Input only pins (on left top as usb port faces down, second pin down on left is GPI36)
+  #define GPAIN_POT1    36 // ADC1_0 (2)
+  //#define GPAIN_POT_2    39 // ADC1_3 (3)
+  // the POT_3 center-pin on the custom PC-board is being used to solder a wire for a SPST POT-Mode switch...
+  //#define GPAIN_POT_3    34 // ADC1_6 (4)
+  #define GPIN_POT_MODE_SW 34 // ADC1_6 (4)
+  //#define GPAIN_POT_4    35 // ADC1_7 (5)
 
 // Data wire is plugged into GPIO 22 on the ESP32
-#define GPIO22_ONE_WIRE_BUS    22 // pin 22
-//#define MY_INPUT_PULLDOWN 0x09
+//  #define GPBD_ONE_WIRE_BUS_DATA  22
+//  #define GPOUT_ONE_WIRE_BUS_CLK   27
 
-// Reset SSID and PWD to defaults if GPIO0 pressed on powerup (same as BOOT button)
-// (User LED is GPIO2 - turn that on and off if we restored ssid/pwd)
-// (Power LED "might" be on GPIO1)
-//#define BTN_RESTORE_SSID_PWD    0 // NOTE: sadly, I can't get this pin to work - it's tied in as BOOT
-#define GPIO2_ONBOARD_LED       2
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_WIFI_AP_SW  18 // (pin 24/30) Set pin to Vcc for WiFi AP mode
+  #define GPIN_WIFI_STA_SW 19 // (pin 25/30) Set pin to Vcc for WiFi STA mode
+#endif
 
-// Input only pins (on left top as usb port faces down, second pin down on left is GPI36)
-#define GPIO36_POT_1            36 // ADC1_0 (2)
-#define GPIO39_POT_2            39 // ADC1_3 (3)
-// the POT_3 center-pin on the custom PC-board is being used to solder a wire for a SPST POT-Mode switch...
-//#define GPIO34_POT_3               34 // ADC1_6 (4)
-#define GPIO34_POT_MODE         34 // ADC1_6 (4)
-#define GPIO35_POT_4            35 // ADC1_7 (5)
-
-// Inputs with pulldowns (3-states 00,01,10)
-#define GPIO18_WIFI_AP          18 // Set pin to Vcc for WiFi AP mode
-#define GPIO19_WIFI_STA         19 // Set pin to Vcc for WiFi STA mode
-
-#define WIFI_SW_MODE_OFF        0
-#define WIFI_SW_MODE_AP         1
-#define WIFI_SW_MODE_STA        2
-
-#define GPIO27_ONE_WIRE_BUS     27
-
-// Outputs
-#define GPIO32_SSR_1            32
-#define GPIO23_SSR_2            23
+#define WIFI_SW_MODE_OFF  0
+#define WIFI_SW_MODE_AP   1
+#define WIFI_SW_MODE_STA  2
 
 #define SERVER_PORT             80
 
@@ -230,8 +271,8 @@ USING_NAMESPACE_APPLEMIDI
 #define RPT_YEARS    7
 
 // hardware timer
-#define HW_TIMER_FREQ 1000000 // 1MHz
-#define HW_TIMER_PERIOD (1000000/4) // .25 sec
+#define HW_TIMER_FREQ 1000000 // use 1000000 for 1MHz
+#define HW_TIMER_PERIOD (HW_TIMER_FREQ/4) // .25 sec
 
 // g8_ledFlashTimer .25ms resolution
 #define LED_FASTFLASH_TIME 1
@@ -260,10 +301,6 @@ USING_NAMESPACE_APPLEMIDI
 #define EVENT_LENGTH_SEC        29 // "umtrdssttX2020-06-05T23:59:59"
 #define EVENT_LENGTH_NOSEC      26 // "umtrdssttX2020-06-05T23:59"
 #define MAX_LOCKPASS_LENGTH     32
-
-// not used at present - way to sleep for X seconds then reset, keeping RTC variables
-#define uS_TO_S_FACTOR 1000000  //Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  5        //Time ESP32 will go to sleep (in seconds)// this is when we don't hook into a router from here, but rather
 
 #define T_ONE_HOUR (2*60*60)
 
@@ -299,7 +336,7 @@ void dnsAndServerStop();
 void print_wakeup_reason();
 void notFound(AsyncWebServerRequest *request);
 void SetupAndStartHardwareTimeInterrupt();
-void HardwareTimerStart(hw_timer_t * timer);
+void HardwareTimerRestart(hw_timer_t * timer);
 time_t DoTimeSyncOneSecondStuff(time_t now);
 void DoTimeSyncOneSecondStuff(void);
 String getSctMinMaxAsJS();
@@ -312,24 +349,40 @@ void stopMIDI();
 void startMIDI();
 bool SendHttpReq(int idx);
 void TaskMidiChan(); // has to be in FanController.ino!
+//String wsTemplateProc(const String& var);
 //#endif
 
 extern int g_slotCount, g_prevMdnsCount;
 extern int g_defToken, g_pendingDefToken, g_oldDefToken;
 extern int g_sct, g_minSct, g_maxSct;
-extern uint8_t g8_oldSw1Value, g8_oldSw2Value, g8_maxPower, g8_nvSsrMode1, g8_nvSsrMode2, g8_midiNoteA, g8_midiNoteB, g8_midiChan;
+extern uint8_t g8_maxPower, g8_midiNoteA, g8_midiNoteB, g8_midiChan;
 extern uint8_t g8_ledFlashCount, g8_ledFlashCounter, g8_ledDigitCounter, g8_ledSaveMode, g8_ledMode, g8_ledSeqState;
 extern uint8_t g8_quarterSecondTimer, g8_fiveSecondTimer, g8_thirtySecondTimer, g8_ledFlashTimer, g8_clockSetDebounceTimer, g8_lockCount;
-extern uint8_t g8_modeSwState, g8_wifiSwState, g8_digitArray[];
+extern uint8_t g8_digitArray[];
 extern uint16_t g16_pot1Value, g16_oldpot1Value; // variable for storing the potentiometer value
 extern uint16_t g16_oldMacLastTwo, g16_unlockCounter, g16_tokenSyncTimer, g16_sendDefTokenTimer;
 extern uint16_t g16_sendDefTokenTime, g16_sendHttpTimer, g16_asyncHttpIndex, g16_oddEvenCounter;
 extern uint32_t g32_periodTimer, g32_savePeriod, g32_dutyCycleTimerA, g32_dutyCycleTimerB, g32_phaseTimer, g32_nextPhase;
 extern String g_sHostName, g_sSSID, g_sApSSID, g_sKey, g_sMac, g_sLabelA, g_sLabelB, g_sSerIn, g_text;
 
-extern bool g_bWiFiConnected, g_bWiFiConnecting, g_bSoftAP, g_bMdnsOn, g_bWiFiDisabled, g_bResetOrPowerLoss, g_bTellP2WebPageToReload, g_bOldModeSwOn;
+extern bool g_bOldWiFiApSwOn, g_bOldWiFiStaSwOn;
+
+#if ESP32_S3
+extern bool g_bOldPotModeSw1On, g_bOldPotModeSw2On;
+extern bool g_bOldSsr1ModeManSwOn, g_bOldSsr1ModeAutSwOn;
+extern bool g_bOldSsr2ModeManSwOn, g_bOldSsr2ModeAutSwOn;
+extern uint8_t g8_ssr1ModeFromSwitch, g8_ssr2ModeFromSwitch;
+#else
+extern bool g_bOldPotModeSwOn;
+#endif
+
+extern uint8_t g8_potModeFromSwitch, g8_wifiModeFromSwitch;
+
+extern uint8_t g8_ssr1ModeFromWeb, g8_ssr2ModeFromWeb;
+
+extern bool g_bWiFiConnected, g_bWiFiConnecting, g_bSoftAP, g_bMdnsOn, g_bWiFiDisabled, g_bResetOrPowerLoss, g_bTellP2WebPageToReload;
 extern bool g_bManualTimeWasSet, g_bWiFiTimeWasSet, g_bValidated, g_bRequestManualTimeSync, g_bRequestWiFiTimeSync, g_bMidiConnected;
-extern bool g_bSsr1On, g_bSsr2On, g_bOldSsr1On, g_bOldSsr2On, g_bTest;
+extern bool g_bSsr1On, g_bSsr2On, g_bOldSsr1On, g_bOldSsr2On, g_bTest, g_bLedOn;
 extern bool g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncToken, g_bSyncTime, g_bSyncEncrypt, g_bSyncMaster;
 
 // cycle pulse-off

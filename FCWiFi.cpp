@@ -8,7 +8,7 @@ void PollWiFiSwitch(){
 
   if (g_bSoftAP){
     // if in AP mode and switch changed to STA mode, disconnect AP
-    if (g8_wifiSwState != WIFI_SW_MODE_AP)
+    if (g8_wifiModeFromSwitch != WIFI_SW_MODE_AP)
       WiFiStartAP(true); // disconnect AP WiFi Mode
 
     CheckWiFiConnected();
@@ -17,34 +17,34 @@ void PollWiFiSwitch(){
     // see if we need to disconnect from router first, then check for entering AP mode
     CheckWiFiConnected();
 
-    if (g8_wifiSwState == WIFI_SW_MODE_AP)
+    if (g8_wifiModeFromSwitch == WIFI_SW_MODE_AP)
       WiFiStartAP(false); // connect in AP mode
   }
 }
 
 void CheckWiFiConnected(){
   if (g_bWiFiConnected){
-    if (g_bWiFiDisabled || (g8_wifiSwState != WIFI_SW_MODE_STA))
+    if (g_bWiFiDisabled || (g8_wifiModeFromSwitch != WIFI_SW_MODE_STA))
       WiFiMonitorConnection(true); // disconnect from router
   }
   else{ // not connected to router
-    if (!g_bWiFiDisabled && (g8_wifiSwState == WIFI_SW_MODE_STA)){
+    if (!g_bWiFiDisabled && (g8_wifiModeFromSwitch == WIFI_SW_MODE_STA)){
       WiFiMonitorConnection(false); // connect to router in STA mode
     }
-    else if (g_bWiFiConnecting && (g8_wifiSwState == WIFI_SW_MODE_OFF)){
+    else if (g_bWiFiConnecting && (g8_wifiModeFromSwitch == WIFI_SW_MODE_OFF)){
       WiFiMonitorConnection(true); // disconnect if in the process of connecting
     }
   }
 }
 
 void WiFiMonitorConnection(bool bDisconnect){
-  if (g8_wifiSwState == WIFI_SW_MODE_OFF && (g_bSoftAP || g_bWiFiConnected || g_bWiFiConnecting || WiFi.getMode() != WIFI_OFF)){
+  if (g8_wifiModeFromSwitch == WIFI_SW_MODE_OFF && (g_bSoftAP || g_bWiFiConnected || g_bWiFiConnecting || WiFi.getMode() != WIFI_OFF)){
     WiFiStop(true);
     return;
   }
 
   if (g_bSoftAP){
-    if (bDisconnect || g8_wifiSwState != WIFI_SW_MODE_AP)
+    if (bDisconnect || g8_wifiModeFromSwitch != WIFI_SW_MODE_AP)
       WiFiStartAP(true); // disconnect AP mode (it will reconnect)
     else
       return;
@@ -91,7 +91,7 @@ void WiFiMonitorConnection(bool bDisconnect){
     else if (g_bWiFiConnecting){
       //prt(".");
     }
-    else if (g_sSSID.length() != 0 && g8_wifiSwState == WIFI_SW_MODE_STA){ // connect to router
+    else if (g_sSSID.length() != 0 && g8_wifiModeFromSwitch == WIFI_SW_MODE_STA){ // connect to router
       QueueTask(TASK_WIFI_STA_CONNECT); // fetch pw from flash and connect
       g8_ledMode = g8_ledMode_FASTFLASH;
       g_bWiFiConnecting = true;

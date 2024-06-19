@@ -86,8 +86,8 @@ void GetPreferences(){
     g_perVals.phase = PHASE_MAX;
   g32_savePeriod = ComputePeriod(g_perVals.perVal, g_perVals.perMax, g_perVals.perUnits);
   g32_nextPhase = ComputePhase();
-  SetSSRMode(GPIO32_SSR_1, g8_nvSsrMode1);
-  SetSSRMode(GPIO23_SSR_2, g8_nvSsrMode2);
+  SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
+  SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
   g_oldDefToken = g_defToken; // don't want send to remotes!
   CIP.setCiphKey(g_sKey);
 }
@@ -129,8 +129,8 @@ void ReadEEprefs(){
   g_bSyncTime = temp & EE_SYNC_MASK_TIME;  
   g_bSyncEncrypt = temp & EE_SYNC_MASK_ENCRYPT;
 
-  g8_nvSsrMode1 = PF.getUChar(EE_RELAY_A, SSR1_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
-  g8_nvSsrMode2 = PF.getUChar(EE_RELAY_B, SSR2_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
+  g8_ssr1ModeFromWeb = PF.getUChar(EE_RELAY_A, SSR1_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
+  g8_ssr2ModeFromWeb = PF.getUChar(EE_RELAY_B, SSR2_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
 
   g8_midiChan = PF.getUChar(EE_MIDICHAN, MIDICHAN_INIT);
 

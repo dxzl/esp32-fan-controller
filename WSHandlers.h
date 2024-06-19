@@ -3,6 +3,11 @@
 
 #include <Arduino.h>
 
+// NOTE: there are many const strings at the top of WSHandlers.cpp that should be changed if you are
+// refreshing "security" overall... so of them need to also be changed in their respective web-page
+// HTML or JavaScript files. You can do it fast with Notepad++ - just open all files and search for a
+// string then do a global-replace. Don't forget to re-obfuscate the .js files at https://obfuscator.io/
+
 // These you can't change unless you search for the strings in the respective javascript
 // files in \Documents\Arduino\projects\ESP32\FanController\origdata and change them there, then upload the .js file to
 // https://obfuscator.io/ and put the obfuscated file into the \Documents\Arduino\projects\ESP32\FanController\data folder, then rebuild
@@ -46,14 +51,15 @@
 #define INDEX_FILENAME    "/index.html"
 #define SERVERINDEX_FILENAME  "/serverIndex.html"
 
-// web-page entry points
+// web-page entry points (if you change these, they must also be changed in the html/javascript files in "data")
 #define EP_POST_UPDATE     "/update"
 #define EP_POST_P2         "/postP2"
 #define EP_POST_P2FORM     "/p2Form"
 #define EP_GET_P1          "/getP1"
+#define EP_ALT_P1          "/altP1"
 #define EP_GET_P2          "/getP2"
 #define EP_GET_LIFORM      "/getLIform"
-#define EP_GET_BUTTONS     "/buttons"
+#define EP_GET_BUTTONS     "/getBut"
 #define EP_GET_HEART       "/getHeart"
 #define EP_GET_INDEX       "/getIndex"
 

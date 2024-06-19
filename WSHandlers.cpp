@@ -17,21 +17,14 @@ const char PH_P1VARS[] = "P1VARS"; // combination script tag with vars for g8_mi
 const char PH_P2DELSTYLE[] = "P2DELSTYLE";
 const char PH_P2DELITEMS[] = "P2DELITEMS";
 
-// response to async http request to mDNS local ESP32s every 5 sec.
-const char HTTP_PARAM_COMMAND[] = "jeisl"; // universal "command" parameter
+// These pertain to http get requests from our client-library (HttpClientHandlers.cpp)
+// the strings can be freely changed for security... but if you change them, ALL devices must be updated!
+const char HTTP_ASYNCREQ_CANRX[] = "/susji";
+const char HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS[] = "ksisw";
 
-//const char HTTP_ASYNCFAILSAFEREQ[] = "/leofw";
-//const char HTTP_ASYNCFAILSAFEREQ_PARAM_RANDTOKEN[] = "lekcn";
-//const char HTTP_ASYNCFAILSAFEREQ_PARAM_MACLT[] = "lwhcb";
-
-const char HTTP_ASYNCCANRXREQ[] = "/qhrfs";
-const char HTTP_ASYNCCANRXREQ_PARAM_TOK3BITS[] = "lejcd";
-
-//const char HTTP_ASYNCTEXTREQ[] = "/qhspu";
-//const char HTTP_ASYNCTEXTREQ_PARAM_TEXT[] = "lejcy";
-
-const char HTTP_ASYNCREQ[] = "/keuve";
-const char HTTP_ASYNCREQ_PARAM_TIMESET[] = "meyvn";
+const char HTTP_ASYNCREQ[] = "/keond";
+const char HTTP_ASYNCREQ_PARAM_TIMESET[] = "kwfta";
+const char HTTP_ASYNCREQ_PARAM_COMMAND[] = "mrefw"; // universal "command" parameter
 
 // ------------------ web-server handlers -------------------
 
@@ -97,73 +90,6 @@ const char PARAM_DATETIME[] = "gejcc";
 const char PARAM_FILEDATA[] = "wqjun";
 const char PARAM_ERASEDATA[] = "lkeism";
 
-//void HandleHttpAsyncTextReq(AsyncWebServerRequest *request){
-//
-//  IPAddress rip = request->client()->remoteIP();
-//
-//  if (!g_bSyncRx){
-//    SendHttpClientResponse(request, HTTPRESP_RXDISABLED, HTTPCODE_RXDISABLED);
-//    prtln("HandleHttpAsyncTextReq(): Local Rx is disabled! (remote ip " + rip.toString());
-//    return;
-//  }
-//  
-//  int rxIdx = IML.FindMdnsIp(rip);
-//  if (rxIdx < 0){
-//    rxIdx = IML.AddMdnsIp(rip);
-//    if (rxIdx < 0){ // add incomming IP to mDNS table
-//      prtln("HandleHttpAsyncCanRxReq(): UNABLE TO ADD ip to mDNS table: " + rip.toString());
-//      SendHttpClientResponse(request, HTTPRESP_ADDIP_FAIL, HTTPCODE_ADDIP_FAIL);
-//      return;
-//    }
-//    prtln("HandleHttpCanRxReq(): ip added to mDNS table: " + rip.toString());
-//  }
-//
-//  String sReply = HTTPRESP_TXT_FAIL;
-//  int code = HTTPCODE_TXT_FAIL;
-//
-//  int rxToken = IML.GetRxToken(rxIdx);
-//
-//  if (request->hasParam(HTTP_ASYNCTEXTREQ_PARAM_TEXT)){
-//    String s1 = request->getParam(HTTP_ASYNCTEXTREQ_PARAM_TEXT)->value();
-////prtln("HandleHttpAsyncFailsafeReq(): raw received HTTP_ASYNCTEXTREQ_PARAM_TEXT: \"" + s1 + "\"");
-//
-//    // HTTP_ASYNCTEXTREQ_PARAM_TEXT is the AES 256-bit encrypted text message
-//    s1 = MyDecodeStr(s1, HTTP_TABLE3, rxToken, CIPH_CONTEXT_BACKGROUND);
-//    if (!s1.isEmpty()){
-//      String sIP = rip.toString();
-//      if (g_text.isEmpty()){
-//        if (s1.length() <= HTTP_TEXT_MAXCHARS){
-//          s1 = sIP + ": \"" + s1 + "\""; // let web-page know who sent the text...
-//          prtln("received text: " + s1);
-//          g_text = s1; // the g_text may eventually be hnEncoded() and sent to a web-browser via a PARAM_TEXT request
-//          code = HTTPCODE_TXT_OK;
-//          sReply = HTTPRESP_TXT_OK;
-//        }
-//        else
-//          prtln("ERROR: text received is too long! " + sIP + "\"" + s1 + "\"");
-//      }
-//      else
-//        prtln("ERROR: new text received before previous text sent! " + sIP + "\"" + s1 + "\"");
-//    }
-//  }
-//
-//  if (sReply != HTTPRESP_TXT_FAIL){
-//    // (NOTE 7/2023: decided to use rxtoken to encode the response, and tx token in the other unit's callback to decode.
-//    // This is so that the entire Tx->Rx->Response loop is completed using the same token-set)
-//    sReply = MyEncodeStr(sReply, HTTP_TABLE1, rxToken, CIPH_CONTEXT_BACKGROUND);
-//    if (sReply.isEmpty()){
-//      sReply = HTTPRESP_TXT_FAIL;
-//      prtln("HandleHttpAsyncTextReq(): MyEncodeStr(sReply) returned empty string!");
-//    }
-//  }
-//  if (sReply == HTTPRESP_TXT_FAIL){
-//    prtln("HandleHttpAsyncTextReq(): Sending HTTPCODE_TXT_FAIL!");
-//    code = HTTPCODE_TXT_FAIL;
-//    sReply = MyEncodeStr(sReply, HTTP_TABLE1, FAILSAFE_TOKEN_3, CIPH_CONTEXT_BACKGROUND);
-//  }
-//  SendHttpClientResponse(request, sReply, code);
-//}
-
 void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
 
   IPAddress rip = request->client()->remoteIP();
@@ -224,19 +150,19 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
   int code;
   String sReply;
 
-  if (request->hasParam(HTTP_PARAM_COMMAND) &&
-          request->hasParam(HTTP_ASYNCCANRXREQ_PARAM_TOK3BITS)){
-//prtln("HandleHttpAsyncCanRxReq(): raw received HTTP_PARAM_COMMAND: \"" + s1 + "\"");
-    String sTokHigh = request->getParam(HTTP_ASYNCCANRXREQ_PARAM_TOK3BITS)->value(); // get (high 3-bits+1) << 4
+  if (request->hasParam(HTTP_ASYNCREQ_PARAM_COMMAND) &&
+          request->hasParam(HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS)){
+//prtln("HandleHttpAsyncCanRxReq(): raw received HTTP_ASYNCREQ_PARAM_COMMAND: \"" + s1 + "\"");
+    String sTokHigh = request->getParam(HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS)->value(); // get (high 3-bits+1) << 4
     if (sTokHigh.isEmpty()){
-      prtln("HandleHttpAsyncCanRxReq(): HTTP_ASYNCCANRXREQ_PARAM_TOK3BITS value is empty!");
+      prtln("HandleHttpAsyncCanRxReq(): HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS value is empty!");
       goto finally;
     }
-//prtln("DEBUG: HandleHttpAsyncCanRxReq(): : raw HTTP_ASYNCCANRXREQ_PARAM_TOK3BITS (key): \"" + sTokHigh + "\"");
+//prtln("DEBUG: HandleHttpAsyncCanRxReq(): : raw HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS (key): \"" + sTokHigh + "\"");
     int iTokHigh = MyDecodeNum(sTokHigh, HTTP_TABLE1, g_defToken, CIPH_CONTEXT_BACKGROUND);
-    String sCmd = MyDecodeStr(request->getParam(HTTP_PARAM_COMMAND)->value(), HTTP_TABLE2, g_defToken, CIPH_CONTEXT_BACKGROUND);
+    String sCmd = MyDecodeStr(request->getParam(HTTP_ASYNCREQ_PARAM_COMMAND)->value(), HTTP_TABLE2, g_defToken, CIPH_CONTEXT_BACKGROUND);
     if (iTokHigh < 0 || sCmd.isEmpty()){
-//prtln("DEBUG: HandleHttpAsyncCanRxReq(): Can't decode HTTP_PARAM_COMMAND with g_defToken= " + String(g_defToken) + ", ip=" + rip.toString());
+//prtln("DEBUG: HandleHttpAsyncCanRxReq(): Can't decode HTTP_ASYNCREQ_PARAM_COMMAND with g_defToken= " + String(g_defToken) + ", ip=" + rip.toString());
       if (weAreMoreMaster == -1){ // we don't know who's "more master" yet (haven't received MAC last-two)
         code = HTTPCODE_CANRX_NOMAC_FAIL;
 //prtln("DEBUG: HandleHttpAsyncCanRxReq(): sending HTTPCODE_CANRX_NOMAC_FAIL");
@@ -250,7 +176,7 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
 prtln("DEBUG: HandleHttpAsyncCanRxReq(): weAreMoreMaster=" + String(weAreMoreMaster) + " (sends NO_TOKEN if 0 or -1 (unset)!)");
       int iDefTok = (weAreMoreMaster == 1) ? g_defToken : NO_TOKEN;
       CIP.saveCiphKey(CIPH_CONTEXT_BACKGROUND);
-      CIP.setCiphKey(sTokHigh); // use the raw HTTP_ASYNCCANRXREQ_PARAM_TOK3BITS encoded parameter as key!
+      CIP.setCiphKey(sTokHigh); // use the raw HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS encoded parameter as key!
       sReply = MyEncodeNum(iDefTok, HTTP_TABLE2, FAILSAFE_TOKEN_2, CIPH_CONTEXT_BACKGROUND); // send our g_defToken to remote for it to set its g_defToken the same!
       CIP.restoreCiphKey(CIPH_CONTEXT_BACKGROUND);
       // do a system-wide default token reset in 3 minutes
@@ -267,7 +193,7 @@ prtln("DEBUG: HandleHttpAsyncCanRxReq(): weAreMoreMaster=" + String(weAreMoreMas
         code = HTTPCODE_CANRX_OK;
         int iTokLow = random(1,8+1); // 0-7 plus 1 to avoid 0!
         sReply = MyEncodeNum(iTokLow<<CANRX_TOKEN_SHIFT, HTTP_TABLE3, g_defToken, CIPH_CONTEXT_BACKGROUND); // send back: ((lower 3 bits plus one) << 4)
-        int rxToken = ((iTokHigh-1)<<3)+iTokLow;
+        int rxToken = (iTokHigh<<3)+(iTokLow-1);
         IML.SetRxToken(rxIdx, rxToken);
 //prtln("DEBUG: HandleHttpAsyncCanRxReq() HTTP_COMMAND_CANRX: got high 3-bits, setting rxToken to: " + String(rxToken));
 //prtln("DEBUG: HandleHttpAsyncCanRxReq() HTTP_COMMAND_CANRX: sending back newly generated low 3-bits: " + String(iTokLow-1));
@@ -332,12 +258,12 @@ void HandleHttpAsyncReq(AsyncWebServerRequest *request){
     return; // return -1 for errors that don't require drastic action...
   }
   
-  if (request->hasParam(HTTP_PARAM_COMMAND)){
-    String sReq = request->getParam(HTTP_PARAM_COMMAND)->value();
-//prtln("debug: raw received HTTP_PARAM_COMMANDS: \"" + s + "\"");
+  if (request->hasParam(HTTP_ASYNCREQ_PARAM_COMMAND)){
+    String sReq = request->getParam(HTTP_ASYNCREQ_PARAM_COMMAND)->value();
+//prtln("debug: raw received HTTP_ASYNCREQ_PARAM_COMMANDS: \"" + s + "\"");
 
     bool bPendingTokenWasSet; // set flag by-reference...
-    int macLastTwo = HMC.DecodeParameters(sReq, rxIdx, bPendingTokenWasSet, false); // returns decoded string in s by-reference!
+    int macLastTwo = HMC.DecodeParameters(sReq, rxIdx, bPendingTokenWasSet, false); // returns decoded string in sReq by-reference!
 //prtln("debug: partially decoded after calling HMC.DecodeParameters(): \"" + sReq + "\"");
 //prtln("debug: macLastTwo from HMC.DecodeParameters(): " + String(macLastTwo));
 
@@ -381,9 +307,9 @@ void HandleHttpAsyncReq(AsyncWebServerRequest *request){
         CheckMasterStatus();
       }
       
-      prtln("HandleHttpAsyncReq(): HTTP_PARAM_COMMAND OK!: decoded macLastTwo=" + String(macLastTwo));
+      prtln("HandleHttpAsyncReq(): HTTP_ASYNCREQ_PARAM_COMMAND OK!: decoded macLastTwo=" + String(macLastTwo));
     }
-//prtln("debug: sending HTTP_PARAM_COMMAND response code and string: " + String(code) + ", s=\"" + s + "\"");
+//prtln("debug: sending HTTP_ASYNCREQ_PARAM_COMMAND response code and string: " + String(code) + ", s=\"" + s + "\"");
     sReply = sReq;
   }
 
@@ -453,54 +379,71 @@ void SendHttpClientResponse(AsyncWebServerRequest *request, String sResp, int co
   }
 }
 
+// handle ON, OFF, AUTO button clicks on index.html/p0.js
 void HandleButtonsReq(AsyncWebServerRequest *request){
     if (IsLockedAlertGet(request, INDEX_FILENAME))
       return;
 
-    if (request->hasParam("A")){
-      String buttonMode = B64C.hnDecode(request->getParam("A")->value());
+    String sSel;
+    if (request->hasParam("A"))
+      sSel = "A";
+    else if (request->hasParam("B"))
+      sSel = "B";
+    if (sSel.isEmpty())
+      return;
+    String sVal = request->getParam(sSel)->value();
+    String sDec = B64C.hnShiftDecode(sVal);
+    if (sDec.isEmpty())
+      return;
+    String sSec = sDec.substring(1);
+    if (!alldigits(sSec))
+      return;
+    if (sSec.toInt() != g_sct) // security check
+      return;
+    String buttonMode = sDec.substring(0,1);
+
+    if (sSel == "A"){
       if (buttonMode == "0"){
-        if (g8_nvSsrMode1 != SSR_MODE_OFF){
-          g8_nvSsrMode1 = SSR_MODE_OFF;
-          SetSSRMode(GPIO32_SSR_1, g8_nvSsrMode1);
+        if (g8_ssr1ModeFromWeb != SSR_MODE_ON){
+          g8_ssr1ModeFromWeb = SSR_MODE_ON;
+          SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
         }
       }
       else if (buttonMode == "1"){
-        if (g8_nvSsrMode1 != SSR_MODE_ON){
-          g8_nvSsrMode1 = SSR_MODE_ON;
-          SetSSRMode(GPIO32_SSR_1, g8_nvSsrMode1);
+        if (g8_ssr1ModeFromWeb != SSR_MODE_OFF){
+          g8_ssr1ModeFromWeb = SSR_MODE_OFF;
+          SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
         }
       }
       else if (buttonMode == "2"){
-        if (g8_nvSsrMode1 != SSR_MODE_AUTO){
-          g8_nvSsrMode1 = SSR_MODE_AUTO;
-          SetSSRMode(GPIO32_SSR_1, g8_nvSsrMode1);
+        if (g8_ssr1ModeFromWeb != SSR_MODE_AUTO){
+          g8_ssr1ModeFromWeb = SSR_MODE_AUTO;
+          SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
         }
       }
     }
-    else if (request->hasParam("B")){
-      String buttonMode = B64C.hnDecode(request->getParam("B")->value());
+    else if (sSel == "B"){
       if (buttonMode == "0"){
-        if (g8_nvSsrMode2 != SSR_MODE_OFF){
-          g8_nvSsrMode2 = SSR_MODE_OFF;
-          SetSSRMode(GPIO23_SSR_2, g8_nvSsrMode2);
+        if (g8_ssr2ModeFromWeb != SSR_MODE_ON){
+          g8_ssr2ModeFromWeb = SSR_MODE_ON;
+          SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
         }
       }
       else if (buttonMode == "1"){
-        if (g8_nvSsrMode2 != SSR_MODE_ON){
-          g8_nvSsrMode2 = SSR_MODE_ON;
-          SetSSRMode(GPIO23_SSR_2, g8_nvSsrMode2);
+        if (g8_ssr2ModeFromWeb != SSR_MODE_OFF){
+          g8_ssr2ModeFromWeb = SSR_MODE_OFF;
+          SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
         }
       }
       else if (buttonMode == "2"){
-        if (g8_nvSsrMode2 != SSR_MODE_AUTO){
-          g8_nvSsrMode2 = SSR_MODE_AUTO;
-          SetSSRMode(GPIO23_SSR_2, g8_nvSsrMode2);
+        if (g8_ssr2ModeFromWeb != SSR_MODE_AUTO){
+          g8_ssr2ModeFromWeb = SSR_MODE_AUTO;
+          SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
           QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
         }
       }
@@ -530,9 +473,9 @@ void HandleHeartbeatReq(AsyncWebServerRequest *request){
 
     // if no text, send the status variable comma-separated values...
     if (s.isEmpty()){
-      s = String(g8_lockCount) + "," + String(g16_pot1Value) + "," + String(g8_wifiSwState) + "," + String(g8_modeSwState);
+      s = String(g8_lockCount) + "," + String(g16_pot1Value) + "," + String(g8_wifiModeFromSwitch) + "," + String(g8_potModeFromSwitch);
     }
-    request->send(200, "text/html", B64C.hnEncode(s).c_str());
+    request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s));
   }
 }
 
@@ -547,7 +490,7 @@ void HandleIndexReq(AsyncWebServerRequest *request){
   if (p == NULL)
     return;
 
-  String sVal = B64C.hnDecode(p->value());
+  String sVal = B64C.hnShiftDecode(p->value());
 
   if (sVal.isEmpty())
     return;
@@ -573,7 +516,7 @@ void HandleIndexReq(AsyncWebServerRequest *request){
     // javascript in our HTML web-page as 4 comma-seperated sub-strings
     if (sVal == PARAM_STATE1_VALUE){
       s = (g_bSsr1On ? "ON" : "OFF");
-      s += "," + SsrModeToString(g8_nvSsrMode1);
+      s += "," + SsrModeToString(g8_ssr1ModeFromWeb);
       s += "," + String(ComputeTimeToOnOrOffA()); // String(g_stats.AOnPrevCount+g_stats.AOnCounter)
       s += "," + PercentOnToString(g_stats.PrevDConA+g_stats.DConA, g_stats.HalfSecondCount+g_stats.HalfSecondCounter);
     }
@@ -581,7 +524,7 @@ void HandleIndexReq(AsyncWebServerRequest *request){
   else if (sName == PARAM_STATE2){
     if (sVal == PARAM_STATE2_VALUE){
       s = (g_bSsr2On ? "ON" : "OFF");
-      s += "," + SsrModeToString(g8_nvSsrMode2);
+      s += "," + SsrModeToString(g8_ssr2ModeFromWeb);
       s += "," + String(ComputeTimeToOnOrOffB()); // String(g_stats.AOnPrevCount+g_stats.AOnCounter)
       s += "," + PercentOnToString(g_stats.PrevDConB+g_stats.DConB, g_stats.HalfSecondCount+g_stats.HalfSecondCounter);
     }
@@ -600,7 +543,8 @@ void HandleIndexReq(AsyncWebServerRequest *request){
       s = "Interface is locked!";
 
     if (s != "")
-      s = "<script>alert('" + s + "'); location.href = '" + String(INDEX_FILENAME) + "';</script>";
+      s = "{\"a\":\"" + s + "\", \"l\":\"" + String(INDEX_FILENAME) + "\", \"o\":\"\"}";
+      //s = "<script>alert('" + s + "'); location.href = '" + String(INDEX_FILENAME) + "';</script>";
   }
   else{
     if (IsLockedAlertGetPlain(request, false))
@@ -620,7 +564,8 @@ void HandleIndexReq(AsyncWebServerRequest *request){
       }
       
       if (s != "")
-        s = "<script>alert('" + s + "'); location.href = '" + String(INDEX_FILENAME) + "';</script>";
+        s = "{\"a\":\"" + s + "\", \"l\":\"" + String(INDEX_FILENAME) + "\", \"o\":\"\"}";
+//        s = "<script>alert('" + s + "'); location.href = '" + String(INDEX_FILENAME) + "';</script>";
     }
     else{
       int iVal = B64C.hnDecNumOnly(sVal);
@@ -643,7 +588,7 @@ void HandleIndexReq(AsyncWebServerRequest *request){
   // 200 = OK
   // 204 = OK but No Content
   if (!s.isEmpty())
-    request->send(200, "text/html", B64C.hnEncode(s).c_str());
+    request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s));
   else if (iStatus == 1)
     request->send(204, "text/html", "");
 }
@@ -663,7 +608,7 @@ void HandleGetP2Req(AsyncWebServerRequest *request){
   if (p == NULL)
     return;
 
-  String sVal = B64C.hnDecode(p->value());
+  String sVal = B64C.hnShiftDecode(p->value());
 
   if (sVal.isEmpty())
     return;
@@ -727,7 +672,7 @@ void HandleGetP2Req(AsyncWebServerRequest *request){
   if (iStatus == 2)
     s = "Send failed, please retry...";
   if (s != "")
-    request->send(200, "text/html", B64C.hnEncode(s).c_str());
+    request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s).c_str());
   else if (iStatus == 1)
     request->send(204, "text/html", ""); // OK but no data
 
@@ -800,7 +745,7 @@ void HandleGetP1Req(AsyncWebServerRequest *request){
     return;
 
   if (request->hasParam(PARAM_BUTRST)){
-    if (g_bSoftAP && B64C.hnDecode(request->getParam(PARAM_BUTRST)->value()) == PARAM_BUTRST_VALUE){
+    if (g_bSoftAP && B64C.hnShiftDecode(request->getParam(PARAM_BUTRST)->value()) == PARAM_BUTRST_VALUE){
       QueueTask(TASK_WIFI_RESTORE);
       s = "<script>alert('SSID and password reset to previous values!');";
     }
@@ -811,9 +756,9 @@ void HandleGetP1Req(AsyncWebServerRequest *request){
     if (g_bSoftAP){
       String valN, valP;
       String sN = request->getParam(PARAM_WIFINAME)->value();
-      int errorCodeN = B64C.hnDecode(sN, valN);
+      int errorCodeN = B64C.hnShiftDecode(sN, valN);
       String sP = request->getParam(PARAM_WIFIPASS)->value();
-      int errorCodeP = B64C.hnDecode(sP, valP);
+      int errorCodeP = B64C.hnShiftDecode(sP, valP);
 
       //!!!!!!!!!!!!!!!!!!!!!!!!
       //prtln("sN: \"" + sN + "\"");
@@ -838,7 +783,7 @@ void HandleGetP1Req(AsyncWebServerRequest *request){
   // 200 = OK
   // 204 = OK but No Content
   if (s != "")
-    request->send(200, "text/html", B64C.hnEncode(s).c_str());
+    request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s).c_str());
   else if (iStatus == 1)
     request->send(204, "text/html", "");
 }
@@ -890,7 +835,7 @@ void HandleP2FormReq(AsyncWebServerRequest *request){
     }
 
     String sName = p->name();
-    String sVal = B64C.hnDecode(p->value());
+    String sVal = B64C.hnShiftDecode(p->value());
 
     //prtln("hnDecode: " + sName + ":" + sVal);
 
@@ -1008,7 +953,7 @@ void HandleP2FormReq(AsyncWebServerRequest *request){
   // 200 = OK
   // 204 = OK but No Content
   if (s != "")
-    request->send(200, "text/html", B64C.hnEncode(s).c_str());
+    request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s).c_str());
   else if (iStatus == 1)
     request->send(204, "text/html", ""); // OK but no data
 }
@@ -1030,7 +975,7 @@ void HandlePostP2Req(AsyncWebServerRequest *request){
 //      prtln("WARNING: is multipart!");
 
   if (request->hasParam(PARAM_FILEDATA, true)){
-    String sIn = B64C.hnDecode(request->getParam(PARAM_FILEDATA, true)->value());
+    String sIn = B64C.hnShiftDecode(request->getParam(PARAM_FILEDATA, true)->value());
 
     //prtln("fileData=" + sIn);
 
@@ -1071,7 +1016,7 @@ void HandlePostP2Req(AsyncWebServerRequest *request){
   }
 
   if (s != "")
-    request->send(200, "text/html", B64C.hnEncode(s).c_str());
+    request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s).c_str());
 }
 
 // Replaces placeholder %VAR% values in HTML being served from here

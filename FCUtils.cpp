@@ -125,7 +125,7 @@ void IpToArray(uint16_t ipLastOctet){
 }
 
 void ReadPot1(){
-  g16_pot1Value = analogRead(GPIO36_POT_1);
+  g16_pot1Value = analogRead(GPAIN_POT1);
   int deltaPotValue = g16_pot1Value - g16_oldpot1Value;
   if (deltaPotValue < 0)
     deltaPotValue = -deltaPotValue;
@@ -140,12 +140,12 @@ void ReadPot1(){
 
     float percent = (float)g16_pot1Value*100.0/4095.0;
 
-    if (g8_modeSwState == 0){
+    if (g8_potModeFromSwitch == 0){
       // period range: 0 - 100% (of perMax)
       QueueTask(TASK_PARMS, SUBTASK_PERVAL, (int)percent);
 //prtln("DEBUG: ReadPot1(): perval changed!: " + String((int)percent));
     }
-    else if (g8_modeSwState == 1){
+    else if (g8_potModeFromSwitch == 1){
       // phase range: 0 - 100%
       QueueTask(TASK_PARMS, SUBTASK_PHASE, (int)percent);
 //prtln("DEBUG: ReadPot1(): phase changed!: " + String((int)percent));
@@ -157,79 +157,175 @@ void ReadPot1(){
 
 void ReadWiFiSwitch(){
 #if FORCE_AP_ON
-  g8_wifiSwState = WIFI_SW_MODE_AP;
+  g8_wifiModeFromSwitch = WIFI_SW_MODE_AP;
 #elif FORCE_STA_ON
-  g8_wifiSwState = WIFI_SW_MODE_STA;
+  g8_wifiModeFromSwitch = WIFI_SW_MODE_STA;
 #else
-  uint8_t sw1Value = digitalRead(GPIO18_WIFI_AP);
-  uint8_t sw2Value = digitalRead(GPIO19_WIFI_STA);
-  if (sw1Value != g8_oldSw1Value || sw2Value != g8_oldSw2Value){
-    if (sw1Value > 0){
-      g8_wifiSwState = WIFI_SW_MODE_AP;
+  bool apSwOn = digitalRead(GPIN_WIFI_AP_SW);
+  bool staSwOn = digitalRead(GPIN_WIFI_STA_SW);
+  if (apSwOn != g_bOldWiFiApSwOn || staSwOn != g_bOldWiFiStaSwOn){
+    if (apSwOn){
+      g8_wifiModeFromSwitch = WIFI_SW_MODE_AP;
       prtln("WiFi Mode Switch: AP");
     }
-    else if (sw2Value > 0){
-      g8_wifiSwState = WIFI_SW_MODE_STA;
+    else if (staSwOn){
+      g8_wifiModeFromSwitch = WIFI_SW_MODE_STA;
       prtln("WiFi Mode Switch: STA");
     }
     else{
-      g8_wifiSwState = WIFI_SW_MODE_OFF;
+      g8_wifiModeFromSwitch = WIFI_SW_MODE_OFF;
       prtln("WiFi Mode Switch: OFF");
     }
 
-    g8_oldSw1Value = sw1Value;
-    g8_oldSw2Value = sw2Value;
+    g_bOldWiFiStaSwOn = staSwOn;
+    g_bOldWiFiApSwOn = apSwOn;
   }
 #endif
 }
 
-void ReadModeSwitch(){
-  bool bModeSwOn = (digitalRead(GPIO34_POT_MODE) == HIGH) ? true : false;
+void ReadSpdtSwitches(){
+#if ESP32_S3
+  bool sw1On = digitalRead(GPIN_POT_MODE_SW1);
+  bool sw2On = digitalRead(GPIN_POT_MODE_SW2);
+  if (sw1On != g_bOldPotModeSw1On || sw2On != g_bOldPotModeSw2On){
+    if (sw1On){
+      g8_potModeFromSwitch = 1;
+      prtln("Pot Mode Switch: 1");
+    }
+    else if (sw2On){
+      g8_potModeFromSwitch = 2;
+      prtln("Pot Mode Switch: 2");
+    }
+    else{
+      g8_potModeFromSwitch = 0;
+      prtln("Pot Mode Switch: OFF");
+    }
 
-  if (bModeSwOn != g_bOldModeSwOn){
-    if (bModeSwOn){
-      g8_modeSwState = 1;
+    g_bOldPotModeSw1On = sw1On;
+    g_bOldPotModeSw2On = sw2On;
+  }
+
+  bool swManOn = digitalRead(GPIN_SSR1_MODE_SW_MAN);
+  bool swAutOn = digitalRead(GPIN_SSR1_MODE_SW_AUT);
+  if (swManOn != g_bOldSsr1ModeManSwOn || swAutOn != g_bOldSsr1ModeAutSwOn){
+    if (swManOn){
+      g8_ssr1ModeFromSwitch = SSR_MODE_ON;
+      prtln("SSR1 Mode Switch: ON");
+    }
+    else if (swAutOn){
+      g8_ssr1ModeFromSwitch = SSR_MODE_AUTO;
+      prtln("SSR1 Mode Switch: AUTO");
+    }
+    else{
+      g8_ssr1ModeFromSwitch = SSR_MODE_OFF;
+      prtln("SSR1 Mode Switch: OFF");
+    }
+
+    g_bOldSsr1ModeManSwOn = swManOn;
+    g_bOldSsr1ModeAutSwOn = swAutOn;
+    SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
+  }
+
+  swManOn = digitalRead(GPIN_SSR2_MODE_SW_MAN);
+  swAutOn = digitalRead(GPIN_SSR2_MODE_SW_AUT);
+  if (swManOn != g_bOldSsr2ModeManSwOn || swAutOn != g_bOldSsr2ModeAutSwOn){
+    if (swManOn){
+      g8_ssr2ModeFromSwitch = SSR_MODE_ON;
+      prtln("SSR2 Mode Switch: ON");
+    }
+    else if (swAutOn){
+      g8_ssr2ModeFromSwitch = SSR_MODE_AUTO;
+      prtln("SSR2 Mode Switch: AUTO");
+    }
+    else{
+      g8_ssr2ModeFromSwitch = SSR_MODE_OFF;
+      prtln("SSR2 Mode Switch: OFF");
+    }
+
+    g_bOldSsr2ModeManSwOn = swManOn;
+    g_bOldSsr2ModeAutSwOn = swAutOn;
+    SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
+  }
+
+#else  
+  bool bPotModeSwOn = (digitalRead(GPIN_POT_MODE_SW) == HIGH) ? true : false;
+
+  if (bPotModeSwOn != g_bOldPotModeSwOn){
+    if (bPotModeSwOn){
+      g8_potModeFromSwitch = 1;
       prtln("Potentiometer Mode Switch: ON");
     } else {
-      g8_modeSwState = 0;
+      g8_potModeFromSwitch = 0;
       prtln("Potentiometer Mode Switch: OFF");
     }
-    g_bOldModeSwOn = bModeSwOn;
+    g_bOldPotModeSwOn = bPotModeSwOn;
   }
+#endif  
 }
 
-// Usage: SetSSRMode(GPIO23_SSR_2, SSR_MODE_ON) sets g_bSsr2On true 
-//        SetSSRMode(GPIO23_SSR_2, SSR_MODE_AUTO) sets g_bSsr2On false 
-//        SetSSRMode(GPIO23_SSR_2, SSR_MODE_OFF) sets g_bSsr2On false 
-void SetSSRMode(uint8_t val, uint8_t ssrMode){
+// Usage: SetSSRMode(GPOUT_SSR2, SSR_MODE_ON) sets g_bSsr2On true 
+//        SetSSRMode(GPOUT_SSR2, SSR_MODE_AUTO) sets g_bSsr2On false 
+//        SetSSRMode(GPOUT_SSR2, SSR_MODE_OFF) sets g_bSsr2On false 
+void SetSSRMode(uint8_t gpout, uint8_t ssrMode){
   if (ssrMode == SSR_MODE_ON)
-    SetSSR(val, true);
+    SetSSR(gpout, true);
   else
-    SetSSR(val, false);
+    SetSSR(gpout, false);
 }
 
 // sets global g_bSsr1On to bSsrOn's value if val is GPIO32_SSR_1
 // sets global g_bSsr2On to bSsrOn's value if val is GPIO23_SSR_2
-void SetSSR(uint8_t val, bool bSsrOn){
-  if (bSsrOn){
-    if (digitalRead(val) == LOW){
-      digitalWrite(val, HIGH);
-      if (val == GPIO32_SSR_1)
-        g_stats.AOnCounter++;
-      else if (val == GPIO23_SSR_2)
-        g_stats.BOnCounter++;
-    }
-    if (val == GPIO32_SSR_1)
-      g_bSsr1On = true;
-    else if (val == GPIO23_SSR_2)
-      g_bSsr2On = true;
+void SetSSR(uint8_t gpout, bool bSetSsrOn){
+  bool bIsOn = (digitalRead(gpout) == HIGH) ? true : false;
+
+#if ESP32_S3
+  // for S3 board, manual SPDT switch mode overrides all else...
+  if (gpout == GPOUT_SSR1){
+    if (bIsOn && g8_ssr1ModeFromSwitch == SSR_MODE_OFF)
+      bSetSsrOn = false;
+    else if (!bIsOn && g8_ssr1ModeFromSwitch == SSR_MODE_ON)
+      bSetSsrOn = true;
   }
-  else{ // OFF or AUTO
-    digitalWrite(val, LOW);
-    if (val == GPIO32_SSR_1)
+  else if (gpout == GPOUT_SSR2){
+    if (bIsOn && g8_ssr2ModeFromSwitch == SSR_MODE_OFF)
+      bSetSsrOn = false;
+    else if (!bIsOn && g8_ssr2ModeFromSwitch == SSR_MODE_ON)
+      bSetSsrOn = true;
+  }
+#endif  
+
+  if (bSetSsrOn){
+    if (!bIsOn)
+      digitalWrite(gpout, HIGH);
+    if (gpout == GPOUT_SSR1){
+      g_bSsr1On = true;
+      g_stats.AOnCounter++;
+#if ESP32_S3
+      digitalWrite(GPOUT_SSR1_LED, HIGH);
+#endif
+    }
+    else if (gpout == GPOUT_SSR2){
+      g_bSsr2On = true;
+      g_stats.BOnCounter++;
+#if ESP32_S3
+      digitalWrite(GPOUT_SSR2_LED, HIGH);
+#endif
+    }
+  }
+  else if (bIsOn){ // Set to OFF or AUTO
+    digitalWrite(gpout, LOW);
+    if (gpout == GPOUT_SSR1){
       g_bSsr1On = false;
-    else if (val == GPIO23_SSR_2)
+#if ESP32_S3
+      digitalWrite(GPOUT_SSR1_LED, LOW);
+#endif
+    }
+    else if (gpout == GPOUT_SSR2){
       g_bSsr2On = false;
+#if ESP32_S3
+      digitalWrite(GPOUT_SSR2_LED, LOW);
+#endif
+    }
   }
 }
 
@@ -429,9 +525,9 @@ void PrintPreferences(){
   prtln("phase: " + String(g_perVals.phase) + "%");
   prt(SyncFlagStatus());
   prt("SSR1 Mode: ");
-  PrintSsrMode(g8_nvSsrMode1);
+  PrintSsrMode(g8_ssr1ModeFromWeb);
   prt("SSR2 Mode: ");
-  PrintSsrMode(g8_nvSsrMode2);
+  PrintSsrMode(g8_ssr2ModeFromWeb);
   PrintMidiChan();
   prt("A: ");
   PrintMidiNote(g8_midiNoteA);
@@ -774,7 +870,7 @@ void prt(String s){
 // Channel 1 (A) switches off when g32_dutyCycleTimerA decrements to 0.
 // It switches on when g32_periodTimer decrements to 0
 int ComputeTimeToOnOrOffA(){
-  if (g8_nvSsrMode1 != SSR_MODE_AUTO)
+  if (g8_ssr1ModeFromWeb != SSR_MODE_AUTO)
     return -1;
   if (g_bSsr1On)
     return g32_dutyCycleTimerA;
@@ -785,7 +881,7 @@ int ComputeTimeToOnOrOffA(){
 // It switches on when g32_phaseTimer decrements to 0 if g32_phaseTimer is running, or
 // at g32_nextPhase + g32_periodTimer if it's not...
 int ComputeTimeToOnOrOffB(){
-  if (g8_nvSsrMode2 != SSR_MODE_AUTO)
+  if (g8_ssr2ModeFromWeb != SSR_MODE_AUTO)
     return -1;
   if (g_bSsr2On)
     return g32_dutyCycleTimerB;
@@ -815,7 +911,7 @@ bool IsLockedAlertGetPlain(AsyncWebServerRequest *request, bool bAllowInAP){
     return false;
 
   if (IsLocked()){
-    request->send(200, "text/html", "System is locked!");
+    request->send(HTTPCODE_OK, "text/html", "System is locked!");
     return true;
   }
   return false;
@@ -831,7 +927,7 @@ bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bA
     if (sReloadUrl != "")
       s += "location.href='" + String(sReloadUrl) + "';";
     s += "</script>";
-    request->send(200, "text/html", s);
+    request->send(HTTPCODE_OK, "text/html", s);
     return true;
   }
   return false;
@@ -842,7 +938,7 @@ bool IsLockedAlertPost(AsyncWebServerRequest *request, bool bAllowInAP){
     return false;
 
   if (IsLocked()){
-    request->send(200, "text/html", "System is locked!");
+    request->send(HTTPCODE_OK, "text/html", "System is locked!");
     return true;
   }
   return false;
@@ -884,7 +980,12 @@ void FlashSequencerInit(uint8_t postFlashMode){
   g8_ledSaveMode = postFlashMode; // save post-flash mode...
   g8_ledMode = g8_ledMode_PAUSED;
   g8_ledSeqState = LEDSEQ_PAUSED;
-  digitalWrite(GPIO2_ONBOARD_LED, LOW);
+#if ESP32_S3
+  neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off
+#else
+  digitalWrite(GPOUT_ONBOARD_LED, LOW);
+#endif
+  g_bLedOn = false;
 }
 
 void FlashSequencer(){
@@ -916,23 +1017,46 @@ void FlashLED(){
   if (g8_ledMode == g8_ledMode_PAUSED)
     g8_ledFlashCounter++; // count 1/4 sec pause interval
   else if (g8_ledMode == g8_ledMode_OFF){
-    if (digitalRead(GPIO2_ONBOARD_LED) == HIGH)
-      digitalWrite(GPIO2_ONBOARD_LED, LOW);
+    if (!g_bLedOn){
+#if ESP32_S3
+        neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off
+#else
+        digitalWrite(GPOUT_ONBOARD_LED, LOW);
+#endif
+      g_bLedOn = true;
+    }
     if (g8_ledFlashTimer)
       g8_ledFlashTimer = 0;
   }
   else if (g8_ledMode == g8_ledMode_ON){
-    if (digitalRead(GPIO2_ONBOARD_LED) == LOW)
-      digitalWrite(GPIO2_ONBOARD_LED, HIGH);
+    if (!g_bLedOn){
+#if ESP32_S3
+      neopixelWrite(RGB_BUILTIN, 0, LED_GREEN, 0);  // On
+#else
+      digitalWrite(GPOUT_ONBOARD_LED, HIGH);
+#endif
+      g_bLedOn = true;
+    }
     if (g8_ledFlashTimer)
       g8_ledFlashTimer = 0;
   }
   else if (g8_ledFlashTimer){
     if (--g8_ledFlashTimer == 0){
-      if (digitalRead(GPIO2_ONBOARD_LED) == LOW)
-        digitalWrite(GPIO2_ONBOARD_LED, HIGH);
+      if (!g_bLedOn){
+#if ESP32_S3
+        neopixelWrite(RGB_BUILTIN, 0, LED_GREEN, 0);  // On
+#else
+        digitalWrite(GPOUT_ONBOARD_LED, HIGH);
+#endif
+        g_bLedOn = true;
+      }
       else{
-        digitalWrite(GPIO2_ONBOARD_LED, LOW);
+#if ESP32_S3
+        neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off
+#else
+        digitalWrite(GPOUT_ONBOARD_LED, LOW);
+#endif
+        g_bLedOn = false;
         g8_ledFlashCounter++;
       }
       
@@ -1045,7 +1169,7 @@ String MyEncodeStr(String s, int table, int token, int context){
     s = B64C.hnEncodeStr(s, table, token);
   }
   else
-    s = B64C.hnEncode(s, table, token);
+    s = B64C.hnShiftEncode(s, table, token);
   return s;
 }
 
@@ -1062,7 +1186,7 @@ String MyDecodeStr(String s, int table, int token, int context){
     s = SubtractTwoDigitBase16Checksum(s);
   }
   else
-    s = B64C.hnDecode(s, table, token);
+    s = B64C.hnShiftDecode(s, table, token);
   return s;
 }
 
@@ -1156,34 +1280,46 @@ String SubtractTwoDigitBase16Checksum(String sIn){
   return sIn;
 }
 
+// 32 chars in DROM sector
+// set using PROJECT_VER
+String GetEmbeddedVersionString(){
+  const esp_app_desc_t *app_desc = esp_app_get_description();
+  // char version[32], char date[16]
+  if (app_desc == NULL)
+    return "";
+  return String(app_desc->version, 32);
+}
+
 // Pertains to the FanController.h conditional-compile boolean switches:
 // READ_WRITE_CUSTOM_BLK3_MAC, FORCE_NEW_EFUSE_BITS_ON, WRITE_PROTECT_BLK3
 void InitMAC(){
   // It appears that we can write to BLK3 using esp_efuse_write_field_blob() and it will
   // persist through power-cycling and resets. But if you reflash the program it is erased.
   // To PERMANENTLY write it, set BURN_EFUSE_ENABLED true
-  #if READ_WRITE_CUSTOM_BLK3_MAC
-
-  uint8_t ver;
-  if (esp_efuse_read_field_blob(ESP_EFUSE_MAC_CUSTOM_VER, &ver, 8) == ESP_OK)
-  {
-    #if !FORCE_NEW_EFUSE_BITS_ON
-    if (ver == 0)
-    {
-    #endif
-      ver = BLK3_VER;
-      if (esp_efuse_write_field_blob(ESP_EFUSE_MAC_CUSTOM_VER, &ver, 8) == ESP_OK)
-        prtln("wrote custom version to efuse: " + String(ver));
-      else
-        prtln("error trying to write custom version: " + String(ver));
-    #if !FORCE_NEW_EFUSE_BITS_ON
-    }
-    else
-      prtln("custom version read as:" + String(ver));
-    #endif
-  }
-  else
-    prtln("error trying to read custom efuse version...");
+  // aplication version is stored in esp_app_desc_t in DROM
+  // set PROJECT_VER in CMakeLists.txt... insert "set(PROJECT_VER, "0.1.0.1") before "project.cmake"
+  // (or put version string in versions.txt in project root)
+  // app can access the project version with esp_ota_get_app_description()
+  // esp_efuse_mac_get_default() read factory-programmed MAC
+  // esp_efuse_mac_get_custom() read from EFUSE_BLK3_RDATA0 to EFUSE_BLK3_RDATA5
+  //  returns ESP_OK, ESP_ERR_INVALID_VERSION, ESP_ERR_INVALID_CRC
+  //  returns: Version 1 byte
+  //           Reserved 16 bytes (128 bits)
+  //           Mac Addr 6 bytes (48 bits)
+  //           Mac CRC 1 byte
+  // esp_err_t esp_base_mac_addr_set/get(const uint8_t *pMac) sets a new base mac (call early in app_main)
+  // returns ESP_OK or ESP_ERR_INVALID_ARG, pMac points to 6-byte array
+  // esp_read_mac() get base_mac returns factory mac in BLK0
+  // esp_wifi_get_mac()
+  // esp_efuse_mac_get_default()
+  // esp_read_mac(uint8_t *pMac, esp_mac_type_t type) returns 6 bytes, type code 0=wifi,1=softap,2=bluetooth,3=ethernet
+  // Wi-Fi Station base_mac
+  // Wi-Fi SoftAP base_mac + 1 to the last octet
+  // Bluetooth base_mac + 1 to the last octet
+  // Ethernet base_mac + 1 to the last octet
+  // NOTE: MAC must be "unicast". lsb of first byte must be 0)
+  // set the "locally administered" bit 1 of first byte)(0x02)
+  // esp_derive_local_mac(uint8_t *localmac, uint8_t *universalmac); returns ESP_OK if success
 
   // One-time burn MAC address
   // uint8_t mac[6]; // = {0xe6, 0xcd, 0x43, 0xa3, 0x6e, 0xb5};
@@ -1198,20 +1334,18 @@ void InitMAC(){
   //int numBits = esp_efuse_get_field_size(ESP_EFUSE_MAC_CUSTOM);
   //prtln("bits in custom MAC field = " + String(numBits)); // 48 bits
   //int numBytes = numBits/8;
+#if READ_WRITE_CUSTOM_BLK3_MAC
   uint8_t mac[6] = {0};
-  if (esp_efuse_read_field_blob(ESP_EFUSE_MAC_CUSTOM, mac, 48) == ESP_OK)
-  {
+  if (esp_efuse_read_field_blob(ESP_EFUSE_MAC_CUSTOM, mac, 48) == ESP_OK){
     bool bIsEmpty = true;
-    for (int ii=0; ii < 6; ii++)
-    {
+    for (int ii=0; ii < 6; ii++){
       prtln("MAC[" + String(ii) + "] = " + String(mac[ii]));
       if (bIsEmpty && mac[ii] != 0)
         bIsEmpty = false;
     }
-    #if !FORCE_NEW_EFUSE_BITS_ON
-    if (bIsEmpty)
-    {
-    #endif
+  #if !FORCE_NEW_EFUSE_BITS_ON
+    if (bIsEmpty){
+  #endif
       mac[0] = BLK3_MAC0;
       mac[1] = BLK3_MAC1;
       mac[2] = BLK3_MAC2;
@@ -1223,11 +1357,11 @@ void InitMAC(){
         prtln("wrote new efuse MAC to BLK3 registers!");
       else
         prtln("error writing new efuse MAC into BLK3...");
-    #if !FORCE_NEW_EFUSE_BITS_ON
+  #if !FORCE_NEW_EFUSE_BITS_ON
     }
     else
       prtln("successfully read custom base MAC address from BLK3 efuse...");
-    #endif
+  #endif
 
     prtln("setting custom base MAC address from BLK3 efuse...");
     esp_base_mac_addr_set(mac); // set all MAC addresses to BLK3 Mac
@@ -1240,16 +1374,16 @@ void InitMAC(){
   else
     prtln("error reading default base MAC address...");
 
-  #endif // end #if READ_WRITE_CUSTOM_BLK3_MAC
+#endif // end #if READ_WRITE_CUSTOM_BLK3_MAC
 
-  #if WRITE_PROTECT_BLK3
+#if WRITE_PROTECT_BLK3
 
     if (esp_efuse_set_write_protect(EFUSE_BLK3) == ESP_OK)
       prtln("BLK3 efuse write-protect set!");
     else
       prtln("BLK3 efuse already write-protected!");
 
-  #endif
+#endif
 }
 
 // call every .5 second to update stats
@@ -1272,21 +1406,21 @@ void TaskStatisticsMonitor(){
 }
 
 void TaskProcessPulseOffFeatureTiming(){
-  if (g8_nvSsrMode1 == SSR_MODE_AUTO && g8_pulseModeA != PULSE_MODE_OFF){
+  if (g8_ssr1ModeFromWeb == SSR_MODE_AUTO && g8_pulseModeA != PULSE_MODE_OFF){
     if (g16_pulsePeriodTimerA == 0){
       if (g8_pulseModeA == PULSE_MODE_OFF_IF_ON){
         if (g32_dutyCycleTimerA)
-          SetSSR(GPIO32_SSR_1, false); // turn off A
+          SetSSR(GPOUT_SSR1, false); // turn off A
       }
       else if (g8_pulseModeA == PULSE_MODE_ON_IF_OFF){
         if (!g32_dutyCycleTimerA)
-          SetSSR(GPIO32_SSR_1, true); // turn on A
+          SetSSR(GPOUT_SSR1, true); // turn on A
       }
       else if (g8_pulseModeA == PULSE_MODE_ON_OR_OFF){
         if (g32_dutyCycleTimerA)
-          SetSSR(GPIO32_SSR_1, false); // turn off A
+          SetSSR(GPOUT_SSR1, false); // turn off A
         else
-          SetSSR(GPIO32_SSR_1, true); // turn on A
+          SetSSR(GPOUT_SSR1, true); // turn on A
       }
       g16_pulsePeriodTimerA = g16_pulsePeriodA;
       g8_pulseWidthTimerA = g8_pulseWidthA;
@@ -1297,38 +1431,38 @@ void TaskProcessPulseOffFeatureTiming(){
     if (g8_pulseWidthTimerA == 0){
       if (g8_pulseModeA == PULSE_MODE_OFF_IF_ON){
         if (g32_dutyCycleTimerA)
-          SetSSR(GPIO32_SSR_1, true); // turn on A
+          SetSSR(GPOUT_SSR1, true); // turn on A
       }
       else if (g8_pulseModeA == PULSE_MODE_ON_IF_OFF){
         if (!g32_dutyCycleTimerA)
-          SetSSR(GPIO32_SSR_1, false); // turn off A
+          SetSSR(GPOUT_SSR1, false); // turn off A
       }
       else if (g8_pulseModeA == PULSE_MODE_ON_OR_OFF){
         if (g32_dutyCycleTimerA)
-          SetSSR(GPIO32_SSR_1, true); // turn on A
+          SetSSR(GPOUT_SSR1, true); // turn on A
         else
-          SetSSR(GPIO32_SSR_1, false); // turn off A
+          SetSSR(GPOUT_SSR1, false); // turn off A
       }
     }
     else
       g8_pulseWidthTimerA--;
   }
   
-  if (g8_nvSsrMode2 == SSR_MODE_AUTO && g8_pulseModeB != PULSE_MODE_OFF){
+  if (g8_ssr2ModeFromWeb == SSR_MODE_AUTO && g8_pulseModeB != PULSE_MODE_OFF){
     if (g16_pulsePeriodTimerB == 0){
       if (g8_pulseModeB == PULSE_MODE_OFF_IF_ON){
         if (g32_dutyCycleTimerB)
-          SetSSR(GPIO23_SSR_2, false); // turn off B
+          SetSSR(GPOUT_SSR2, false); // turn off B
       }
       else if (g8_pulseModeB == PULSE_MODE_ON_IF_OFF){
         if (!g32_dutyCycleTimerB)
-          SetSSR(GPIO23_SSR_2, true); // turn on B
+          SetSSR(GPOUT_SSR2, true); // turn on B
       }
       else if (g8_pulseModeB == PULSE_MODE_ON_OR_OFF){
         if (g32_dutyCycleTimerB)
-          SetSSR(GPIO23_SSR_2, false); // turn off B
+          SetSSR(GPOUT_SSR2, false); // turn off B
         else
-          SetSSR(GPIO23_SSR_2, true); // turn on B
+          SetSSR(GPOUT_SSR2, true); // turn on B
       }
       g16_pulsePeriodTimerB = g16_pulsePeriodB;
       g8_pulseWidthTimerB = g8_pulseWidthB;
@@ -1339,17 +1473,17 @@ void TaskProcessPulseOffFeatureTiming(){
     if (g8_pulseWidthTimerB == 0){
       if (g8_pulseModeB == PULSE_MODE_OFF_IF_ON){
         if (g32_dutyCycleTimerB)
-          SetSSR(GPIO23_SSR_2, true); // turn on B
+          SetSSR(GPOUT_SSR2, true); // turn on B
       }
       else if (g8_pulseModeB == PULSE_MODE_ON_IF_OFF){
         if (!g32_dutyCycleTimerB)
-          SetSSR(GPIO23_SSR_2, false); // turn off B
+          SetSSR(GPOUT_SSR2, false); // turn off B
       }
       else if (g8_pulseModeB == PULSE_MODE_ON_OR_OFF){
         if (g32_dutyCycleTimerB)
-          SetSSR(GPIO23_SSR_2, true); // turn on B
+          SetSSR(GPOUT_SSR2, true); // turn on B
         else
-          SetSSR(GPIO23_SSR_2, false); // turn off B
+          SetSSR(GPOUT_SSR2, false); // turn off B
       }
     }
     else

@@ -28,9 +28,9 @@ void RunTasks(){
     
     case TASK_PARMS:
       if (i1 == SUBTASK_RELAY_A)
-        PC.PutPrefByte(EE_RELAY_A, g8_nvSsrMode1);
+        PC.PutPrefByte(EE_RELAY_A, g8_ssr1ModeFromWeb);
       else if (i1 == SUBTASK_RELAY_B)
-        PC.PutPrefByte(EE_RELAY_B, g8_nvSsrMode2);
+        PC.PutPrefByte(EE_RELAY_B, g8_ssr2ModeFromWeb);
       else{
         SubtaskProcessParams(i1, i2);
         LimitPeriod(); // force end of cycle if it's over 10 sec!
@@ -316,14 +316,14 @@ void TaskMainTimingCycle(){
   // check duty-cycle before period and set any pending "off" event
   // if duty-cycle is 100 we stay on all the time
   if (g32_dutyCycleTimerA && --g32_dutyCycleTimerA == 0)
-    if (g8_nvSsrMode1 == SSR_MODE_AUTO && g_perVals.dutyCycleA != 100)
-      SetSSR(GPIO32_SSR_1, false);
+    if (g8_ssr1ModeFromWeb == SSR_MODE_AUTO && g_perVals.dutyCycleA != 100)
+      SetSSR(GPOUT_SSR1, false);
 
   // check duty-cycle before period and set any pending "off" event
   // if duty-cycle is 100 we stay on all the time
   if (g32_dutyCycleTimerB && --g32_dutyCycleTimerB == 0)
-    if (g8_nvSsrMode2 == SSR_MODE_AUTO && g_perVals.dutyCycleB != 100)
-      SetSSR(GPIO23_SSR_2, false);
+    if (g8_ssr2ModeFromWeb == SSR_MODE_AUTO && g_perVals.dutyCycleB != 100)
+      SetSSR(GPOUT_SSR2, false);
 
   if (g32_periodTimer && --g32_periodTimer == 0){
     // do this before setting duty-cycle and phase timers!
@@ -369,7 +369,15 @@ void TaskHttpCallback(int& iSpare, int& httpCode, String& sRsp, String& sMac, St
     prtln("TASK_HTTPCALLBACK: custom response header IP not in mDNS table: " + sTxIp);
     return;
   }
+
+  // clear bCanRxInProgress
+  if (IML.GetCanRxInProgFlag(ipIdx)){
+    IML.SetCanRxInProgFlag(ipIdx, false);
+    prtln("TASK_HTTPCALLBACK: cleared bCanRxInProgress for IP: " + sTxIp);
+  }
+
   prtln("TASK_HTTPCALLBACK: custom response header IP: " + sTxIp);
+
   if (!IML.GetLinkOkFlag(ipIdx)){
     prtln("TASK_HTTPCALLBACK: LINK NOT OK BUT GETTING (FAKED?) response from : " + sTxIp);
     return;
@@ -439,10 +447,10 @@ void SubHttpCB_CanRxOk(int& ipIdx, int& httpCode, String& sRsp, String& sTxIp){
       iTokLow -= 1; // subtract 1 since we send as (1-8) << 4 to avoid 0
       int iTokHigh = IML.GetSaveToken(ipIdx);
       if (iTokHigh >= 1 && iTokHigh <= 8){
-        int txToken = (iTokHigh<<3) + (iTokLow-1); // subtract 1 since we send as (1-8) << 4 to avoid 0
+        int txToken = ((iTokHigh-1)<<3) + iTokLow; // subtract 1 since we send as (1-8) << 4 to avoid 0
         IML.SetTxToken(ipIdx, txToken);
         IML.SetTxNextToken(ipIdx, NO_TOKEN);
-        prtln("DEBUG: TaskHttpCallback() HTTPCODE_CANRX_OK: got low 3-bits, setting txToken to: " + txToken);
+        prtln("DEBUG: TaskHttpCallback() HTTPCODE_CANRX_OK: got low 3-bits, setting txToken to: " + String(txToken));
       }
       else
         prtln("DEBUG: TaskHttpCallback() HTTPCODE_CANRX_OK: iTokHigh 3bits out of range!" + String(iTokHigh));
@@ -559,6 +567,7 @@ void SubHttpCB_DecFLDecPrevFLParamFLTxtFlCanRxFLNoTokenFL(int& ipIdx, int& httpC
       IML.SetTxToken(ipIdx, txPrevToken);
       IML.SetTxPrevToken(ipIdx, NO_TOKEN);
       prtln("TASK_HTTPCALLBACK: set txToken = txPrevToken: " + String(txPrevToken));
+      prtln("TASK_HTTPCALLBACK: set txPrevToken = NO_TOKEN");
     }else{
       IML.SetTxToken(ipIdx, NO_TOKEN);
       IML.SetTxNextToken(ipIdx, NO_TOKEN);

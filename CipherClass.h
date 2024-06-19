@@ -12,10 +12,10 @@
 
 // NOTE: be sure to put the backslash escape before the " or \ char!
 // NOTE:  only all lower-case works reliably!
-#define HTTP_CIPKEY_INIT "M*u%p/?v/CQ=\"J<H)aco4V7gxtSSFT5," // 32 chars for 256-bit AES encryption
+#define HTTP_CIPKEY_INIT "J<cM7gxtS*u%p/?v/CH)aQ=\"o4VSFT5," // 32 chars for 256-bit AES encryption
 
 // initialization vector
-#define CIPH_INIT_VECT ".$b1=EO8>*O49Y!>"
+#define CIPH_INIT_VECT "=E.*O48>9Y!$b1O>"
 
 #define CIPKEY_MAX 32 // need 16 bytes for 128-bit and 32 bytes for 256-bit encryption
 #define CIPKEY_BITS_LENGTH (CIPKEY_MAX*8)
@@ -57,7 +57,7 @@ public:
 
 private:
 
-  uint8_t* cyphBufFromString(String sIn, int &dataLen);
+  uint8_t* cyphBufFromString(String sIn);
   void generateInitializationVector();
   String encryptDecryptString(String sIn, bool bDecrypt, int token, int context);
   int encryptDecryptBuf(uint8_t * bufInOut, int iLength, bool bDecrypt, int token, int context);

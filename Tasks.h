@@ -6,7 +6,7 @@
 #include <esp_wifi_types.h>
 #include <ESPmDNS.h>
 
-#define MAX_TASKS 20 // need enough to change all timing parameters at once for remote HTTP_PARAM_COMMAND
+#define MAX_TASKS 20 // need enough to change all timing parameters at once for remote HTTP_ASYNCREQ_PARAM_COMMAND
 
 #define TASK_PARMS        0 // this task has sub-tasks (below)
 #define TASK_HOSTNAME     1

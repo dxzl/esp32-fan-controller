@@ -7,13 +7,13 @@
 #define MAX_HEADER_LENGTH 200
 #define MINUTES_AFTER_DEF_TOKEN_FAIL_TO_INITIATE_RESET 2 // 0 is OFF
 
-#define CANRX_TOKEN_SHIFT 4 // 1-5
-#define HTTP_SERVER_IP_HEADER_NAME         "SmOw" // receiving unit's IP added to response via custom header 
-#define HTTP_CLIENT_MAC_HEADER_NAME        "EgLg" // last two octets of MAC address added to client-send via custom header
-#define HTTP_SERVER_MAC_HEADER_NAME        "jeUc" // last two octets of MAC address added to response via custom header
+#define CANRX_TOKEN_SHIFT 2 // 1-5
+#define HTTP_SERVER_IP_HEADER_NAME         "NmrU" // receiving unit's IP added to response via custom header 
+#define HTTP_CLIENT_MAC_HEADER_NAME        "LdWo" // last two octets of MAC address added to client-send via custom header
+#define HTTP_SERVER_MAC_HEADER_NAME        "KrXC" // last two octets of MAC address added to response via custom header
 
 // HTTP commands sent in the HTTP_CANRX_PARAM_COMMAND field
-#define HTTP_COMMAND_CANRX                 "Ofew"
+#define HTTP_COMMAND_CANRX                 "Ndhb"
 
 // OK - all of the below is out the window (it's implimented in version 2.37 but never tested)... new way...
 // We send "Can Rx?" query. Receiver either can or can't decode it. We add
@@ -44,38 +44,34 @@
 
 // range 200-255
 #define HTTPCODE_OK           200      // standard HTTP success code, don't change!
-#define HTTPRESP_OK           "OK"     // (used in OTA programming!)
+#define HTTPRESP_OK           "OK"     // (used in OTA programming [so don't change!])
 #define HTTPCODE_PARAM_OK     211
-#define HTTPRESP_PARAM_OK     "ZqTi"
+#define HTTPRESP_PARAM_OK     "dhne"
 #define HTTPCODE_TOK_OK       222
-#define HTTPRESP_TOK_OK       "rHYY"
-//#define HTTPCODE_TXT_OK       233
-//#define HTTPRESP_TXT_OK       "RqeW"
+#define HTTPRESP_TOK_OK       "YDng"
 #define HTTPCODE_CANRX_OK     244      // response data has other 3-bits of new Rx/Tx token pair shifted left 5
 
 // range 400-511
 #define HTTPCODE_FAIL           400         // standard HTTP fail code, don't change!
-#define HTTPRESP_FAIL           "FAIL"      // (used in OTA programming!)
+#define HTTPRESP_FAIL           "FAIL"      // (used in OTA programming [so don't change!])
 #define HTTPCODE_PARAM_FAIL     501         // good remote decode but error in remote mDNS command string processing
-#define HTTPRESP_PARAM_FAIL     "cdxy"
+#define HTTPRESP_PARAM_FAIL     "FwUD"
 #define HTTPCODE_DECODE_FAIL    502         // bad remote decode, remote has set rxToken NO_TOKEN
-#define HTTPRESP_DECODE_FAIL    "zomc"
+#define HTTPRESP_DECODE_FAIL    "LEmi"
 #define HTTPCODE_DECPREV_FAIL   503         // bad remote decode, remote has moved rxPrevToken to rxToken
-#define HTTPRESP_DECPREV_FAIL   "AFhO"
+#define HTTPRESP_DECPREV_FAIL   "MsrV"
 #define HTTPCODE_ADDIP_FAIL     504
-#define HTTPRESP_ADDIP_FAIL     "kbFU"
+#define HTTPRESP_ADDIP_FAIL     "Mwtx"
 #define HTTPCODE_TOK_FAIL       505
-#define HTTPRESP_TOK_FAIL       "Iuqi"
-//#define HTTPCODE_TXT_FAIL       506
-//#define HTTPRESP_TXT_FAIL       "KltL"
+#define HTTPRESP_TOK_FAIL       "hjwP"
 #define HTTPCODE_CANRX_FAIL     507
-#define HTTPRESP_CANRX_FAIL     "jRiW"
+#define HTTPRESP_CANRX_FAIL     "NeTs"
 #define HTTPCODE_CANRX_DECODE_FAIL 508      // response data has new default token to set (can be 255 = NO_TOKEN)
 #define HTTPCODE_CANRX_NOMAC_FAIL 509       // response data has NO_TOKEN because we don't yet have MAC and don't know who's "more master"
 #define HTTPCODE_RXDISABLED     510 // sent to HttpClientCallback if "c sync rx off" command (g_bSyncRx = false)
-#define HTTPRESP_RXDISABLED     "tyDN"
+#define HTTPRESP_RXDISABLED     "eivW"
 #define HTTPCODE_TIMESET_FAIL   511
-#define HTTPRESP_RXTOKEN_FAIL   "pkrK"
+#define HTTPRESP_RXTOKEN_FAIL   "RNiJ"
 #define HTTPCODE_RXTOKEN_FAIL   512
 
 // after resetting wifi-parameters flash-memory via "c reset wifi", this device will try
@@ -90,15 +86,11 @@
 
 void ClearLinkOk(int code);
 void InitHttpClientHandlers();
-//bool SendHttpFailsafeReq(int idx);
-//int SendHttpText(int idx, String sText);
-//int SendHttpText(String sIP, String sText);
 bool SendHttpCanRxReq(int idx);
 bool SendHttpReq(IPAddress ip);
 String GetHttpCodeString(int httpCode);
 
 #endif
 
-extern const char HTTP_ASYNCREQ[], HTTP_PARAM_COMMAND[],  HTTP_ASYNCREQ_PARAM_TIMESET[];
-//extern const char HTTP_ASYNCTEXTREQ[], HTTP_ASYNCTEXTREQ_PARAM_TEXT[];
-extern const char HTTP_ASYNCCANRXREQ[], HTTP_ASYNCCANRXREQ_PARAM_TOK3BITS[];
+extern const char HTTP_ASYNCREQ[], HTTP_ASYNCREQ_PARAM_COMMAND[],  HTTP_ASYNCREQ_PARAM_TIMESET[];
+extern const char HTTP_ASYNCREQ_CANRX[], HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS[];

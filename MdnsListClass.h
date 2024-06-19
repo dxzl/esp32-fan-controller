@@ -31,7 +31,7 @@ class MdnsListClass{
       uint16_t mac_last_two_octets;
       int iMin, sendCount; // we store current minute and delete this entry if older than 10 min.
       int rxToken, rxPrevToken, txToken, txPrevToken, txNextToken, saveToken; // NO_TOKEN is 255
-      bool bSendTime, bSendOk, bTokOk, bLinkOk;
+      bool bSendTime, bSendOk, bTokOk, bLinkOk, bCanRxInProgress;
       String sSend, sUtil, sRxTxt;
     } t_indexMdns;
     
@@ -67,6 +67,8 @@ class MdnsListClass{
     void SetRxTxtStr(int idx, String val);
     bool GetSendTimeFlag(int idx);
     void SetSendTimeFlag(int idx, bool val);
+    bool GetCanRxInProgFlag(int idx);
+    void SetCanRxInProgFlag(int idx, bool val);
     bool GetSendOkFlag(int idx);
     void SetSendOkFlag(int idx, bool val);
     void SetSendOkFlag(IPAddress ipFind, bool val);

@@ -39,57 +39,17 @@ void ClearLinkOk(int code){
   }
 }
 
-//int SendHttpText(String sIP, String sText){
-//  if (sIP.isEmpty())
-//    return -2;  
-//  IPAddress ip;
-//  ip.fromString(sIP);
-//  int idx = IML.FindMdnsIp(ip);
-//  return SendHttpText(idx, sText);
-//}
-//int SendHttpText(int idx, String sText){
-//  if (!g_bWiFiConnected)
-//    return -2;  
-//
-//  if (asyncHttpreq.readyState() != readyStateUnsent && asyncHttpreq.readyState() != readyStateDone)
-//    return -3;
-//
-//  if (sText.isEmpty() || sText.length() > HTTP_TEXT_MAXCHARS)
-//    return -4;  
-//
-//  int count = IML.GetCount();
-//  
-//  if (!count || idx < 0 || idx >= count)
-//    return -5;
-//
-//  int txToken = IML.GetTxToken(idx);
-//  sText = MyEncodeStr(sText, HTTP_TABLE3, txToken, CIPH_CONTEXT_FOREGROUND);
-//  if (sText.isEmpty())
-//    return -7;
-//
-//  IPAddress ip = IML.GetIP(idx);
-//  
-//  sText = "http://" + ip.toString() + HTTP_ASYNCTEXTREQ + '?' +
-//                              HTTP_ASYNCTEXTREQ_PARAM_TEXT + '=' + sText + '&';
-//
-//  if (!asyncHttpreq.open("GET", sText.c_str()))
-//    return -8;
-//
-//  g_httpTxIP = ip; // save it for use in callback!
-//  asyncHttpreq.send();
-//  return 0;
-//}
-
 bool SendHttpCanRxReq(int idx){
-  if (!g_bWiFiConnected)
+  if (!g_bWiFiConnected || idx < 0)
     return false;  
+
+  IML.SetCanRxInProgFlag(idx, true); // prevent send to remote IP until CanRx request is answered...
 
   if (asyncHttpreq.readyState() != readyStateUnsent && asyncHttpreq.readyState() != readyStateDone)
     return false;
 
-  if (IML.GetSaveToken(idx) != NO_TOKEN){ // save pending high bits + 1
+  if (IML.GetSaveToken(idx) != NO_TOKEN) // save pending high bits + 1
     prtln("SendHttpCanRxReq(): WARNING! Callback from previous SendHttpCanRxReq() not processed yet!");
-  }
   
   IPAddress ip = IML.GetIP(idx);
   String sEnc = MyEncodeStr(HTTP_COMMAND_CANRX, HTTP_TABLE2, g_defToken, CIPH_CONTEXT_FOREGROUND);
@@ -100,8 +60,8 @@ bool SendHttpCanRxReq(int idx){
     prtln("SendHttpCanRxReq(): Can't encode sTokHigh for tokShifted=" + String(tokShifted));
     return true; // move on to next IP
   }
-  String sReq = "http://" + ip.toString() + HTTP_ASYNCCANRXREQ + '?' + HTTP_PARAM_COMMAND + '=' + sEnc + '&' +
-    HTTP_ASYNCCANRXREQ_PARAM_TOK3BITS + '=' + sTokHigh + '&'; // transmit high bits << 4
+  String sReq = "http://" + ip.toString() + HTTP_ASYNCREQ_CANRX + '?' + HTTP_ASYNCREQ_PARAM_COMMAND + '=' + sEnc + '&' +
+    HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS + '=' + sTokHigh + '&'; // transmit high bits << 4
 
   if (asyncHttpreq.open("GET", sReq.c_str())){
     g_httpTxIP = ip; // save it for use in callback!
@@ -111,7 +71,7 @@ bool SendHttpCanRxReq(int idx){
     String sMac = '&' + MyEncodeNum(IML.GetOurDeviceMacLastTwoOctets(), HTTP_TABLE2, FAILSAFE_TOKEN_3, CIPH_CONTEXT_FOREGROUND);
     asyncHttpreq.setReqHeader(HTTP_CLIENT_MAC_HEADER_NAME, sMac.c_str());
     asyncHttpreq.send();
-    prtln("SendHttpCanRxReq() sent HTTP_ASYNCCANRXREQ: \"" + sReq + "\"");
+    prtln("SendHttpCanRxReq() sent HTTP_ASYNCREQ_CANRX: \"" + sReq + "\"");
   }
   else
     prtln("SendHttpCanRxReq() Can't send request");
@@ -123,22 +83,31 @@ bool SendHttpCanRxReq(int idx){
 bool SendHttpReq(int idx){
   if (!g_bWiFiConnected || (asyncHttpreq.readyState() != readyStateUnsent && asyncHttpreq.readyState() != readyStateDone))
     return false; // don't advance index
-
-  // don't send if link is broken, but advance to next mDNS entry
-  if (!g_bSyncTx || !IML.GetLinkOkFlag(idx)){
-    prtln("DEBUG: SendHttpReq() Can't send because either the linkOK flag is false or g_bSyncTx is false!");
+  
+  // check conditions for abort of send...
+  if (!g_bSyncTx){
+    prtln("DEBUG: SendHttpReq() Can't send because g_bSyncTx is false!");
+    return true; // advance index to next mDNS entry
+  }
+  if (!IML.GetLinkOkFlag(idx)){
+    prtln("DEBUG: SendHttpReq() Can't send because linkOK flag is false!");
+    return true; // advance index to next mDNS entry
+  }
+  if (IML.GetCanRxInProgFlag(idx)){
+    prtln("DEBUG: SendHttpReq() Can't send because \"Can Rx?\" request in-progress!");
     return true; // advance index to next mDNS entry
   }
   
+  IPAddress ip = IML.GetIP(idx);
+
   // if we've exceeded MAX_HTTP_CLIENT_SENDS, delete the mDNS entry for this IP
   int sendCount = IML.GetSendCount(idx);
   if (sendCount > MAX_HTTP_CLIENT_SENDS){
     IML.DelMdnsIp(idx);
-    prtln("DEBUG: SendHttpReq() sendCount exceeded, called IML.DelMdnsIp(" + String(idx) + ")");
+    prtln("DEBUG: SendHttpReq() sendCount exceeded, deleting mDNS ip: (" + ip.toString() + ")");
     return false; // don't advance index
   }
 
-  IPAddress ip = IML.GetIP(idx);
   int txToken = IML.GetTxToken(idx);  
 
   // if our last transmit for this IP failed, the HTTP callback task (tasks.cpp) will set txNextToken and txToken to NO_TOKEN
@@ -167,7 +136,7 @@ bool SendHttpReq(int idx){
 //prtln("DEBUG: SendHttpReq(): sReq before MyEncodeStr: \"" + sReq + "\", txToken=" + String(txToken)); 
     sReq = MyEncodeStr(sReq, HTTP_TABLE1, txToken, CIPH_CONTEXT_FOREGROUND);
 //prtln("DEBUG: SendHttpReq(): sReq after MyEncode: " + sReq); 
-    sReq = "http://" + ip.toString() + HTTP_ASYNCREQ + '?' + HTTP_PARAM_COMMAND + '=' + sReq + '&'; // works with the & added...
+    sReq = "http://" + ip.toString() + HTTP_ASYNCREQ + '?' + HTTP_ASYNCREQ_PARAM_COMMAND + '=' + sReq + '&'; // works with the & added...
 
     if (!sDateTime.isEmpty())
       sReq += HTTP_ASYNCREQ_PARAM_TIMESET + '=' + sDateTime + '&';

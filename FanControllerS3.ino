@@ -3,12 +3,21 @@
 
 /*********
   ------------------------------------------------------------------------ 
-  NOTE: 6/3/2024 the last esp tools release that works "as is" is 2.0.17.
-  This project won't compile with 3.0.0. Changes needed to use with
-  3.x.x appear to be:
-      1) Mods to the ESPAsyncWebServer library.
-      2) Changes to the hardware timer API calls
-      3) other possible changes - I quit trying!
+  NOTE: 6/4/2024 Compile with ESP32 build-tools 3.0.0 and up
+
+  NOTE: you must use my custom-modified "MyPreferences.zip" library
+  and also, the web-server had to be modified to work with the latest
+  build (3.0.0). The modified web-server is in 
+  misc/ESPAsyncWebServerFor3-0-0.zip. On my PC, I install it into
+  \Documents\Arduino\libraries
+
+  Future potentially useful links as this project is eventually ported
+  to use the new "secure" versions of ESP32 (S3):
+
+  https://forum.arduino.cc/t/esp32-s3-n16r8-new-board/1099353
+  https://esp32s3.com/getting-started.html
+  https://github.com/vtunr/esp32_binary_merger
+  https://github.com/PBearson/Get-Started-With-ESP32-OTA
   ------------------------------------------------------------------------
   
   Install instructions:
@@ -18,7 +27,7 @@
 
   WiFi Smart Fan Controller is by Scott Swift, Christian - Jesus is Lord!
 
-  NOTE: Build with ESP32 for Arduino 2.02 or higher
+  NOTE: Build with ESP32 for Arduino 3.0.0 or higher
   NOTE: Use the Arduino->Tools->Partition Scheme: Default 4MB with spiffs(1.2MB APP/1.5MB SPIFFS)
 
   I use Sketch->Export Compiled Binary then run FixName.bat to change the .bin file to fc.bin
@@ -127,15 +136,26 @@ RTC_DATA_ATTR int bootCount;
 // stackArray[] - Interesting! FYI
 //    t_event stackArray[g_slotCount];
 bool g_bWiFiConnected, g_bWiFiConnecting, g_bSoftAP, g_bMdnsOn, g_bWiFiDisabled;
-bool g_bResetOrPowerLoss, g_bTellP2WebPageToReload, g_bOldModeSwOn;
+bool g_bResetOrPowerLoss, g_bTellP2WebPageToReload;
 bool g_bManualTimeWasSet, g_bWiFiTimeWasSet, g_bValidated;
 bool g_bRequestManualTimeSync, g_bRequestWiFiTimeSync, g_bMidiConnected;
-bool g_bSsr1On, g_bSsr2On, g_bOldSsr1On, g_bOldSsr2On, g_bTest;
+bool g_bSsr1On, g_bSsr2On, g_bOldSsr1On, g_bOldSsr2On, g_bTest, g_bLedOn;
 bool g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncToken, g_bSyncTime, g_bSyncEncrypt, g_bSyncMaster;
 
-int g_slotCount, g_prevMdnsCount;
+bool g_bOldWiFiApSwOn, g_bOldWiFiStaSwOn;
 
-int g_defToken, g_oldDefToken, g_pendingDefToken;
+#if ESP32_S3
+bool g_bOldPotModeSw1On, g_bOldPotModeSw2On;
+bool g_bOldSsr1ModeManSwOn, g_bOldSsr1ModeAutSwOn;
+bool g_bOldSsr2ModeManSwOn, g_bOldSsr2ModeAutSwOn;
+uint8_t g8_ssr1ModeFromSwitch, g8_ssr2ModeFromSwitch;
+#else
+bool g_bOldPotModeSwOn;
+#endif
+
+uint8_t g8_potModeFromSwitch, g8_wifiModeFromSwitch;
+
+uint8_t g8_ssr1ModeFromWeb, g8_ssr2ModeFromWeb;
 
 // cycle pulse-off feature
 uint8_t g8_pulseModeA, g8_pulseModeB;
@@ -144,9 +164,7 @@ uint8_t g8_pulseWidthTimerB, g8_pulseWidthB, g8_pulseMinWidthB, g8_pulseMaxWidth
 uint16_t g16_pulsePeriodTimerA, g16_pulsePeriodA, g16_pulseMinPeriodA, g16_pulseMaxPeriodA;
 uint16_t g16_pulsePeriodTimerB, g16_pulsePeriodB, g16_pulseMinPeriodB, g16_pulseMaxPeriodB;
 
-// three-position switch with pulldowns on the GPIO pins
-uint8_t g8_oldSw1Value, g8_oldSw2Value, g8_maxPower;
-uint8_t g8_nvSsrMode1, g8_nvSsrMode2;
+uint8_t g8_maxPower;
 uint8_t g8_midiNoteA, g8_midiNoteB, g8_midiChan;
 
 // used to flash the ip address least-signifigant digit first, 4th (last) number
@@ -156,10 +174,6 @@ uint8_t g8_digitArray[4];
 
 uint8_t g8_quarterSecondTimer, g8_fiveSecondTimer, g8_thirtySecondTimer;
 uint8_t g8_ledFlashTimer, g8_clockSetDebounceTimer, g8_lockCount;
-uint8_t g8_modeSwState, g8_wifiSwState;
-
-// counters for web-page hnDecode() routine
-int g_sct, g_minSct, g_maxSct;
 
 uint16_t g16_pot1Value, g16_oldpot1Value; // variable for storing the potentiometer value
 uint16_t g16_oldMacLastTwo, g16_unlockCounter, g16_tokenSyncTimer, g16_sendDefTokenTimer;
@@ -167,6 +181,12 @@ uint16_t g16_sendDefTokenTime, g16_sendHttpTimer, g16_asyncHttpIndex, g16_oddEve
 
 // timers
 uint32_t g32_savePeriod, g32_periodTimer, g32_dutyCycleTimerA, g32_dutyCycleTimerB, g32_phaseTimer, g32_nextPhase;
+
+// counters for web-page hnDecode() routine
+int g_sct, g_minSct, g_maxSct;
+
+int g_slotCount, g_prevMdnsCount;
+int g_defToken, g_oldDefToken, g_pendingDefToken;
 
 Stats g_stats;
 PerVals g_perVals, g_oldPerVals;
@@ -219,6 +239,16 @@ void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found");
 }
 
+// TODO (someday... but probably will change to a secure web-server library anyway...) 6/2024
+// (search for "setTemplateProcessor" below...)
+//String wsTemplateProc(const String& sReqFile){
+//  prtln("sReqFile=\"" + sReqFile + "\"");  
+//  if (sReqFile == HELP2_FILENAME)
+//    // "F" means the string is a file-path - backslash chars...
+//    // (don't need if just file's name...)
+//    return F(HELP2_FILENAME);
+//}
+
 void setup()
 {
   WiFi.disconnect(true, false); // turn off WiFi but don't clear AP credentials from NV memory
@@ -226,16 +256,40 @@ void setup()
   // Serial port for debugging purposes
   Serial.begin(115200);
 
+  // Solid-state relay outputs
+  pinMode(GPOUT_SSR1, OUTPUT);
+  pinMode(GPOUT_SSR2, OUTPUT);
+
+  // SPDT center-off WiFi AP/Off/STA switch. Inputs with pulldowns (3-states 00,01,10)
+  pinMode(GPIN_WIFI_AP_SW, INPUT_PULLDOWN);
+  pinMode(GPIN_WIFI_STA_SW, INPUT_PULLDOWN);
+
+#if ESP32_S3
+  // Analog Input
+  pinMode(GPAIN_POT1, INPUT); // (pin 4 left) GPIO04 ADC1_3
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  pinMode(GPIN_POT_MODE_SW1, INPUT_PULLDOWN); // (pin 5/44 left) GPIO05 ADC1_4 Set pin to Vcc for POT1 Mode 1
+  pinMode(GPIN_POT_MODE_SW2, INPUT_PULLDOWN); // (pin 6/44 left) GPIO06 ADC1_5 Set pin to Vcc for POT1 Mode 2
+  
+  pinMode(GPBD_ONE_WIRE_BUS_DATA, INPUT_PULLDOWN); // (pin 12/44) GPIO08 ADC1_7
+  pinMode(GPOUT_ONE_WIRE_BUS_CLK, OUTPUT); // (pin 15/44 left) GPIO09 ADC1_8
+
+  // SPDT center-off SSR On/Off/Auto switches. Inputs with pulldowns (3-states 00,01,10)
+  pinMode(GPIN_SSR1_MODE_SW_MAN, INPUT_PULLDOWN); // (pin 17/44 left) Set pin to Vcc for SSR_1 Manual ON
+  pinMode(GPIN_SSR1_MODE_SW_AUT, INPUT_PULLDOWN); // (pin 18/44 left) Set pin to Vcc for SSR_1 Auto ON
+  pinMode(GPIN_SSR2_MODE_SW_MAN, INPUT_PULLDOWN); // (pin 19/44 left) Set pin to Vcc for SSR_2 Manual ON
+  pinMode(GPIN_SSR2_MODE_SW_AUT, INPUT_PULLDOWN); // (pin 20/44 left) Set pin to Vcc for SSR_2 Auto ON
+
+  pinMode(GPOUT_SSR1_LED, OUTPUT); // (pin 32/44 right) GPIO35
+  pinMode(GPOUT_SSR2_LED, OUTPUT); // (pin 33/44 right) GPIO36
+
+#else
   // SW_SOFT_AP (all four POT pins are input only, no pullup/down!)
-  pinMode(GPIO34_POT_MODE, INPUT); // GPIO34 toggle switch where a POT normally would go - used to boot to softAP WiFi mode
+  pinMode(GPIN_POT_MODE_SW, INPUT); // GPIO34 toggle switch where a POT normally would go - used to boot to softAP WiFi mode
+  pinMode(GPOUT_ONBOARD_LED, OUTPUT); // set internal LED (blue) as output
+#endif
 
-  pinMode(GPIO18_WIFI_AP, INPUT_PULLDOWN);
-  pinMode(GPIO19_WIFI_STA, INPUT_PULLDOWN);
-  pinMode(GPIO2_ONBOARD_LED, OUTPUT); // set internal LED (blue) as output
-  pinMode(GPIO32_SSR_1, OUTPUT);
-  pinMode(GPIO23_SSR_2, OUTPUT);
-
-  //Increment boot number (memory-location is in Real-Time-Clock module) and print it every reboot
   prtln("Boot number: " + String(++bootCount));
 
   //Print the wakeup reason for ESP32
@@ -255,16 +309,28 @@ void setup()
   //attachInterrupt(BTN_RESTORE_SSID_PWD, ISR, Mode);
 
   // insure "old" values for POT the same
-  g16_oldpot1Value = g16_pot1Value = analogRead(GPIO36_POT_1);
+  g16_oldpot1Value = g16_pot1Value = analogRead(GPAIN_POT1);
 
   // insure "old" values for SWITCH different
-  g8_oldSw1Value = ~digitalRead(GPIO18_WIFI_AP);
-  g8_oldSw2Value = ~digitalRead(GPIO19_WIFI_STA);
-  g_bOldModeSwOn = ~digitalRead(GPIO34_POT_MODE);
+  g_bOldWiFiApSwOn = ~digitalRead(GPIN_WIFI_AP_SW);
+  g_bOldWiFiStaSwOn = ~digitalRead(GPIN_WIFI_STA_SW);
 
-  g8_modeSwState = 255;
-  g8_wifiSwState = 255;
+#if ESP32_S3
+  g_bOldPotModeSw1On = ~digitalRead(GPIN_POT_MODE_SW1);
+  g_bOldPotModeSw2On = ~digitalRead(GPIN_POT_MODE_SW2);
+  g_bOldSsr1ModeManSwOn = ~digitalRead(GPIN_SSR1_MODE_SW_MAN);
+  g_bOldSsr1ModeAutSwOn = ~digitalRead(GPIN_SSR1_MODE_SW_AUT);
+  g_bOldSsr2ModeManSwOn = ~digitalRead(GPIN_SSR2_MODE_SW_MAN);
+  g_bOldSsr2ModeAutSwOn = ~digitalRead(GPIN_SSR2_MODE_SW_AUT);
+  g8_ssr1ModeFromSwitch = 255;
+  g8_ssr2ModeFromSwitch = 255;
+#else
+  g_bOldPotModeSwOn = ~digitalRead(GPIN_POT_MODE_SW);
+#endif
 
+  g8_potModeFromSwitch = 255;
+  g8_wifiModeFromSwitch = 255;
+  
   g8_fiveSecondTimer = FIVE_SECOND_TIME-2; // call PollApSwitch() in 2-3 seconds
 
   // init blue LED on the ESP32 daughter-board
@@ -276,7 +342,13 @@ void setup()
   g8_ledFlashCounter = 0;
   g8_ledDigitCounter = 0;
   g8_digitArray[0] = 0;
-  digitalWrite(GPIO2_ONBOARD_LED, LOW);
+
+  g_bLedOn = false;
+#if ESP32_S3
+  neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off
+#else
+  digitalWrite(GPOUT_ONBOARD_LED, LOW);
+#endif
 
   bootCount = 0;
   g8_clockSetDebounceTimer = 0;
@@ -296,7 +368,7 @@ void setup()
     prtln("Changing cpu frequency to " + String(CPU_FREQ) + "MHz");
     setCpuFrequencyMhz(CPU_FREQ);
   }
-  
+
   g_prevMdnsCount = 0;
   g8_lockCount = 0;
   g16_unlockCounter = 0;
@@ -314,7 +386,7 @@ void setup()
   g_bTellP2WebPageToReload = false;
   g_bValidated = false;
   g_bSyncMaster = false;
-
+  
 #if HTTP_CLIENT_TEST_MODE
   g_bTest = true;
 #else
@@ -341,6 +413,8 @@ void setup()
     prtln("An Error has occurred while mounting SPIFFS");
     return;
   }
+
+  prtln("Embedded Version string: \"" + GetEmbeddedVersionString() + "\"");
 
   // Pertains to the FanController.h conditional-compile boolean switches:
   // READ_WRITE_CUSTOM_BLK3_MAC, FORCE_NEW_EFUSE_BITS_ON, WRITE_PROTECT_BLK3
@@ -386,21 +460,25 @@ void setup()
 // don't need this if calling configTzTime????
 //  setenv("TZ", TIMEZONE, 1); // Set timezone
 //  tzset();
+  
+  // someday need to experiment with this... to eliminate some of the "on" statements below...
+//  webServer.serveStatic("/", SPIFFS, "/web/").setTemplateProcessor(wsTemplateProc); // serve files from "data\web\" folder
+  
   webServer.onNotFound(notFound);
 
   // local message received from remote unit's async http client... we reply and the reply is
   // received and decoded by the HttpClientCallback() function (see above)
-  // for HTTP_PARAM_COMMAND:
+  // for HTTP_ASYNCREQ_PARAM_COMMAND:
   // if all is well we send code HTTPCODE_PARAM_OK and HTTPRESP_PARAM_OK
   // if not, we send code HTTPCODE_FAIL along with a new base 36 encoded token
   // for HTTP_ASYNCREQ_PARAM_TIMESET:
-  // if HTTP_PARAM_COMMAND failed we won't try to process HTTP_ASYNCREQ_PARAM_TIMESET at all.
+  // if HTTP_ASYNCREQ_PARAM_COMMAND failed we won't try to process HTTP_ASYNCREQ_PARAM_TIMESET at all.
   // if we are sending back HTTPRESP_PARAM_OK with code HTTPCODE_PARAM_OK, we decode the time-set string and add nothing more to the return string,
   // but if time set fails we return code HTTPCODE_TIMESET_FAIL
-  webServer.on(HTTP_ASYNCCANRXREQ, HTTP_GET, [](AsyncWebServerRequest *request){
+  webServer.on(HTTP_ASYNCREQ_CANRX, HTTP_GET, [](AsyncWebServerRequest *request){
     HandleHttpAsyncCanRxReq(request);
   });
-//  webServer.on(HTTP_ASYNCTEXTREQ, HTTP_GET, [](AsyncWebServerRequest *request){
+//  webServer.on(HTTP_ASYNCREQ_TEXT, HTTP_GET, [](AsyncWebServerRequest *request){
 //    HandleHttpAsyncTextReq(request);
 //  });
   webServer.on(HTTP_ASYNCREQ, HTTP_GET, [](AsyncWebServerRequest *request){
@@ -516,8 +594,8 @@ void setup()
     if (request->hasParam(PARAM_UDID) && request->hasParam(PARAM_UDPW))
     {
       String sId, sPw;
-      int errorCodeId = B64C.hnDecode(request->getParam(PARAM_UDID)->value(), sId);
-      int errorCodePw = B64C.hnDecode(request->getParam(PARAM_UDPW)->value(), sPw);
+      int errorCodeId = B64C.hnShiftDecode(request->getParam(PARAM_UDID)->value(), sId);
+      int errorCodePw = B64C.hnShiftDecode(request->getParam(PARAM_UDPW)->value(), sPw);
       if (sId == UPDATE_USERID && sPw == UPDATE_USERPW) // change to stored values - maybe use g_sHostName (???)
       {
         g_bValidated = true;
@@ -530,10 +608,10 @@ void setup()
         // returns errorCode -2 if empty string, -3 if bad validation prefix,
         // -4 if bad checksum, -5 if have validation but empty string thereafter
         if (errorCodeId < -1 || errorCodePw < -1)
-          request->send(200, "text/html", "<script>alert('Transmission error - please retry!');location.href = '" +
+          request->send(HTTPCODE_OK, "text/html", "<script>alert('Transmission error - please retry!');location.href = '" +
                                                                             String(LOGIN_FILENAME) + "'</script>");
         else
-          request->send(200, "text/html", "<script>alert('Incorrect credentials!');location.href = '" +
+          request->send(HTTPCODE_OK, "text/html", "<script>alert('Incorrect credentials!');location.href = '" +
                                                                         String(LOGIN_FILENAME) + "'</script>");
       };
 
@@ -542,9 +620,6 @@ void setup()
     }
   });
   #endif
-
-  // not able to get this working thus far - to eliminate much of the above...
-  //webServer.serveStatic("/", SPIFFS, "/www/"); // upload to root directory (if you add "www" directory in "data", last param becomes "/www/")
 
   webServer.on(EP_POST_UPDATE, HTTP_POST, [](AsyncWebServerRequest *request){
     if (IsLockedAlertPost(request, true)) // allow in AP!
@@ -582,7 +657,7 @@ void setup()
 //      prtln(SPIFFS.usedBytes());
 //      prtln(SPIFFS.totalBytes());
       //bool begin(size_t size=UPDATE_SIZE_UNKNOWN, int command = U_FLASH, int ledPin = -1, uint8_t ledOn = LOW);
-//      if(!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH, GPIO2_ONBOARD_LED , HIGH))
+//      if(!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH, GPOUT_ONBOARD_LED , HIGH))
 //      FSInfo fs_info;
 //      SPIFFS.info(fs_info);
 //      prt("Total bytes:    "); prtln(fs_info.totalBytes);
@@ -630,7 +705,7 @@ void setup()
 //  uint8_t* g_buf = null;
 //  uint8_t* p_buf = null;
 
-  // Route to set GPIO GPIO32_SSR_1 to HIGH
+  // Route to set GPOUT_SSR1/GPOUT_SSR2
   webServer.on(EP_GET_BUTTONS, HTTP_GET, [](AsyncWebServerRequest *request){
     HandleButtonsReq(request);
   });
@@ -651,7 +726,7 @@ void setup()
     HandleGetP2Req(request);
   });
 
-  webServer.on("/altP1", HTTP_GET, [] (AsyncWebServerRequest *request){
+  webServer.on(EP_ALT_P1, HTTP_GET, [] (AsyncWebServerRequest *request){
     HandleAltP1Req(request);
   });
 
@@ -984,6 +1059,22 @@ void print_wakeup_reason(){
 //-------------------------------------------------------------
 
 void loop(){
+//#ifdef RGB_BUILTIN
+//  digitalWrite(RGB_BUILTIN, HIGH);  // Turn the RGB LED white
+//  delay(1000);
+//  digitalWrite(RGB_BUILTIN, LOW);  // Turn the RGB LED off
+//  delay(1000);
+//
+//  neopixelWrite(RGB_BUILTIN, RGB_BRIGHTNESS, 0, 0);  // Red
+//  delay(1000);
+//  neopixelWrite(RGB_BUILTIN, 0, RGB_BRIGHTNESS, 0);  // Green
+//  delay(1000);
+//  neopixelWrite(RGB_BUILTIN, 0, 0, RGB_BRIGHTNESS);  // Blue
+//  delay(1000);
+//  neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off / black
+//  delay(1000);
+//#endif  //Increment boot number (memory-location is in Real-Time-Clock module) and print it every reboot
+
   // Listen to incoming notes
   RTP_MIDI.read();
   //Control_Surface.loop(); // handle all midi and control-surface messages
@@ -1006,7 +1097,9 @@ void loop(){
   // -------- do stuff every .25 sec here
   // read potentiometer and associated mode-switch every 1/4 second unless locked
   if (!IsLocked()){
-    ReadModeSwitch(); // read SPST mode switch (select phase or period to change with POT)
+    // For old ESP32 board, reads SPST POT mode switch (select phase or period to change with POT)
+    // For ESP32_S3 board, reads the DPDT mode switches for POT1, SSR1 and SSR2
+    ReadSpdtSwitches();
 #if !DISABLE_POTENTIOMETER    
     ReadPot1();
 #endif
@@ -1165,9 +1258,6 @@ void loop(){
   }
 }
 
-// timerEnd();
-// bool timerStarted(#); bool timerAlarmEnabled(#);
-// timerStart(#); timerRestart(#); timerStop(#); timerAlarmDisable(#);
 // C:\Users\Scott\Documents\Arduino\hardware\espressif\esp32\cores\esp32\esp32-hal-timer.h
 void SetupAndStartHardwareTimeInterrupt(){
   // Create semaphore to inform us when the timer has fired
@@ -1184,9 +1274,10 @@ void SetupAndStartHardwareTimeInterrupt(){
   // Repeat the alarm (third parameter)
   g_prevNow = DoTimeSyncOneSecondStuff(time(0));
 
-  // Start timer
-//  timerAlarmEnable(g_HwTimer);
-  HardwareTimerStart(g_HwTimer);
+  // Enable and start timer
+  // Set alarm to call onTimer function every 1/4 second (value in microseconds).
+  // void timerAlarm(hw_timer_t * timer, uint64_t alarm_value, bool autoreload, uint64_t reload_count);
+  timerAlarm(g_HwTimer, HW_TIMER_PERIOD, true, 0); // .25 sec
 }
 
 time_t DoTimeSyncOneSecondStuff(time_t now){
@@ -1215,22 +1306,19 @@ void DoTimeSyncOneSecondStuff(void){
 
   ResetPeriod();
 
-  HardwareTimerStart(g_HwTimer);
+  HardwareTimerRestart(g_HwTimer);
 }
 
 // call this when the internal clock is changed or set
 // FYI: C:\Users\Scott\Documents\Arduino\hardware\espressif\esp32\cores\esp32\esp32-hal-timer.h
-void HardwareTimerStart(hw_timer_t * timer){
-  prtln("Starting hardware timer...");
-
-  // Set alarm to call onTimer function every 1/4 second (value in microseconds).
-  // void timerAlarm(hw_timer_t * timer, uint64_t alarm_value, bool autoreload, uint64_t reload_count);
-  timerAlarm(timer, HW_TIMER_PERIOD, true, 0); // .25 sec
+void HardwareTimerRestart(hw_timer_t * timer){
+  prtln("Restarting hardware timer...");
+  timerRestart(timer);
 }
 
 void SSR1On(uint32_t iPeriod){
-  if (g8_nvSsrMode1 == SSR_MODE_AUTO)
-    SetSSR(GPIO32_SSR_1, true);
+  if (g8_ssr1ModeFromWeb == SSR_MODE_AUTO)
+    SetSSR(GPOUT_SSR1, true);
 
   // random mode is 0
   if (g_perVals.dutyCycleA == 0)
@@ -1241,8 +1329,8 @@ void SSR1On(uint32_t iPeriod){
 }
 
 void SSR2On(uint32_t iPeriod){
-  if (g8_nvSsrMode2 == SSR_MODE_AUTO)
-    SetSSR(GPIO23_SSR_2, true);
+  if (g8_ssr2ModeFromWeb == SSR_MODE_AUTO)
+    SetSSR(GPOUT_SSR2, true);
 
   // random mode is 0
   if (g_perVals.dutyCycleB == 0)
@@ -1292,7 +1380,7 @@ bool CheckForWiFiTimeSync(){
 // This one works for us - good for testing! - S.S.
 // This one works for us - good for testing! - S.S.
 //NoteValueLED led = {
-//    GPIO2_ONBOARD_LED, note(C, 4),
+//    GPOUT_ONBOARD_LED, note(C, 4),
 //};
 //NoteButton button = {
 //    0, note(C, 4),  // GPIO0 has a push button connected on most boards
@@ -1350,10 +1438,10 @@ void OnMidiNoteOn(uint8_t chan, uint8_t note, uint8_t velocity){
   if (velocity == 0)
     OnMidiNoteOff(chan, note, velocity);
   else{
-    if (note == g8_midiNoteA && g8_nvSsrMode1 == SSR_MODE_OFF)
-      SetSSR(GPIO32_SSR_1, true);
-    if (note == g8_midiNoteB && g8_nvSsrMode2 == SSR_MODE_OFF)
-      SetSSR(GPIO23_SSR_2, true);
+    if (note == g8_midiNoteA && g8_ssr1ModeFromWeb == SSR_MODE_OFF)
+      SetSSR(GPOUT_SSR1, true);
+    if (note == g8_midiNoteB && g8_ssr2ModeFromWeb == SSR_MODE_OFF)
+      SetSSR(GPOUT_SSR2, true);
   }
 }
 
@@ -1366,10 +1454,10 @@ void OnMidiNoteOff(uint8_t chan, uint8_t note, uint8_t velocity){
 //  Serial.print(velocity);
 //  Serial.println();
 //
-  if (note == g8_midiNoteA && g8_nvSsrMode1 == SSR_MODE_OFF)
-    SetSSR(GPIO32_SSR_1, false);
-  if (note == g8_midiNoteB && g8_nvSsrMode2 == SSR_MODE_OFF)
-    SetSSR(GPIO23_SSR_2, false);
+  if (note == g8_midiNoteA && g8_ssr1ModeFromWeb == SSR_MODE_OFF)
+    SetSSR(GPOUT_SSR1, false);
+  if (note == g8_midiNoteB && g8_ssr2ModeFromWeb == SSR_MODE_OFF)
+    SetSSR(GPOUT_SSR2, false);
 }
 
 // has to be in FanController.ino!

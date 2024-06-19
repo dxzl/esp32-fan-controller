@@ -74,13 +74,13 @@ void B64Class::ShuffleB64ExternalTable(int count){
   }
 }
 
-// call to encode a number and alse hnEncode() it
+// call to encode a number and also hnShiftEncode() it
 // returns empty string if error
 String B64Class::hnEncNum(int iIn, int tableIdx, int token){
   String sEnc = hnEncNumOnly(iIn, tableIdx, token);
   if (sEnc.isEmpty())
     return "";
-  return hnEncode(sEnc, tableIdx, token);
+  return hnShiftEncode(sEnc, tableIdx, token);
 }
 
 // call to encode a number without hnEncode() of it
@@ -96,7 +96,7 @@ String B64Class::hnEncNumOnly(int iIn, int tableIdx, int token){
 // converts the UTF-8 input string to wide (wchar_t 16-bit chars), then applies shifting to 18-bit values,
 // encodes each 18-bit integer via B64Inc() (18-bits fit perfectly into 3 base64 "digits"), then escapes the
 // entire string as base 64 using B64StrInc().
-String B64Class::hnEncode(String sIn, int tableIdx, int token){
+String B64Class::hnShiftEncode(String sIn, int tableIdx, int token){
 
   SetTableAndBusy(tableIdx, token);
 
@@ -138,7 +138,7 @@ String B64Class::hnEncode(String sIn, int tableIdx, int token){
 // call this if expecting a number that's been encoded to string via hnEncNum()
 // returns negative if error
 int B64Class::hnDecNum(String sIn, int tableIdx, int token){
-  String sOut = hnDecode(sIn, tableIdx, token);
+  String sOut = hnShiftDecode(sIn, tableIdx, token);
   if (sOut.isEmpty())
     return -2;
   return hnDecNumOnly(sOut, tableIdx, token);
@@ -154,9 +154,9 @@ int B64Class::hnDecNumOnly(String sIn, int tableIdx, int token){
 }
 
 // returns empty string if error
-String B64Class::hnDecode(String sIn, int tableIdx, int token){
+String B64Class::hnShiftDecode(String sIn, int tableIdx, int token){
   String sOut;
-  int errorCode = hnDecode(sIn, sOut, tableIdx, token);
+  int errorCode = hnShiftDecode(sIn, sOut, tableIdx, token);
   if (errorCode < 0)
     prtln("hnDecode error: " + String(errorCode));
   return sOut;
@@ -165,7 +165,7 @@ String B64Class::hnDecode(String sIn, int tableIdx, int token){
 // returns errorCode -2 if empty input string, -3 if string too short (must have prefix of comma-separated
 // B64Enc() of sct, minSct, maxSct then at least one data char = 7), -4 if bad validation prefix, -5 if bad checksum.
 //std::string narrow = converter.to_bytes(wide_utf16_source_string);
-int B64Class::hnDecode(String sIn, String &sOut, int tableIdx, int token){
+int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
 
   SetTableAndBusy(tableIdx, token);
 

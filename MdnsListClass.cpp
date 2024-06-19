@@ -29,6 +29,8 @@ String MdnsListClass::GetRxTxtStr(int idx) { return arr[idx].sRxTxt; }
 void MdnsListClass::SetRxTxtStr(int idx, String val) { arr[idx].sRxTxt = val; }
 bool MdnsListClass::GetSendTimeFlag(int idx) { return arr[idx].bSendTime; }
 void MdnsListClass::SetSendTimeFlag(int idx, bool val) { arr[idx].bSendTime = val; }
+bool MdnsListClass::GetCanRxInProgFlag(int idx) { return arr[idx].bCanRxInProgress; }
+void MdnsListClass::SetCanRxInProgFlag(int idx, bool val) { arr[idx].bCanRxInProgress = val; }
 bool MdnsListClass::GetSendOkFlag(int idx) { return arr[idx].bSendOk; }
 void MdnsListClass::SetSendOkFlag(int idx, bool val) { arr[idx].bSendOk = val; }
 void MdnsListClass::SetSendOkFlag(IPAddress ipFind, bool val) {
@@ -198,7 +200,9 @@ int MdnsListClass::AddMdnsIp(IPAddress ipNew){
   arr[count].sUtil = "";
   arr[count].sRxTxt = "";
 
+  arr[count].bCanRxInProgress = false;
   arr[count].bLinkOk = true;
+
   if (g_bSyncMaster){
     g_bSyncMaster = false; // master-status needs re-evaluation with addition of new remote device!
     prtln("temporarily revoking master-status - new remote detected...");

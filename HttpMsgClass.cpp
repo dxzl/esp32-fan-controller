@@ -10,16 +10,17 @@ HttpMsgClass HMC;
 // to be sent to other networked ESP32s with the same service-name.
 // We save a lowercase id (below) followed by the base 10 encoding of the parameter and string them all
 // together.
-// Keeping the numbers base 10 allows us to easily merge new changed parameters into the old strings
+// Keeping the data base 64 allows us to easily merge new changed parameters into the old strings
 // if they have not yet been sent.
-// Before sending, encode the base 10 numbers to base 36 (0-9, A-Z) and then hnEncode() the entire
-// transmit string as base 64.
+// Before sending, we either shift-encode or encrypt the base 64 sSend string and then encode the final string as base 64.
 // A random transmit "token" is also included in the string (CMtoken) and stored in txToken. A receiving unit will
 // store it in rxToken and use the token to decode the next received data. The next transmit will use txToken to encode.
-// Set bSendDefaultTxToken true to store DEFAULT_TX_TOKEN for each ip or to false (the default) to store a
-// random tx token for each ip.
-// The resulting encoded string is stored in IML.arr for each remote unit's ip address.
-// Encoded transmit strings for each IP are saved in a t_ip_time struct (see MdnsClass.h) 
+// If the txToken = NO_TOKEN on a send-attempt, a "CanRx?" handshake task is queued-up that will set initial Tx/Rx tokens
+// at either end of the link.
+// Encoded transmit strings for each IP are saved in sSend of a t_indexMdns struct (see MdnsClass.h). Each string can contain
+// multiple commands which can be added asynchronously. The string is cleard after successful transmission. Data for each
+// command is encoded as base 64. A "command" consists of a single ANSI character (the character must NOT be in the
+// ENCODE_TABLE0 string! (see B64Class.h)).
 // Received data is decoded using the rxToken for the remote IP. The CMtoken token in the receive data is stored in the
 // rxToken mDNS slot.
 // Transmitted data is encoded using the txToken for the remote IP. A CMtoken token is randomly generated and sent

@@ -3,6 +3,10 @@
 
 #include <Arduino.h>
 #include <esp_wifi.h>
+#include <esp_mac.h>
+//#include <esp_cpu.h>
+#include <esp_app_desc.h>
+//#include <esp_chip_info.h>
 #include <esp_wifi_types.h>
 #include <ESPmDNS.h>
 
@@ -71,13 +75,13 @@ String GetPhaseString(int phase);
 String GetPerDCString(int iVal);
 
 void ReadPot1();
-void ReadModeSwitch();
+void ReadSpdtSwitches();
 void ReadWiFiSwitch();
 
 String PercentOnToString(uint32_t totalDCon, uint32_t totalTime);
 String SsrModeToString(uint8_t ssrMode);
-void SetSSR(uint8_t val, bool bSsrOn);
-void SetSSRMode(uint8_t val, uint8_t ssrMode);
+void SetSSR(uint8_t gpout, bool bSetSsrOn);
+void SetSSRMode(uint8_t gpout, uint8_t ssrMode);
 
 uint8_t* MacStringToByteArray(const char* pMac, uint8_t* pbyAddress);
 String MacArrayToString(uint8_t* pMacArray);
@@ -140,6 +144,7 @@ String MyDecodeStr(String s, int table, int token, int context);
 String MyEncodeNum(unsigned int uiIn, int table, int token, int context);
 int MyDecodeNum(String s, int table, int token, int context);
 
+String GetEmbeddedVersionString();
 void InitMAC();
 
 void TaskProcessPulseOffFeatureTiming();

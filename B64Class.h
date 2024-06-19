@@ -22,12 +22,12 @@
 // set ENCODE[1] to random sequence of A-Z, a-z, 0-9, _, - for internal messaging outer wrapper.
 // use my Windows utility program Password Generator Sharp https://github.com/dxzl/password-generator-sharp
 // (if changed, must reflash all units!!!)
-#define ENCODE_TABLE1 "wrq53xbRA_v8SPCJmDZ2Npt0O1BknjiQ4TgscUIGWFoYyMXKdLuE6-79zlfHheaV" // 64 chars 
+#define ENCODE_TABLE1 "yEkO-cAoSUVdegifnzL49w_JK3R1hxlFqmIYa7THW2sQrpDGu6ZCtX0v8M5BNPbj" // 64 chars 
 // set ENCODE[2] to random sequence of A-Z, a-z, 0-9, _, - for internal messaging individual components such as *8Sh or &J2d
 // use my Windows utility program Password Generator Sharp https://github.com/dxzl/password-generator-sharp
 // (if changed, must reflash all units!!!)
-#define ENCODE_TABLE2 "17oNf53VTmIsxudGRFyYzPZSQK-DtwhXOk8L4cpCq6jvUJ2lgrbA_ieMHBn9aWE0" // 64 chars
-#define ENCODE_TABLE3 "kejRvTQXNxH13I8taKYpAsgJSEu6mfOyqoBZWl24FD9cr-_0Uhn57dCwzMiPVLbG" // 64 chars
+#define ENCODE_TABLE2 "hQygtSk0bRWxmALC1wJ7ZOTE65pHIX2UvBjfYziNoaM9DnG-drqVc8K4uePsF3l_" // 64 chars
+#define ENCODE_TABLE3 "PwFroTIXBzSJU0KZpWMCHsR6ye-NjudtaEVc3QiOhA8nDmk2_gYbvq7L91x5Glf4" // 64 chars
 
 //#define B36_TABLE_SIZE 36
 #define B64_TABLE_SIZE 64
@@ -86,9 +86,9 @@ class B64Class{
     String hnEncNumOnly(int iIn, int tableIdx=-1, int token=0);
     int hnDecNumOnly(String sIn, int tableIdx=-1, int token=0);
 
-    String hnEncode(String sIn, int tableIdx=-1, int token=0);
-    int hnDecode(String sIn, String &sOut, int tableIdx=-1, int token=0);
-    String hnDecode(String sIn, int tableIdx=-1, int token=0);
+    String hnShiftEncode(String sIn, int tableIdx=-1, int token=0);
+    int hnShiftDecode(String sIn, String &sOut, int tableIdx=-1, int token=0);
+    String hnShiftDecode(String sIn, int tableIdx=-1, int token=0);
 
     String hnEncodeStr(String sIn, int tableIdx, int token);
     String hnDecodeStr(String sIn, int tableIdx, int token);
