@@ -1,102 +1,15 @@
 // this file WSHandlers.cpp
 #include "FanController.h"
 
-// Web-page placeholders we fill-in dynamically as the html file is "served"
-// index.html
-const char PH_HOSTNAME[] = "HOSTNAME";
-const char PH_MAXSCT[] = "MAXSCT";
-const char PH_PERVARS[] = "PERVARS";
-const char PH_LABEL_A[] = "LABELA";
-const char PH_LABEL_B[] = "LABELB";
-
-// p1.html
-const char PH_P1APMODE[] = "P1APMODE";
-const char PH_P1VARS[] = "P1VARS"; // combination script tag with vars for g8_midiChan, g8_midiNoteA, g8_midiNoteB
-
-// p2.html
-const char PH_P2DELSTYLE[] = "P2DELSTYLE";
-const char PH_P2DELITEMS[] = "P2DELITEMS";
-
-// These pertain to http get requests from our client-library (HttpClientHandlers.cpp)
-// the strings can be freely changed for security... but if you change them, ALL devices must be updated!
-const char HTTP_ASYNCREQ_CANRX[] = "/susji";
-const char HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS[] = "ksisw";
-
-const char HTTP_ASYNCREQ[] = "/keond";
-const char HTTP_ASYNCREQ_PARAM_TIMESET[] = "kwfta";
-const char HTTP_ASYNCREQ_PARAM_COMMAND[] = "mrefw"; // universal "command" parameter
-
-// ------------------ web-server handlers -------------------
-
-// NOTE: These all appear both here and in the .js files for the web-pages served out of SPIFFS file-system
-// by the AsyncWebServer library. You can best change via Notepad++ by opening all .html files and .js (in "origdata" folder)
-// files as well as this file and WSHandlers.h and use Find/Replace "in all opened documents". Then upload the changed .js files
-// to https://obfuscator.io/ and save obfuscated files in the "data" folder.
-
-// sct.js heartbeat /getHeart
-const char PARAM_HEARTBEAT[]   = "neihs";
-
-// index.html
-const char PARAM_HOSTNAME[]    = "hddsi"; // hnEnc
-const char PARAM_PERMAX[]      = "geuge"; // perMax
-const char PARAM_PERUNITS[]    = "djeuc"; // perUnits
-const char PARAM_PERVAL[]      = "rrksv"; // perVal
-const char PARAM_STATE1[]      = "mwial"; // stateTxtA
-const char PARAM_STATE2[]      = "uvohh"; // stateTxtB
-const char PARAM_LABEL_A[]     = "wjdte"; // labelTxtA
-const char PARAM_LABEL_B[]     = "meufw"; // labelTxtB
-const char PARAM_TEXT[]        = "ifhrv"; // text-message
-
-// loginIndex.html
-const char PARAM_UDID[]   = "bwihl"; // used in firmware update
-const char PARAM_UDPW[]   = "pdklt";
-
-// p1.html
-
-// (PARAM_BUTRST, PARAM_WIFINAME and PARAM_WIFIPASS can be changed without reprocessing the spiffs web-data)
-const char PARAM_BUTRST[]     = "neuqj"; // restore button press
-const char PARAM_WIFINAME[]   = "fgdje"; // set by hidden field on p1.html - variable %P1APMODE% is replaced by two edit-input fields
-const char PARAM_WIFIPASS[]   = "rsgyb"; // data submitted is handled in in ReplaceHtmlPercentSign().
-
-// changing these requires serching for the strings in p1.html/p1.js and changeing there too!
-const char PARAM_PHASE[]      = "jeita";
-const char PARAM_DC_A[]       = "neufb";
-const char PARAM_DC_B[]       = "xbmey";
-const char PARAM_MIDICHAN[]   = "ahejn";
-const char PARAM_MIDINOTE_A[] = "ehwdo";
-const char PARAM_MIDINOTE_B[] = "fjezm";
-
-// p2.html
-// received from p2.html when Add button pressed
-const char PARAM_MINUTE[] = "hriqn";
-const char PARAM_HOUR[] = "nwuds";
-const char PARAM_SECOND[] = "bbeis";
-const char PARAM_AMPM[] = "heidc";
-const char PARAM_DEVICE_MODE[] = "whrro";
-const char PARAM_DEVICE_ADDR[] = "ajedd";
-const char PARAM_REPEAT_MODE[] = "nriwq";
-const char PARAM_REPEAT_COUNT[] = "jegsi";
-const char PARAM_EVERY_COUNT[] = "ehitm";
-const char PARAM_DATE[] = "wjyrc";
-// when Edit button pressed on p2.html
-const char PARAM_EDITINDEX[] = "ejddo";
-const char PARAM_DELINDEX[] = "heifq";
-// received from p2.html
-const char PARAM_REPLACEINDEX[] = "jfrej";
-const char PARAM_INCLUDETIMINGCYCLE[] = "whsin";
-const char PARAM_TIMINGCYCLEINREPEATS[] = "ydjyz";
-const char PARAM_USEOLDTIMEVALS[] = "vjenw";
-const char PARAM_DATETIME[] = "gejcc";
-const char PARAM_FILEDATA[] = "wqjun";
-const char PARAM_ERASEDATA[] = "lkeism";
-
 void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
 
   IPAddress rip = request->client()->remoteIP();
-
+  String sIp = rip.toString();
+  prtln("HandleHttpAsyncCanRxReq(): remoteIP: " + sIp);
+  
   if (!g_bSyncRx){
     SendHttpClientResponse(request, HTTPRESP_RXDISABLED, HTTPCODE_RXDISABLED);
-    prtln("HandleHttpAsyncCanRxReq(): Local Rx is disabled! (remote ip " + rip.toString());
+    prtln("HandleHttpAsyncCanRxReq(): Local Rx is disabled!");
     return;
   }
 
@@ -104,11 +17,11 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
   if (rxIdx < 0){
     rxIdx = IML.AddMdnsIp(rip);
     if (rxIdx < 0){ // add incomming IP to mDNS table
-      prtln("HandleHttpAsyncCanRxReq(): UNABLE TO ADD ip to mDNS table: " + rip.toString());
+      prtln("HandleHttpAsyncCanRxReq(): UNABLE TO ADD ip to mDNS table");
       SendHttpClientResponse(request, HTTPRESP_ADDIP_FAIL, HTTPCODE_ADDIP_FAIL);
       return;
     }
-    prtln("HandleHttpAsyncCanRxReq(): ip added to mDNS table: " + rip.toString());
+    prtln("HandleHttpAsyncCanRxReq(): ip added to mDNS table");
   }
 
   // get MAC header
@@ -121,9 +34,10 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
 //prtln("DEBUG: HandleHttpAsyncCanRxReq() got HTTP_CLIENT_MAC_HEADER_NAME: \"" + sMac + "\"");
     if (!sMac.isEmpty() && sMac[0] == '&')
       sMac = sMac.substring(1);
-    int iMac = MyDecodeNum(sMac, HTTP_TABLE2, FAILSAFE_TOKEN_3, CIPH_CONTEXT_BACKGROUND);
-    if (iMac > 0){
-      uint16_t localMacLT = IML.GetOurDeviceMacLastTwoOctets();
+    int iMac = 0;
+    int iErr = MyDecodeNum(iMac, sMac, HTTP_TABLE2, FAILSAFE_TOKEN_3, CIPH_CONTEXT_BACKGROUND);
+    if (!iErr && iMac > 0){
+      uint16_t localMacLT = GetOurDeviceMacLastTwoOctets();
       uint16_t remoteMacLT = (uint16_t)iMac;
       if (localMacLT > 0){
         if (localMacLT != remoteMacLT) // leave -1 if mac-last-two-octets are the same
@@ -133,11 +47,11 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
         if (IML.GetMdnsMAClastTwo(rxIdx) != remoteMacLT){
           IML.SetMdnsMAClastTwo(rxIdx, remoteMacLT);
           prtln("HandleHttpAsyncCanRxReq(): MAC last-two added: " + String(remoteMacLT));
-          CheckMasterStatus();
+          RefreshGlobalMasterFlagAndIp();
           // purge possible pending command requesting MAC!
-//            String sRef = IML.GetSendStr(rxIdx);
-//            HMC.StripParam(CMreqMacMin, CMreqMacMax, sRef);
-//            IML.SetSendStr(rxIdx, sRef);
+//            String sRef = IML.GetStr(rxIdx, MDNS_STRING_SEND_ALL);
+//            HMC.StripRangeCommand(CMreqMacMin, CMreqMacMax, sRef);
+//            IML.SetStr(rxIdx, MDNS_STRING_SEND_ALL, sRef);
         }
       }
     }
@@ -146,220 +60,219 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
   }
   else
     prtln("HandleHttpAsyncCanRxReq(): no MAC header!");
-  
-  int code;
-  String sReply;
 
-  if (request->hasParam(HTTP_ASYNCREQ_PARAM_COMMAND) &&
-          request->hasParam(HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS)){
-//prtln("HandleHttpAsyncCanRxReq(): raw received HTTP_ASYNCREQ_PARAM_COMMAND: \"" + s1 + "\"");
-    String sTokHigh = request->getParam(HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS)->value(); // get (high 3-bits+1) << 4
-    if (sTokHigh.isEmpty()){
-      prtln("HandleHttpAsyncCanRxReq(): HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS value is empty!");
-      goto finally;
-    }
-//prtln("DEBUG: HandleHttpAsyncCanRxReq(): : raw HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS (key): \"" + sTokHigh + "\"");
-    int iTokHigh = MyDecodeNum(sTokHigh, HTTP_TABLE1, g_defToken, CIPH_CONTEXT_BACKGROUND);
-    String sCmd = MyDecodeStr(request->getParam(HTTP_ASYNCREQ_PARAM_COMMAND)->value(), HTTP_TABLE2, g_defToken, CIPH_CONTEXT_BACKGROUND);
-    if (iTokHigh < 0 || sCmd.isEmpty()){
-//prtln("DEBUG: HandleHttpAsyncCanRxReq(): Can't decode HTTP_ASYNCREQ_PARAM_COMMAND with g_defToken= " + String(g_defToken) + ", ip=" + rip.toString());
-      if (weAreMoreMaster == -1){ // we don't know who's "more master" yet (haven't received MAC last-two)
-        code = HTTPCODE_CANRX_NOMAC_FAIL;
-//prtln("DEBUG: HandleHttpAsyncCanRxReq(): sending HTTPCODE_CANRX_NOMAC_FAIL");
+  int iCode = HTTPCODE_CANRX_FAIL;
+  String sReply = HTTPRESP_CANRX_FAIL;
+  
+  String sCmd;
+  int iTokHigh;
+  int iTokDecode = IML.GetToken(rxIdx, MDNS_TOKEN_CANRX_RX);
+  
+  bool bBadDecode = false;
+  int iErr = 0;
+    
+  if (request->params() != CANRX_PARAMETER_COUNT){
+    prtln("SendHttpCanRxReq(): Bad parameter count: " + String(CANRX_PARAMETER_COUNT));
+    goto finally;
+  }
+
+  if (iTokDecode != NO_TOKEN){
+    for (int ii = 0; ii < CANRX_PARAMETER_COUNT; ii++){
+      AsyncWebParameter* p = request->getParam(ii);
+      if (!p) continue;
+      String sName = String(p->name());
+      iErr = MyDecodeStr(sName, HTTP_TABLE2, iTokDecode, CIPH_CONTEXT_BACKGROUND);
+      if (iErr < -1){
+        prtln("HandleHttpAsyncCanRxReq(): sName Bad decode: " + String(iErr));
+        bBadDecode = true;
+        break;
       }
-      else{
-        code = HTTPCODE_CANRX_DECODE_FAIL;
-//prtln("DEBUG: HandleHttpAsyncCanRxReq(): sending HTTPCODE_CANRX_DECODE_FAIL");
+      String sValue = String(p->value());
+      if (sName == String(HTTP_ASYNCREQ_CANRX_PARAM_COMMAND)){
+        iErr = MyDecodeStr(sValue, HTTP_TABLE1, iTokDecode, CIPH_CONTEXT_BACKGROUND);
+        if (iErr < -1){
+          prtln("HandleHttpAsyncCanRxReq(): sValue Bad decode: " + String(iErr));
+          bBadDecode = true;
+          break;
+        }
+        sCmd = sValue;
       }
-      // send back our g_defToken if we "outrank" the remote or NO_TOKEN if not
-// NOTE: if both sides are still unset - we'll be in a deadlock... best to wait to send until it's set???
-prtln("DEBUG: HandleHttpAsyncCanRxReq(): weAreMoreMaster=" + String(weAreMoreMaster) + " (sends NO_TOKEN if 0 or -1 (unset)!)");
-      int iDefTok = (weAreMoreMaster == 1) ? g_defToken : NO_TOKEN;
-      CIP.saveCiphKey(CIPH_CONTEXT_BACKGROUND);
-      CIP.setCiphKey(sTokHigh); // use the raw HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS encoded parameter as key!
-      sReply = MyEncodeNum(iDefTok, HTTP_TABLE2, FAILSAFE_TOKEN_2, CIPH_CONTEXT_BACKGROUND); // send our g_defToken to remote for it to set its g_defToken the same!
-      CIP.restoreCiphKey(CIPH_CONTEXT_BACKGROUND);
-      // do a system-wide default token reset in 3 minutes
-//      if (MINUTES_AFTER_DEF_TOKEN_FAIL_TO_INITIATE_RESET){
-//        int ipCount = IML.GetCount();
-//        if (ipCount)
-//          g16_sendDefTokenTimer = g16_sendDefTokenTime-(ipCount+ MINUTES_AFTER_DEF_TOKEN_FAIL_TO_INITIATE_RESET);
-//      }
-    }
-    else if (sCmd == HTTP_COMMAND_CANRX){
-      iTokHigh >>= CANRX_TOKEN_SHIFT; // shift high bits into place (>>4)
-      if (iTokHigh >= 1 && iTokHigh <= 8){
-        iTokHigh -= 1; // we send token plus one to avoid 0!
-        code = HTTPCODE_CANRX_OK;
-        int iTokLow = random(1,8+1); // 0-7 plus 1 to avoid 0!
-        sReply = MyEncodeNum(iTokLow<<CANRX_TOKEN_SHIFT, HTTP_TABLE3, g_defToken, CIPH_CONTEXT_BACKGROUND); // send back: ((lower 3 bits plus one) << 4)
-        int rxToken = (iTokHigh<<3)+(iTokLow-1);
-        IML.SetRxToken(rxIdx, rxToken);
-//prtln("DEBUG: HandleHttpAsyncCanRxReq() HTTP_COMMAND_CANRX: got high 3-bits, setting rxToken to: " + String(rxToken));
-//prtln("DEBUG: HandleHttpAsyncCanRxReq() HTTP_COMMAND_CANRX: sending back newly generated low 3-bits: " + String(iTokLow-1));
+      else if (sName == String(HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS)){
+        int iValue = 0;
+        iErr = MyDecodeNum(iValue, sValue, HTTP_TABLE3, iTokDecode, CIPH_CONTEXT_BACKGROUND);
+        if (iErr < -1){
+          prtln("HandleHttpAsyncCanRxReq(): iValue Bad decode: " + String(iErr));
+          bBadDecode = true;
+          break;
+        }
+        iTokHigh = iValue;
       }
-      else
-        prtln("DEBUG: HandleHttpAsyncCanRxReq() sCmd unknown/unprocessed: \"" + sCmd + "\"");
     }
   }
+  // designed to fail the first time...
+  else{
+    iTokDecode = GetRandToken(); // set new Rx token to send back
+    IML.SetToken(rxIdx, MDNS_TOKEN_CANRX_RX, iTokDecode);
+    bBadDecode = true;
+  }
+
+  if (bBadDecode || sCmd.isEmpty()){
+    int iToken;
+    if (IML.GetFlag(rxIdx, MDNS_FLAG_CANRX_MAIN_DECODE_FAIL))
+      iToken = g_origDefToken;
+    else{
+      IML.SetFlag(rxIdx, MDNS_FLAG_CANRX_MAIN_DECODE_FAIL, true);
+      iToken = g_defToken;
+    }
+    
+    String sKey;
+    AsyncWebParameter* p = request->getParam(CANRX_PARAMETER_COUNT-1);
+    if (p)
+      sKey = String(p->value());
+
+    if (!sKey.isEmpty()){
+      // encode with flash-stored value (since g_defToken will change over time...)
+      CIP.saveCiphKey(CIPH_CONTEXT_BACKGROUND);
+      CIP.setCiphKey(sKey); // use the raw HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS encoded parameter as key!
+      sReply = MyEncodeNum(iTokDecode, HTTP_TABLE2, iToken, CIPH_CONTEXT_BACKGROUND); // send other unit our new random token...
+      CIP.restoreCiphKey(CIPH_CONTEXT_BACKGROUND);
+      iCode = HTTPCODE_CANRX_DECODE_FAIL;
+    }
+    else
+      prtln("SendHttpCanRxReq(): Bad parameter list!");
+  }
+  else if (sCmd == HTTP_COMMAND_CANRX){
+    // shift until marker-bit shifted out...
+    if (iTokHigh >= 1){ // 1 is the minimum because of "always 1" shift-marker bit
+      while(!(iTokHigh & 1))
+        iTokHigh >>= 1;
+      iTokHigh >>= 1;
+      
+      int iTokCanRxHigh = iTokHigh & 7; // low 3 bits are high part of Canrx token
+      int iTokCmdStrHigh = iTokHigh >> 3; // high 3 bits are high part of Command-string token
+      
+      if (iTokCmdStrHigh >= 0 && iTokCmdStrHigh <= 7 && iTokCanRxHigh >= 0 && iTokCanRxHigh <= 7){
+        int iTokCanRxLow = random(0,7+1); // 0-7
+        int iTokCmdStrLow = random(0,7+1); // 0-7
+        int iTokShifted = (iTokCmdStrLow<<4)|(iTokCanRxLow<<1)|1; // add shift-marker-bit
+        iTokShifted <<= random(0,MAX_CANRX_TOKEN_SHIFT+1);
+        sReply = MyEncodeNum(iTokShifted, HTTP_TABLE3, iTokDecode, CIPH_CONTEXT_BACKGROUND);
+        if (sReply.isEmpty()){
+          prtln("SendHttpCanRxReq(): Can't encode sTokLow for tokShifted=" + String(iTokShifted));
+          goto finally;
+        }
+        int iTokRx = (iTokCmdStrHigh<<3)+iTokCmdStrLow;
+        IML.SetToken(rxIdx, MDNS_TOKEN_RX, iTokRx);
+        iTokRx = (iTokCanRxHigh<<3)+iTokCanRxLow;
+        IML.SetToken(rxIdx, MDNS_TOKEN_CANRX_RX, iTokRx);
+        IML.SetFlag(rxIdx, MDNS_FLAG_CANRX_MAIN_DECODE_FAIL, false);
+        
+        iCode = HTTPCODE_CANRX_OK;
+      }
+      else
+        prtln("HandleHttpAsyncCanRxReq() HTTP_COMMAND_CANRX iTokCmdStrHigh or iTokCanRxHigh out of range!");
+    }
+    else
+      prtln("HandleHttpAsyncCanRxReq() HTTP_COMMAND_CANRX iTokHigh < 1 (possible bad decode)!");
+  }
+  else
+    prtln("HandleHttpAsyncCanRxReq() sCmd unrecognized: \"" + sCmd + "\"");
 
 finally:
   if (sReply.isEmpty()){
     sReply = HTTPRESP_CANRX_FAIL;
-//prtln("DEBUG: HandleHttpAsyncCanRxReq(): sReply is empty. Set sReply = HTTPRESP_CANRX_FAIL");
+    prtln("HandleHttpAsyncCanRxReq(): sReply is empty. Set sReply = HTTPRESP_CANRX_FAIL");
   }
 
   if (sReply == HTTPRESP_CANRX_FAIL){
-    code = HTTPCODE_CANRX_FAIL;
-    sReply = MyEncodeStr(sReply, HTTP_TABLE3, FAILSAFE_TOKEN_1, CIPH_CONTEXT_BACKGROUND);
-//prtln("DEBUG: HandleHttpAsyncCanRxReq(): Set code = HTTPCODE_CANRX_FAIL");
+    iCode = HTTPCODE_CANRX_FAIL;
+    iErr = MyEncodeStr(sReply, HTTP_TABLE3, FAILSAFE_TOKEN_1, CIPH_CONTEXT_BACKGROUND);
+    if (iErr){
+      prtln("SendHttpCanRxReq(): bad encodeStr: " + String(iErr));
+      return;
+    }
   }
-  SendHttpClientMacResponse(request, sReply, code);
+  
+  SendHttpClientMacResponse(request, sReply, iCode);
 }
 
+// Note: poll in main loop for MDNS_STRING_RECEIVE not empty and
+// TSK.QueueTask(TASK_PROCESS_RECEIVE_STRING, 0, httpCode, sRsp, sMac, sRemIP).
+// Send reply to sender's callback using: HTTPRESP_PROCESSING_OK, HTTPCODE_PROCESSING_OK
+// TODO: move much of below code to TaskProcessReceiveString()
+// In this function, do SetString(idx, MDNS_STRING_RECEIVE, sReq);
 void HandleHttpAsyncReq(AsyncWebServerRequest *request){
 
-  IPAddress rip = request->client()->remoteIP();
-  
-  if (!g_bSyncRx){
-    SendHttpClientResponse(request, HTTPRESP_RXDISABLED, HTTPCODE_RXDISABLED);
-    prtln("HandleHttpAsyncReq(): Local Rx is disabled! (remote ip " + rip.toString());
+  int iParamCount = request->params();
+
+  if (iParamCount <= 0 || iParamCount > 2)
     return;
-  }
-  
+
+  String sParam[2];
   String sReply;
-  int code;
+  int iCode, rxIdx, rxTok;
+  int iErr = 0;
+  
+  IPAddress rip = request->client()->remoteIP();
 
-
-//    // block web update if locked unless in AP mode
-//    if (IsLockedAlertGet(request, P1_FILENAME, true))
-//      return;
-
-  int rxIdx = IML.FindMdnsIp(rip);
+  String sIp = rip.toString();
+  
+  rxIdx = IML.FindMdnsIp(rip);
   if (rxIdx < 0){
-    rxIdx = IML.AddMdnsIp(rip);
-    if (rxIdx < 0){ // add incomming IP to mDNS table (we will update its rxToken below)
-      prtln("HandleHttpAsyncReq(): UNABLE TO ADD ip to mDNS table: " + rip.toString());
-      SendHttpClientResponse(request, HTTPRESP_ADDIP_FAIL, HTTPCODE_ADDIP_FAIL);
-      return; // return -1 for errors that don't require drastic action...
-    }
-    prtln("HandleHttpAsyncReq(): ip added to mDNS table: " + rip.toString());
+    iCode = HTTPCODE_NOIP_FAIL;
+    sReply = HTTPRESP_NOIP_FAIL;
+    prtln("HandleHttpAsyncReq(): replying HTTPRESP_NOIP_FAIL, ip is not in mDNS table: " + sIp);
+    goto noencode;
   }
 
-  int saveRxTok = IML.GetRxToken(rxIdx); // save before calling HMC.DecodeParameters()!
-//prtln("DEBUG: HandleHttpAsyncReq(): saveRxTok: " + String(saveRxTok));    
+  rxTok = IML.GetToken(rxIdx, MDNS_TOKEN_RX); // save before calling HMC.ProcessMsgCommands()!
 
-  if (saveRxTok == NO_TOKEN){
-    sReply = MyEncodeStr(HTTPRESP_RXTOKEN_FAIL, HTTP_TABLE3, FAILSAFE_TOKEN_1, CIPH_CONTEXT_BACKGROUND);
-// don't send Can Rx query here... we send it if NO_TOKEN on SendHttpReq()
-// QueueTask(TASK_SEND_CANRX_QUERY, rip.toString()); // this will get Rx/Tx tokens!
-    SendHttpClientResponse(request, sReply, HTTPCODE_RXTOKEN_FAIL);
-    prtln("HandleHttpAsyncReq(): Rx or Tx token = NO_TOKEN, sending HTTPCODE_RXTOKEN_FAIL! " + rip.toString());
-    return; // return -1 for errors that don't require drastic action...
+  if (rxTok == NO_TOKEN){
+    iCode = HTTPCODE_RXTOKEN_FAIL;
+    sReply = HTTPRESP_RXTOKEN_FAIL;
+    prtln("HandleHttpAsyncReq(): replying HTTPRESP_RXTOKEN_FAIL, rxTok == NO_TOKEN:  " + sIp);
+    goto noencode;
+  }
+
+  if (!g_bSyncRx){
+    iCode = HTTPCODE_RXDISABLED;
+    sReply = HTTPRESP_RXDISABLED;
+    prtln("HandleHttpAsyncReq(): replying HTTPRESP_RXDISABLED, local Rx is disabled: " + sIp);
+    goto finally;
   }
   
-  if (request->hasParam(HTTP_ASYNCREQ_PARAM_COMMAND)){
-    String sReq = request->getParam(HTTP_ASYNCREQ_PARAM_COMMAND)->value();
-//prtln("debug: raw received HTTP_ASYNCREQ_PARAM_COMMANDS: \"" + s + "\"");
-
-    bool bPendingTokenWasSet; // set flag by-reference...
-    int macLastTwo = HMC.DecodeParameters(sReq, rxIdx, bPendingTokenWasSet, false); // returns decoded string in sReq by-reference!
-//prtln("debug: partially decoded after calling HMC.DecodeParameters(): \"" + sReq + "\"");
-//prtln("debug: macLastTwo from HMC.DecodeParameters(): " + String(macLastTwo));
-
-    if (macLastTwo < 0){ // negative if error in HMC.DecodeParameters()!
-      if (macLastTwo == -3){ // failed to decode
-        int rxPrevToken = IML.GetRxPrevToken(rxIdx);
-        if (rxPrevToken != NO_TOKEN){
-          IML.SetRxToken(rxIdx, rxPrevToken);
-          IML.SetRxPrevToken(rxIdx, NO_TOKEN);
-          sReq = HTTPRESP_DECPREV_FAIL;
-          code = HTTPCODE_DECPREV_FAIL;
-          prtln("DEBUG: HandleHttpAsyncReq(): setting Rx Token to previous and sending response HTTPCODE_DECPREV_FAIL!");
-        }else{
-          IML.SetRxToken(rxIdx, NO_TOKEN);
-          sReq = HTTPRESP_DECODE_FAIL;
-          code = HTTPCODE_DECODE_FAIL;
-          prtln("DEBUG: HandleHttpAsyncReq(): previous Rx token was NO_TOKEN, sending response HTTPCODE_DECODE_FAIL!");
-        }
-      }
-      else{ // checksum or other failure of parameter-commands decoding...
-        sReq = HTTPRESP_PARAM_FAIL;
-        code = HTTPCODE_PARAM_FAIL;
-      }
-      prtln("DEBUG: HandleHttpAsyncReq(): HMC.DecodeParameters() returned error: " + String(macLastTwo));
-    }
-    else{
-      //s = "Decoded: \"" + s + '"';
-//prtln("DEBUG: HandleHttpAsyncReq(): rxToken after DecodeParameters(): " + String(IML.GetRxToken(rxIdx)));    
-
-      // if a pending new token was received, we want to reply "TOKOK" instead of "PARAMOK"
-      if (bPendingTokenWasSet){
-        sReq = HTTPRESP_TOK_OK;
-        code = HTTPCODE_TOK_OK;
-      }else{
-        sReq = HTTPRESP_PARAM_OK;
-        code = HTTPCODE_PARAM_OK;
-      }
-
-      if (macLastTwo > 0){ // positive if a mac-string was decoded
-        IML.SetMdnsMAClastTwo(rxIdx, macLastTwo);
-        CheckMasterStatus();
-      }
-      
-      prtln("HandleHttpAsyncReq(): HTTP_ASYNCREQ_PARAM_COMMAND OK!: decoded macLastTwo=" + String(macLastTwo));
-    }
-//prtln("debug: sending HTTP_ASYNCREQ_PARAM_COMMAND response code and string: " + String(code) + ", s=\"" + s + "\"");
-    sReply = sReq;
+  for (int ii = 0; ii < iParamCount; ii++){
+    AsyncWebParameter* p = request->getParam(ii);
+    if (p != NULL)
+      sParam[ii] = String(p->name()) + '=' + String(p->value());
   }
 
-  if (request->hasParam(HTTP_ASYNCREQ_PARAM_TIMESET) && (code == HTTPCODE_PARAM_OK || code == HTTPCODE_TOK_OK)){
-    String sTmp = MyDecodeStr(request->getParam(HTTP_ASYNCREQ_PARAM_TIMESET)->value(), HTTP_TABLE1, saveRxTok, CIPH_CONTEXT_BACKGROUND);
-    if (!sTmp.isEmpty()){
-      if (g_bSyncTime)
-        sTmp = SetTimeDate(sTmp); // returns the time/date that was set or empty if not able to read
-      else
-        prtln("HandleHttpAsyncReq(): got remote time-set, but sync is off!");
-    }
-
-    if (sTmp.isEmpty()){
-      code = HTTPCODE_TIMESET_FAIL; // time-set failed!
-      prtln("HandleHttpAsyncReq(): time was not set!");
-    }
-    else
-      prtln("HandleHttpAsyncReq(): time remotely set: " + sTmp);
-
-    // don't add anything more to sReply here - just means it must be parsed by the HTTP client callback!
-  }
-
-  if (sReply == HTTPRESP_DECODE_FAIL || sReply == HTTPRESP_DECPREV_FAIL)
-    sReply = MyEncodeStr(sReply, HTTP_TABLE3, FAILSAFE_TOKEN_1, CIPH_CONTEXT_BACKGROUND);
-  else if (sReply != HTTPRESP_PARAM_FAIL)
-    // (NOTE 7/2023: decided to use rxtoken to encode the response, and tx token in the other unit's callback to decode.
-    // This is so that the entire Tx->Rx->Response loop is completed using the same token-set)
-    sReply = MyEncodeStr(sReply, HTTP_TABLE1, saveRxTok, CIPH_CONTEXT_BACKGROUND);
-
-  if (sReply.isEmpty()){
-    sReply = HTTPRESP_PARAM_FAIL;
-    prtln("HandleHttpAsyncReq(): MyEncodeStr(sReply) returned empty string!");
-  }
-  if (sReply == HTTPRESP_PARAM_FAIL){
-    sReply = MyEncodeStr(sReply, HTTP_TABLE3, FAILSAFE_TOKEN_1, CIPH_CONTEXT_BACKGROUND);
-    code = HTTPCODE_PARAM_FAIL;
-    prtln("HandleHttpAsyncReq(): sending HTTPRESP_PARAM_FAIL!");
-  }
-  SendHttpClientResponse(request, sReply, code);
+  // NOTE: order of parameters does not matter! 0,1 1,0
+  TSK.QueueTask(TASK_PROCESS_RECEIVE_STRING, IpToUInt(sIp), rxTok, sParam[1], sParam[0]);
+  
+  iCode = HTTPCODE_PROCESSING_OK;
+  sReply = HTTPRESP_PROCESSING_OK;
+  prtln("HandleHttpAsyncReq(): replying HTTPRESP_PROCESSING_OK: " + sIp);
+  
+finally:
+  iErr = MyEncodeStr(sReply, HTTP_TABLE3, FAILSAFE_TOKEN_1, CIPH_CONTEXT_BACKGROUND);
+  
+noencode:
+  if (iErr)
+    prtln("SendHttpCanRxReq(): bad encode: " + String(iErr));
+  else
+    SendHttpClientResponse(request, sReply, iCode);
 }
 
 void SendHttpClientMacResponse(AsyncWebServerRequest *request, String sResp, int code){
   if (!sResp.isEmpty()){
     AsyncWebServerResponse *r = request->beginResponse(code, "text/plain", sResp);
-    String sIp = request->client()->localIP().toString();
+//    String sIp = request->client()->localIP().toString();
 //prtln("DEBUG: SendHttpClientMacResponse(): sIp before MyEncodeStr(): " + sIp);
-    sIp = MyEncodeStr(sIp, HTTP_TABLE3, FAILSAFE_TOKEN_4, CIPH_CONTEXT_BACKGROUND);
+//    sIp = MyEncodeStr(sIp, HTTP_TABLE3, FAILSAFE_TOKEN_4, CIPH_CONTEXT_BACKGROUND);
 //prtln("DEBUG: SendHttpClientMacResponse(): sIp after MyEncodeStr() (about to call r->addHeader()): " + sIp);
-    r->addHeader(HTTP_SERVER_IP_HEADER_NAME, sIp.c_str());
-    String sMac = MyEncodeNum(IML.GetOurDeviceMacLastTwoOctets(), HTTP_TABLE1, FAILSAFE_TOKEN_5, CIPH_CONTEXT_BACKGROUND);
+//    r->addHeader(HTTP_SERVER_IP_HEADER_NAME, sIp.c_str());
+    String sMac = MyEncodeNum(GetOurDeviceMacLastTwoOctets(), HTTP_TABLE1, FAILSAFE_TOKEN_5, CIPH_CONTEXT_BACKGROUND);
     r->addHeader(HTTP_SERVER_MAC_HEADER_NAME, sMac.c_str());
     //r->addHeader("Connection", "close");
     request->send(r);
@@ -369,11 +282,11 @@ void SendHttpClientMacResponse(AsyncWebServerRequest *request, String sResp, int
 void SendHttpClientResponse(AsyncWebServerRequest *request, String sResp, int code){
   if (!sResp.isEmpty()){
     AsyncWebServerResponse *r = request->beginResponse(code, "text/plain", sResp);
-    String sIp = request->client()->localIP().toString();
+//    String sIp = request->client()->localIP().toString();
 //prtln("DEBUG: SendHttpClientResponse(): sIp before MyEncodeStr(): " + sIp);
-    sIp = MyEncodeStr(sIp, HTTP_TABLE3, FAILSAFE_TOKEN_4, CIPH_CONTEXT_BACKGROUND);
+//    sIp = MyEncodeStr(sIp, HTTP_TABLE3, FAILSAFE_TOKEN_4, CIPH_CONTEXT_BACKGROUND);
 //prtln("DEBUG: SendHttpClientResponse(): sIp after MyEncodeStr(): " + sIp);
-    r->addHeader(HTTP_SERVER_IP_HEADER_NAME, sIp.c_str());
+//    r->addHeader(HTTP_SERVER_IP_HEADER_NAME, sIp.c_str());
     //r->addHeader("Connection", "close");
     request->send(r);
   }
@@ -407,21 +320,21 @@ void HandleButtonsReq(AsyncWebServerRequest *request){
         if (g8_ssr1ModeFromWeb != SSR_MODE_ON){
           g8_ssr1ModeFromWeb = SSR_MODE_ON;
           SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
-          QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
         }
       }
       else if (buttonMode == "1"){
         if (g8_ssr1ModeFromWeb != SSR_MODE_OFF){
           g8_ssr1ModeFromWeb = SSR_MODE_OFF;
           SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
-          QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
         }
       }
       else if (buttonMode == "2"){
         if (g8_ssr1ModeFromWeb != SSR_MODE_AUTO){
           g8_ssr1ModeFromWeb = SSR_MODE_AUTO;
           SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
-          QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_A);
         }
       }
     }
@@ -430,21 +343,21 @@ void HandleButtonsReq(AsyncWebServerRequest *request){
         if (g8_ssr2ModeFromWeb != SSR_MODE_ON){
           g8_ssr2ModeFromWeb = SSR_MODE_ON;
           SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
-          QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
         }
       }
       else if (buttonMode == "1"){
         if (g8_ssr2ModeFromWeb != SSR_MODE_OFF){
           g8_ssr2ModeFromWeb = SSR_MODE_OFF;
           SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
-          QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
         }
       }
       else if (buttonMode == "2"){
         if (g8_ssr2ModeFromWeb != SSR_MODE_AUTO){
           g8_ssr2ModeFromWeb = SSR_MODE_AUTO;
           SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
-          QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_B);
         }
       }
     }
@@ -460,13 +373,13 @@ void HandleHeartbeatReq(AsyncWebServerRequest *request){
     // check for received text (via internal Http client communications between units)
     // and echo it to the connected web-browser...
     for (int ii = 0; ii < IML.GetCount(); ii++){
-      String sRxTxt = IML.GetRxTxtStr(ii);
+      String sRxTxt = IML.GetStr(ii, MDNS_STRING_RXTXT);
       if (!sRxTxt.isEmpty()){
         if (sRxTxt.length() < MAXTXTLEN){
-          s = TEXT_PREAMBLE + g_sHostName + ": \"" + sRxTxt + "\"";
+          s = TEXT_PREAMBLE + sRxTxt; // prepend "TXT:" - javascript for web-page looks for that!
 //prtln("DEBUG: HandleHeartbeatReq(): sending text from " + IML.GetIP(ii).toString() + " to web-browser at " + request->client()->remoteIP().toString() + ": \"" + s + "\"");
         }
-        IML.SetRxTxtStr(ii, "");
+        IML.SetStr(ii, MDNS_STRING_RXTXT, "");
         break; // just send one - if there are more, send on subsequent heartbeat-requests...
       }
     }
@@ -515,7 +428,7 @@ void HandleIndexReq(AsyncWebServerRequest *request){
     // This sends current state, outlet mode, # times on and duty-cycle in percent to
     // javascript in our HTML web-page as 4 comma-seperated sub-strings
     if (sVal == PARAM_STATE1_VALUE){
-      s = (g_bSsr1On ? "ON" : "OFF");
+      s = (g_devStatus & DEV_STATUS_1) ? "ON" : "OFF";
       s += "," + SsrModeToString(g8_ssr1ModeFromWeb);
       s += "," + String(ComputeTimeToOnOrOffA()); // String(g_stats.AOnPrevCount+g_stats.AOnCounter)
       s += "," + PercentOnToString(g_stats.PrevDConA+g_stats.DConA, g_stats.HalfSecondCount+g_stats.HalfSecondCounter);
@@ -523,7 +436,7 @@ void HandleIndexReq(AsyncWebServerRequest *request){
   }
   else if (sName == PARAM_STATE2){
     if (sVal == PARAM_STATE2_VALUE){
-      s = (g_bSsr2On ? "ON" : "OFF");
+      s = (g_devStatus & DEV_STATUS_2) ? "ON" : "OFF";
       s += "," + SsrModeToString(g8_ssr2ModeFromWeb);
       s += "," + String(ComputeTimeToOnOrOffB()); // String(g_stats.AOnPrevCount+g_stats.AOnCounter)
       s += "," + PercentOnToString(g_stats.PrevDConB+g_stats.DConB, g_stats.HalfSecondCount+g_stats.HalfSecondCounter);
@@ -560,7 +473,7 @@ void HandleIndexReq(AsyncWebServerRequest *request){
         s = "Max label length is: " + String(LABEL_MAXLENGTH) + "!";
       else{
         int iTask = (sName == PARAM_LABEL_A) ? TASK_LABEL_A : TASK_LABEL_B;
-        QueueTask(iTask, sVal);
+        TSK.QueueTask(iTask, sVal);
       }
       
       if (s != "")
@@ -571,15 +484,15 @@ void HandleIndexReq(AsyncWebServerRequest *request){
       int iVal = B64C.hnDecNumOnly(sVal);
 
       if (sName == PARAM_PERMAX){
-        QueueTask(TASK_PARMS, SUBTASK_PERMAX, iVal);
+        TSK.QueueTask(TASK_PARMS, SUBTASK_PERMAX, iVal);
         iStatus = 1;
       }
       else if (sName == PARAM_PERUNITS){
-        QueueTask(TASK_PARMS, SUBTASK_PERUNITS, iVal);
+        TSK.QueueTask(TASK_PARMS, SUBTASK_PERUNITS, iVal);
         iStatus = 1;
       }
       else if (sName == PARAM_PERVAL){
-        QueueTask(TASK_PARMS, SUBTASK_PERVAL, iVal);
+        TSK.QueueTask(TASK_PARMS, SUBTASK_PERVAL, iVal);
         iStatus = 1;
       }
     }
@@ -617,7 +530,7 @@ void HandleGetP2Req(AsyncWebServerRequest *request){
 
   // used to set our time from time on remote laptop
   if (sName == PARAM_DATETIME){
-    s = SetTimeDate(sVal);
+    s = SetTimeDate(sVal, true);
   }
   else{
     if (IsLockedAlertGetPlain(request, false))
@@ -646,7 +559,7 @@ void HandleGetP2Req(AsyncWebServerRequest *request){
     }
     else if (sName == PARAM_ERASEDATA){
       if (sVal == ERASE_DATA_CONFIRM){
-        QueueTask(TASK_RESET_SLOTS);
+        TSK.QueueTask(TASK_RESET_SLOTS);
         s = "Deleting all time-events!";
       }
       else
@@ -705,27 +618,27 @@ void HandleAltP1Req(AsyncWebServerRequest *request){
   }
     
   if (sName == PARAM_PHASE)
-    QueueTask(TASK_PARMS, SUBTASK_PHASE, iVal);
+    TSK.QueueTask(TASK_PARMS, SUBTASK_PHASE, iVal);
   else if (sName == PARAM_DC_A)
-    QueueTask(TASK_PARMS, SUBTASK_DCA, iVal);
+    TSK.QueueTask(TASK_PARMS, SUBTASK_DCA, iVal);
   else if (sName == PARAM_DC_B)
-    QueueTask(TASK_PARMS, SUBTASK_DCB, iVal);
+    TSK.QueueTask(TASK_PARMS, SUBTASK_DCB, iVal);
   else if (sName == PARAM_MIDICHAN){
     if (iVal != g8_midiChan){
       g8_midiChan = iVal;
-      QueueTask(TASK_MIDICHAN);
+      TSK.QueueTask(TASK_MIDICHAN);
     }
   }
   else if (sName == PARAM_MIDINOTE_A){
     if (iVal != g8_midiNoteA){
       g8_midiNoteA = iVal;
-      QueueTask(TASK_MIDINOTE_A);
+      TSK.QueueTask(TASK_MIDINOTE_A);
     }
   }
   else if (sName == PARAM_MIDINOTE_B){
     if (iVal != g8_midiNoteB){
       g8_midiNoteB = iVal;
-      QueueTask(TASK_MIDINOTE_B);
+      TSK.QueueTask(TASK_MIDINOTE_B);
     }
   }
 
@@ -746,7 +659,7 @@ void HandleGetP1Req(AsyncWebServerRequest *request){
 
   if (request->hasParam(PARAM_BUTRST)){
     if (g_bSoftAP && B64C.hnShiftDecode(request->getParam(PARAM_BUTRST)->value()) == PARAM_BUTRST_VALUE){
-      QueueTask(TASK_WIFI_RESTORE);
+      TSK.QueueTask(TASK_WIFI_RESTORE);
       s = "<script>alert('SSID and password reset to previous values!');";
     }
     else
@@ -815,7 +728,7 @@ void HandleP2FormReq(AsyncWebServerRequest *request){
   int repIndex = -1; // if this is -1 we add an event rather than replace
 
   // cancel pending refresh task
-  if (CancelTask(TASK_PAGE_REFRESH_REQUEST))
+  if (TSK.CancelTask(TASK_PAGE_REFRESH_REQUEST))
     g_bTellP2WebPageToReload = false;
 
   for (int ii = 0; ii < count; ii++){
@@ -837,7 +750,7 @@ void HandleP2FormReq(AsyncWebServerRequest *request){
     String sName = p->name();
     String sVal = B64C.hnShiftDecode(p->value());
 
-    //prtln("hnDecode: " + sName + ":" + sVal);
+    //prtln("hnDecode: " + sName + ':' + sVal);
 
     if (sName == PARAM_INCLUDETIMINGCYCLE)
       // this is a checkbox - weirdly, it reports "on" if checked and no parameter is sent
@@ -1083,13 +996,13 @@ String ReplaceHtmlPercentSign(const String& var){
       ProcessRandMAC(WIFI_IF_STA);
 
       sRet = "<form action='" + String(EP_GET_P1) + "' method='get' name='fName' id='fName'>"
-             "<input type='hidden' name='" + String(PARAM_WIFINAME) + "' id='hidName'>WiFi Name:<br>"
+             "<input type='hidden' name='" + PARAM_WIFINAME + "' id='hidName'>WiFi Name:<br>"
              "<input type='text' id='wifiName' list='wifiNames'>"
              "<datalist id='wifiNames'>" + WiFiScan(sTemp) + "</datalist><br>"
-             "<input type='hidden' name='" + String(PARAM_WIFIPASS) + "' id='hidPass'>Password:<br>"
-             "<input type='password' id='wifiPass' value='" + sDummyPass + "' maxlength='" + String(MAXPASS) + "'>"
+             "<input type='hidden' name='" + PARAM_WIFIPASS + "' id='hidPass'>Password:<br>"
+             "<input type='password' id='wifiPass' value='" + sDummyPass + "' maxlength='" + MAXPASS + "'>"
              "<input type='submit' value='Submit'></form><br>"
-             "<a href='" + EP_GET_P1 + "?" + String(PARAM_BUTRST) + "=hnEncode(" + PARAM_BUTRST_VALUE + ")'><button>Restore</button></a>"
+             "<a href='" + String(EP_GET_P1) + "?" + PARAM_BUTRST + "=hnEncode(" + PARAM_BUTRST_VALUE + ")'><button>Restore</button></a>"
              "<script>" + "$('#fName').submit(function(){"
                   "var wfn = document.getElementById('wifiName');"
                   "document.getElementById('hidName').value=hnEncode(wfn.value);"
@@ -1098,8 +1011,7 @@ String ReplaceHtmlPercentSign(const String& var){
                   "document.getElementById('hidPass').value=hnEncode(wfp.value);"
                   "wfp.value='';"
                 "});"
-             "</script>"
-             "<script src='sct.js' type='text/javascript'></script>";
+             "</script>";
     }
     else
       sRet = ""; // replace %P1APMODE% with nothing if in STA WiFi mode!

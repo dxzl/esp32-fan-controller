@@ -23,61 +23,77 @@
 #define MDNS_ASYNC_SEARCH_TIMEOUT 1000
 #define MDNS_ASYNC_SEARCH_MAX_COUNT 7
 
+#define MDNS_FLAG_CHANGE_OK 0
+#define MDNS_FLAG_LINK_OK 1
+#define MDNS_FLAG_REQUEST_DEFAULT_TOKEN_CHANGE 2
+#define MDNS_FLAG_CANRX_MAIN_DECODE_FAIL 3
+#define MDNS_FLAG_CANRX_CALLBACK_DECODE_FAIL 4
+#define MDNS_FLAG_SEND_PROCESSING 5
+#define FLAG_COUNT_MDNS 6 // set 1 higher than last flag's index!
+
+#define MDNS_TOKEN_RX 0
+#define MDNS_TOKEN_RXPREV 1
+#define MDNS_TOKEN_RXNEXT 2
+#define MDNS_TOKEN_TX 3
+#define MDNS_TOKEN_TXPREV 4
+#define MDNS_TOKEN_TXNEXT 5
+#define MDNS_TOKEN_CANRX_RX 6
+#define MDNS_TOKEN_CANRX_TX 7
+#define MDNS_TOKEN_SAVE 8
+#define TOKEN_COUNT_MDNS 9 // set 1 higher than last token's index!
+
+#define MDNS_STRING_KEY 0
+#define MDNS_STRING_RXTXT 1
+#define MDNS_STRING_SEND_ALL 2
+#define MDNS_STRING_SEND_SPECIFIC 3
+#define MDNS_STRING_RXPROCCODE 4
+#define STRING_COUNT_MDNS 5 // set 1 higher than last string's index!
+
 class MdnsListClass{
   private:
 
     typedef struct{
       IPAddress ip;
       uint16_t mac_last_two_octets;
-      int iMin, sendCount; // we store current minute and delete this entry if older than 10 min.
-      int rxToken, rxPrevToken, txToken, txPrevToken, txNextToken, saveToken; // NO_TOKEN is 255
-      bool bSendTime, bSendOk, bTokOk, bLinkOk;
-      String sSend, sUtil, sRxTxt;
+      int iMin, devStatus, sendCount;
+      int tokens[TOKEN_COUNT_MDNS];
+      bool flags[FLAG_COUNT_MDNS];
+      String strings[STRING_COUNT_MDNS];
     } t_indexMdns;
     
     std::vector<t_indexMdns> arr;
 
-    uint16_t GetHighestMac();
     bool SetSize(int newSize);
     int DeleteOldestNoLinkMdnsEntry();
 
   public:
     
-    void PrintInfo();
-    int GetRxToken(int idx);
-    int GetRxPrevToken(int idx);
-    void SetRxToken(int idx, int val);
-    void SetRxPrevToken(int idx, int val);
-    void SetSaveToken(int idx, int val);
-    int GetTxToken(int idx);
-    int GetTxPrevToken(int idx);
-    int GetTxNextToken(int idx);
-    int GetSaveToken(int idx);
-    void SetTxToken(int idx, int val);
-    void SetTxPrevToken(int idx, int val);
-    void SetTxNextToken(int idx, int val);
-    void SetAllTokens(int idx, int val);
+    bool IsGoodIndex(int idx);
+    
+    void PrintMdnsInfo();
     uint16_t GetMdnsMAClastTwo(int idx);
     void SetMdnsMAClastTwo(int idx, uint16_t val);
-    String GetSendStr(int idx);
-    void SetSendStr(int idx, String val);
-    String GetUtilStr(int idx);
-    void SetUtilStr(int idx, String val);
-    String GetRxTxtStr(int idx);
-    void SetRxTxtStr(int idx, String val);
-    bool GetSendTimeFlag(int idx);
-    void SetSendTimeFlag(int idx, bool val);
-    bool GetSendOkFlag(int idx);
-    void SetSendOkFlag(int idx, bool val);
-    void SetSendOkFlag(IPAddress ipFind, bool val);
-    bool GetTokOkFlag(int idx);
-    void SetTokOkFlag(int idx, bool val);
-    void SetTokOkFlag(IPAddress ipFind, bool val);
-    bool GetLinkOkFlag(int idx);
-    void SetLinkOkFlag(int idx, bool val);
-    void SetLinkOkFlag(IPAddress ipFind, bool val);
+    
+    String GetStr(int idx, int iString);
+    void SetStr(int idx, int iString, String val);
+    void InitStrings(int idx);
+    
+    int GetToken(int idx, int iToken);
+    void SetToken(int idx, int iToken, int val);
+    void InitTokens(int idx);
+
+    bool GetFlag(int idx, int iFlag);
+    void SetFlag(int idx, int iFlag, bool val);
+    void SetFlag(IPAddress ipFind, int iFlag, bool val);
+    bool IsFlagSetForAnyIP(int iFlag);
+    bool IsFlagSetForAllIP(int iFlag);
+    void SetFlagForAllIP(int iFlag, bool val);
+    void InitFlags(int idx);
+    
     int GetSendCount(int idx);
     void SetSendCount(int idx, int val);
+    int GetStatus(int idx);
+    void SetStatus(int idx, int val);
     int GetMinute(int idx);
     void SetMinute(int idx, int val);
     IPAddress GetIP(int idx);
@@ -90,11 +106,11 @@ class MdnsListClass{
     void RestorePrevTokens(int idx);
     
     int AddMdnsIp(IPAddress ipNew);
+    int FindMdnsIp(uint32_t iIp);
     int AddMdnsIp(String sIP);
     int FindMdnsIp(String sIp);
     int FindMdnsIp(IPAddress ipFind);
-    void ClearLinkOkFlagsForExpiredMdnsIps();
-    uint16_t GetOurDeviceMacLastTwoOctets();
+    void DeleteExpiredMdnsIps();
 
     bool DelMdnsIp(IPAddress ipDel);
     bool DelMdnsIp(int idx);
@@ -102,12 +118,6 @@ class MdnsListClass{
     bool ClearMdnsSendInfo(IPAddress ipClear);
     bool ClearMdnsSendInfo(int idx);
     
-    bool AreWeMaster();
-    bool IsAnyMacZero();
-    bool AreAllTokOkFlagsSet();
-    void ClearAllTokOkFlags();
-    void ClearAllLinkOkFlags();
-    void SetAllSendTimeFlags();
     void QueryMdnsServiceAsync(const char* host_name);
     //void QueryHostServiceAsync(const char* host_name);
     bool CheckMdnsSearchResult();

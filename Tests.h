@@ -10,16 +10,9 @@
 #define TEST_5_ON false
 #define TEST_6_ON false
 #define TEST_7_ON false
-
-/*
-#define TEST_1_ON true
-#define TEST_2_ON true
-#define TEST_3_ON true
-#define TEST_4_ON true
-#define TEST_5_ON true
-#define TEST_6_ON true
-#define TEST_7_ON true
-*/
+#define TEST_8_ON false
+#define TEST_9_ON false
+#define TEST_10_ON false
 
 void Tests();
 #endif

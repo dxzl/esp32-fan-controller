@@ -16,5 +16,6 @@ void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info);
 //void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info);
 //void WiFiEvent(WiFiEvent_t event);
 //void printWiFiEventDetails(WiFiEvent_t event);
+IPAddress GetLocalIp();
 
 #endif

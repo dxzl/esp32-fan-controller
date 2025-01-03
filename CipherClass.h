@@ -12,10 +12,10 @@
 
 // NOTE: be sure to put the backslash escape before the " or \ char!
 // NOTE:  only all lower-case works reliably!
-#define HTTP_CIPKEY_INIT "J<cM7gxtS*u%p/?v/CH)aQ=\"o4VSFT5," // 32 chars for 256-bit AES encryption
+#define HTTP_CIPKEY_INIT "J<cM7?v/CH)aQg\x07tS*u%p/=\"o4VT5,SF" // 32 chars for 256-bit AES encryption (escape sequence \x01-\xff allowed)
 
 // initialization vector
-#define CIPH_INIT_VECT "=E.*O48>9Y!$b1O>"
+#define CIPH_INIT_VECT "gLO#\x0bP7kjy*b&c3B" // 16 chars (escape sequence \x01-\xff allowed)
 
 #define CIPKEY_MAX 32 // need 16 bytes for 128-bit and 32 bytes for 256-bit encryption
 #define CIPKEY_BITS_LENGTH (CIPKEY_MAX*8)

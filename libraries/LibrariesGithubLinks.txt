@@ -1,19 +1,14 @@
 Libraries needed:
 
-https://github.com/dvarrel/AsyncTCP
 https://github.com/lathoub/Arduino-AppleMidi-Library
 https://github.com/FortySevenEffects/arduino_midi_library
 https://github.com/khoih-prog/AsyncHTTPRequest_Generic
 https://www.arduino.cc/reference/en/libraries/wifi/
 https://github.com/me-no-dev/ESPAsyncWebServer
+https://github.com/me-no-dev/ESPAsyncTCP
 
-//NOTE: ESPAsyncWebServer has custom modifications to work with ESP Tools 3.0.0
-// You need to use the library I've zipped in file: misc\ESPAsyncWebServerFor3-0-0.zip
-
-// NOTE: MyPreferences has my custom modifications to Preferences (below)...
-
-// libraries built-in for version 3.0.0
-Path: C:\Users\YOURNAME\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.0\libraries
+// libraries built-in for version 3.0.2
+Path: C:\Users\YOURNAME\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.2\libraries
 https://github.com/espressif/arduino-esp32/tree/master/libraries/SPIFFS
 https://github.com/espressif/arduino-esp32/tree/master/libraries/ESPmDNS
 https://github.com/espressif/arduino-esp32/tree/master/libraries/Update
@@ -25,7 +20,7 @@ https://github.com/espressif/arduino-esp32/tree/master/libraries/Preferences
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
 #include <ESPmDNS.h>
-#include <MyPreferences.h>
+#include <Preferences.h>
 #include <Update.h>
 #include <AppleMIDI.h>
 #include "SPIFFS.h"

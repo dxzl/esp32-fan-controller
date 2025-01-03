@@ -3,6 +3,38 @@
 
 #include <Arduino.h>
 
+// TimeSlot field chars
+#define TSC_YES                      "y"
+#define TSC_OFF                      "off"
+#define TSC_INF                      "inf"
+#define TSC_REPEAT_MODE              't'
+#define TSC_REPEAT_COUNT             'r'
+#define TSC_EVERY_COUNT              'e'
+#define TSC_INCLUDE_CYCLE_TIMING     'i'
+#define TSC_CYCLE_TIMING_IN_REPEATS  'c'
+#define TSC_DUTY_CYCLE_A             'a'
+#define TSC_DUTY_CYCLE_B             'b'
+#define TSC_PHASE                    'p'
+#define TSC_UNITS                    'u'
+#define TSC_PERMAX                   'm'
+#define TSC_PERVAL                   'v'
+
+// repeat modes (set on p2.html web-page)
+#define RPT_OFF      0
+#define RPT_SECONDS  1
+#define RPT_MINUTES  2
+#define RPT_HOURS    3
+#define RPT_DAYS     4
+#define RPT_WEEKS    5
+#define RPT_MONTHLY  6
+#define RPT_YEARS    7
+
+#define MAX_TIME_SLOTS          100 // EE_SLOT_xxx (xxx is 000 to 099)
+#define MAX_RECORD_SIZE         300
+#define MAX_FILE_SIZE           (2*MAX_TIME_SLOTS*MAX_RECORD_SIZE) // upper limit for incoming text-file; allow for comment-lines!\r\n"
+#define EVENT_LENGTH_SEC        29 // "umtrdssttX2020-06-05T23:59:59"
+#define EVENT_LENGTH_NOSEC      26 // "umtrdssttX2020-06-05T23:59"
+
 typedef struct{
   uint8_t dayOfWeek; // 0=Sunday, 1=Monday... 6=Saturday
   uint8_t hour;
@@ -43,6 +75,7 @@ class TimeSlotsClass{
     bool ParseRepeatMode(String &s, int16_t &iRepeatMode);
 
   public:
+    String PrintTimeSlots();
     bool StringToTimeSlot(String sIn, t_event &slotData);
     void ProcessMinuteResolutionTimeSlots();
     void ProcessSecondResolutionTimeSlots();
@@ -54,6 +87,7 @@ class TimeSlotsClass{
     bool EraseTimeSlots();
     int CountFullTimeSlots();
     String GetSlotNumAsString(int val);
+//    int GetSlotIndexFromName(String sName);
     bool DisableTimeSlot(int slotIndex);
     bool EnableTimeSlot(int slotIndex, bool bEnable=true);
     bool AddTimeSlot(t_event &slotData, bool bVerbose=false);

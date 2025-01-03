@@ -2,9 +2,8 @@
 //#define FanControllerH
 #pragma once
 
-// links for additional boards in Arduino IDE Preferences
-// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
+// needed by AsyncHTTPRequest_Generic.h library
+#define ESP32 true
 
 #include <Arduino.h>
 
@@ -14,55 +13,37 @@
 
 // Import required libraries
 #include <ESPmDNS.h>
-#include <MyPreferences.h>
+#include <MyPreferences.h> // custom change to disable error-logging in getBytesLength()
 #include <Update.h>
-#include <AppleMIDI.h>
 
-// note: AsyncTCP_SSL is available, AsyncHTTPSRequest_Generic is available and esp32_https_server is at
-// https://github.com/fhessel/esp32_https_server 
-// ESPAsyncWebServer has no working SSL version at this time... October 3, 2022
-//#include <WiFiUdp.h>
-//#include <AsyncUDP.h>
-//#include <MIDI.h>
-//#include <AsyncTCP.h>
-//#include <WiFiClient.h>
-//#include <WebServer.h>
-//#include <OneWire.h>
-//#include <DallasTemperature.h>
-//#define ARDUINOJSON_DECODE_UNICODE 0 // don't decode unicode escape sequences
-//#include <ArduinoJson.h> // define before MsgPack.h
-//#include <AsyncJson.h>
-//#include "FS.h" // add file-system functions https://arduino-esp8266.readthedocs.io/en/latest/filesystem.html
+// NOTE: if you set this true you will need to use the the bigger partition scheme and lose OTA programming
+// for the older ESP32 with 4MB flash. When true, you can control the outputs with a midi-keyboard.
+// If this is the 8MB flash (ESP32 S3), you can set this true!
+//
+// NOTE: 8/13/2024 - the memory limit for OTA is exceeded for the old ESP32 boards...
+// Now using: "No OTA 2MB App/ 2MB SPIFFS" - may as well set COMPILE_WITH_MIDI_LIBRARY true.
+#define COMPILE_WITH_MIDI_LIBRARY true
 
-#include "SPIFFS.h"
-#include "ESPAsyncWebServer.h"
+// links for additional boards in Arduino IDE Preferences
+// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
 
-#include "CipherClass.h" // aes32-Encrypt library requires Seed_Arduino_mbedtls library
-#include "B64Class.h"
-#include "ValueListClass.h"
-#include "RepeatListClass.h"
-#include "MdnsListClass.h"
-#include "PrefsClass.h"
-#include "TimeSlotsClass.h"
-#include "HttpMsgClass.h"
+// NOTE: there is an additional true/false switch above "COMPILE_WITH_MIDI_LIBRARY"!
+#define DTS_VERSION "Version 3.45 (December 16, 2024)"
 
-#include "FCUtils.h"
-#include "FCWiFI.h"
-#include "WSHandlers.h"
-#include "HttpClientHandlers.h"
-#include "Cmd.h"
-#include "Tasks.h"
-#include "Tests.h"
-
-USING_NAMESPACE_APPLEMIDI
-
-#define DTS_VERSION "Version 3.05 (June 18, 2024)"
+// Note: to compile for ESP32S3, set Tools->Board->ESP32 Arduino->ESP32S3 Dev Module,
+// set Tools->Flash Size->8MB, set Tools->CPU Frequency->240MHz, Partition Scheme->8M with spiffs (3MB app/1.5MB spiffs)
+// Note: Specifically select Port->(select port, COM7 usually)
+// Note: my S3 board "should" be 16MB - needs more sluthing!
+// (For the old ESP32 Dev Module, select it in Boards, use the 4MB RAM size - you need to use
+// Partition Scheme->No OTA (2MB app/2MB spiffs) or it won't fit!)
 #define ESP32_S3 false // set true if using ESP32 S3 board
+
 #define PRINT_ON true // set true to enable status printing to console
 #define RESET_PREFS false // set true to force clear on boot, then set back to false and rebuild...
 #define RESET_WIFI  false // ""
 #define RESET_SLOTS false // ""
-#define FORCE_DEF_CIPHER_KEY false
+#define FORCE_DEF_CIPHER_KEY false // force use of default cipher key AND default token!
 #define FORCE_AP_ON false
 #define FORCE_STA_ON false
 #define HTTP_CLIENT_TEST_MODE false // send random HTTP strings to each mDNS-discovered remote unit
@@ -77,13 +58,7 @@ USING_NAMESPACE_APPLEMIDI
 #define WIFI_MAX_CHANNEL 11 // 1-13 possible but max is 11 in USA!
 // NOTE: see PrefsClass.h for WIFI_MAX_POWER_INIT
 
-#define DEF_SSID "MyRouter"
-#define DEF_PWD "MyRouterPass"
-#define DEF_HOSTNAME "dts7"
-
 // log directely into this device via access-point mode at 192.168.7.7
-#define DEF_AP_SSID DEF_HOSTNAME
-#define DEF_AP_PWD "1234567890"
 #define DEF_AP_IP "192.168.7.7"
 #define DEF_AP_GATEWAY "192.168.7.7"
 #define DEF_AP_SUBNET_MASK "255.255.255.0"
@@ -96,6 +71,150 @@ USING_NAMESPACE_APPLEMIDI
 #define MDNS_SVC "dts"
 #define MDNS_SVCU "_dts"
 
+//----------------------------------------------------------------------------
+// defaults for EE_WIFI_NAMESPACE (see PrefsClass.h)
+
+#define DEF_HOSTNAME "dts7"
+#define DEF_SSID "MyRouter"
+#define DEF_PWD "MyRouterPass"
+#define DEF_AP_SSID DEF_HOSTNAME
+#define DEF_AP_PWD "1234567890"
+// most signifigant byte bit 0 is multicast bit - do not set
+// most signifigant byte bit 1 is locally administered bit - set this.
+// least signifigant three bytes are unique to manufacturer
+#define DEF_MAC "" // not set we use chip's MAC... format 42:ad:f2:23:d0
+#define LOCKCOUNT_INIT          -1 // unlocked
+#define LOCKPASS_INIT           "****"
+
+//----------------------------------------------------------------------------
+// defaults for EE_PREFS_NAMESPACE (see PrefsClass.h)
+
+// set timezone
+// https://remotemonitoringsystems.ca/time-zone-abbreviations.php
+//Australia   Melbourne,Canberra,Sydney   EST-10EDT-11,M10.5.0/02:00:00,M3.5.0/03:00:00
+//Australia   Perth   WST-8
+//Australia   Brisbane  EST-10
+//Australia   Adelaide  CST-9:30CDT-10:30,M10.5.0/02:00:00,M3.5.0/03:00:00
+//Australia   Darwin  CST-9:30
+//Australia   Hobart  EST-10EDT-11,M10.1.0/02:00:00,M3.5.0/03:00:00
+//Europe  Amsterdam,Netherlands   CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Athens,Greece   EET-2EEST-3,M3.5.0/03:00:00,M10.5.0/04:00:00
+//Europe  Barcelona,Spain   CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Berlin,Germany  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Brussels,Belgium  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Budapest,Hungary  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Copenhagen,Denmark  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Dublin,Ireland  GMT+0IST-1,M3.5.0/01:00:00,M10.5.0/02:00:00
+//Europe  Geneva,Switzerland  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Helsinki,Finland  EET-2EEST-3,M3.5.0/03:00:00,M10.5.0/04:00:00
+//Europe  Kyiv,Ukraine  EET-2EEST,M3.5.0/3,M10.5.0/4
+//Europe  Lisbon,Portugal   WET-0WEST-1,M3.5.0/01:00:00,M10.5.0/02:00:00
+//Europe  London,GreatBritain   GMT+0BST-1,M3.5.0/01:00:00,M10.5.0/02:00:00
+//Europe  Madrid,Spain  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Oslo,Norway   CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Paris,France  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Prague,CzechRepublic  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Roma,Italy  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//Europe  Moscow,Russia   MSK-3MSD,M3.5.0/2,M10.5.0/3
+//Europe  St.Petersburg,Russia  MST-3MDT,M3.5.0/2,M10.5.0/3
+//Europe  Stockholm,Sweden  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
+//New Zealand   Auckland, Wellington  NZST-12NZDT-13,M10.1.0/02:00:00,M3.3.0/03:00:00
+//USA & Canada  Hawaii Time   HAW10
+//USA & Canada  Alaska Time   AKST9AKDT
+//USA & Canada  Pacific Time  PST8PDT
+//USA & Canada  Mountain Time   MST7MDT
+//USA & Canada  Mountain Time (Arizona, no DST)   MST7
+//USA & Canada  Central Time  CST6CDT
+//USA & Canada  Eastern Time  EST5EDT
+//Atlantic  Atlantic Time   AST4ADT
+//Asia  Jakarta   WIB-7
+//Asia  Jerusalem   GMT+2
+//Asia  Singapore   SGT-8
+//Asia  Ulaanbaatar, Mongolia   ULAT-8ULAST,M3.5.0/2,M9.5.0/2
+//Central and South America   Brazil,Sao Paulo  BRST+3BRDT+2,M10.3.0,M2.3.0
+//Central and South America   Argentina   UTC+3
+//Central and South America   Central America   CST+6
+#define SNTP_TZ_INIT "CST6CDT"
+#define SNTP_INT_INIT 7 // 0=off (hours)
+
+// presently, tokens are int (0-63) 255 = NO_TOKEN
+// uint8_t, range MIN_TOKEN to MAX_TOKEN (should be under the base64 table-length...)
+// you can change TOKEN_INIT but I'd advise no greater than 18 or so because the higher the
+// number the greater the processing time to do shifts...
+#define TOKEN_INIT 8 // NOTE: to set token use command "c token <token>"
+#define MIN_TOKEN  0
+#define MAX_TOKEN  (B64_TABLE_SIZE-1) // 63
+
+// 40 = 10dBm, 82 = 20dBm,  0.25dBm steps [40..82]
+#define WIFI_MAX_POWER_INIT 40
+#define MAX_POWER_MIN 40
+#define MAX_POWER_MAX 82
+
+// Flag masks for HTTP communication between other units through a router
+// (flag masks 32, 64, 128 available...)(stored in flash as a uint8_t EE_SYNC/SYNC_INIT)
+// g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncTime, g_bSyncEncrypt
+#define SYNC_INIT               (1+2+4+8+16) // EE_SYNC_MASK_RX|EE_SYNC_MASK_TX|EE_SYNC_MASK_CYCLE|EE_SYNC_MASK_TIME|EE_SYNC_MASK_ENCRYPT
+#define EE_SYNC_MASK_RX         1
+#define EE_SYNC_MASK_TX         2
+#define EE_SYNC_MASK_CYCLE      4
+#define EE_SYNC_MASK_TIME       8
+#define EE_SYNC_MASK_ENCRYPT    16
+
+// .25 sec units (4 ticks per second)
+#define PULSE_OFF_MODE_A_INIT 0 // 0=off, 1=on-to-off, 2=off-to-on, 3= both
+#define MINWID_A_INIT   (1*4) // when 0, we use only pulse-maxWidth with no variation
+#define MAXWID_A_INIT   (4*4) 
+#define MINPER_A_INIT   (10*4) // 10 sec
+#define MAXPER_A_INIT   (14*4)  // 14 sec
+
+// .25 sec units (4 ticks per second)
+#define PULSE_OFF_MODE_B_INIT 0 // 0=off, 1=on-to-off, 2=off-to-on, 3= both
+#define MINWID_B_INIT   (1*4) // when 0, we use only pulse-maxWidth with no variation
+#define MAXWID_B_INIT   (4*4) 
+#define MINPER_B_INIT   (10*4) // 10 sec
+#define MAXPER_B_INIT   (14*4)  // 14 sec
+
+#define LABEL_A_INIT            "Outlet A"
+#define LABEL_B_INIT            "Outlet B"
+#define LABEL_MAXLENGTH         32 // max length of index.html labelTxtA and labelTxtB contenteditable HTML5 fields
+
+#define PERUNITS_INIT           1 // 0= 1/2 sec, 1=sec, 2=min, 3=hrs
+#define PERUNITS_MIN            0 // index represents .5 second units for perMax
+#define PERUNITS_MAX            3 // index represents 1 hour units for perMax
+
+#define PERMAX_INIT             60 // 60 (sec, min, hrs, Etc.)
+#define PERMAX_MIN              1
+#define PERMAX_MAX              65535
+
+#define PERIOD_INIT             0 // percent offset of period (0-100) 0=random
+#define PERIOD_MIN              0 // %
+#define PERIOD_MAX              100 // 0 = random mode
+
+#define PHASE_INIT              100 // percent offset of period (0-100) 100=random
+#define PHASE_MIN               0 // %
+#define PHASE_MAX               100 // 0 = random mode
+
+#define DUTY_CYCLE_A_INIT       0 // percent on (0-100) 0=random
+#define DUTY_CYCLE_B_INIT       0 // percent on (0-100) 0=random
+#define DUTY_CYCLE_MIN          0 // %
+#define DUTY_CYCLE_MAX          100 // 0 = random mode
+#define MIN_RAND_PERCENT_DUTY_CYCLE 20 // smallest time-on is 20% of period when in random mode!
+
+#define MIDICHAN_INIT           MIDICHAN_OFF // off
+#define MIDINOTE_A_INIT         60 // middle C
+#define MIDINOTE_B_INIT         62 // middle D
+#define MIDINOTE_ALL            128 // all notes
+#define MIDICHAN_ALL            0 // all channels
+#define MIDICHAN_OFF            255 // no channels
+
+#define SSR1_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
+#define SSR2_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
+//----------------------------------------------------------------------------
+
+// NOTE: if you want custom security for your particular implementation, you can change the order of letters in _HttpCommandTable[]
+// in HttpMsgClass.h and you can change ENCODE_TABLE2 and ENCODE_TABLE3 in B64Class.h
+// You will also want to change TOKEN_INIT in PrefsClass.h! Also change HTTP_ASYNCREQ and HTTP_ASYNCREQ_PARAM_COMMAND in WSHandlers.cpp.
+
 // technically these can be 0-63 but better to keep them small for less processing overhead...
 // and 0 is probably not advised...
 #define FAILSAFE_TOKEN_1 4 // MAC from HTTP client send to the remote web-server
@@ -103,11 +222,6 @@ USING_NAMESPACE_APPLEMIDI
 #define FAILSAFE_TOKEN_3 3 // CanRx fail, text fail, param fail...
 #define FAILSAFE_TOKEN_4 5 // IP address string
 #define FAILSAFE_TOKEN_5 2 // MAC response from web-server to HTTP client callback
-
-// most signifigant byte bit 0 is multicast bit - do not set
-// most signifigant byte bit 1 is locally administered bit - set this.
-// least signifigant three bytes are unique to manufacturer
-#define DEF_MAC "" // not set we use chip's MAC... format 42:ad:f2:23:d0
 
 // https://en.wikipedia.org/wiki/Year_2038_problem this esp32 system won't work past 2035 sometime it appears!
 // Unix epoch is 00:00:00 UTC on 1 January 1970
@@ -120,9 +234,8 @@ USING_NAMESPACE_APPLEMIDI
 // I give two years to "live in the past" - for whatever reason... (this is 2020)!
 #define DEF_YEAR    2016 // (note: don't think someone made a mistake and failed to set this!) I've seen this year - filled in by the system before...
 
-// NOTE: if you want custom security for your particular implementation, you can change the order of letters in _HttpCommandTable[]
-// in HttpMsgClass.h and you can change ENCODE_TABLE2 and ENCODE_TABLE3 in B64Class.h
-// You will also want to change TOKEN_INIT in PrefsClass.h! Also change HTTP_ASYNCREQ and HTTP_ASYNCREQ_PARAM_COMMAND in WSHandlers.cpp.
+#define SNTP_SERVER1  "pool.ntp.org"
+#define SNTP_SERVER2  "time.nist.gov"
 
 // setting READ_WRITE_CUSTOM_BLK3_MAC true will write to BLK3 and permanently set efuse bits specified (presently written once).
 // set it false to use original factory base MAC from BLK1, set true to use MAC shown below as base MAC.
@@ -150,11 +263,18 @@ USING_NAMESPACE_APPLEMIDI
 #define MAXHOSTNAME 32
 
 // limit length of text sent via CMtxt command!
-#define MAXTXTLEN 80
+#define MAXTXTLEN 512
+#define MAXTIMELEN 19 // 2020-11-31T23:32:00
+
+// "c test on" - max length of random text
+#define TEST_TEXT_MAX_LENGTH 10
 
 // used for hnEncode()/hnDecode() for web-pages
 #define MIN_SHIFT_COUNT 1
 #define MAX_SHIFT_COUNT 12
+
+#define RESTART_KEY_MIN_LENGTH 5
+#define RESTART_KEY_MAX_LENGTH 10
 
 #if ESP32_S3
   // left side (USB at bottom)
@@ -231,14 +351,16 @@ USING_NAMESPACE_APPLEMIDI
 
 #define SERVER_PORT             80
 
+#define RESTART_EXPIRATION_TIME (5*60) // 5 minutes to type "c restart ip key" command after arming with "c restart all"
+
 #define TIME_SYNC_WAIT_TIME     10000 // time to wait for NTP time after connecting to wifi
 
 #define MIN_PERIOD_TIMER        10 // 5 seconds
 
 #define MANUAL_CLOCK_SET_DEBOUNCE_TIME 3 // 1 second units
 
-#define SEND_HTTP_TIME_MIN      10 // 1-second resolution
-#define SEND_HTTP_TIME_MAX      30
+#define SEND_HTTP_TIME_MIN      3 // 1-second resolution
+#define SEND_HTTP_TIME_MAX      7
 
 // we pick a random time from range below...
 #define SEND_DEF_TOKEN_TIME_MIN (60*12) // 1-minute resolution 16-bits - 0.5 days
@@ -260,15 +382,9 @@ USING_NAMESPACE_APPLEMIDI
 #define PULSE_MODE_ON_IF_OFF 2
 #define PULSE_MODE_ON_OR_OFF 3
 
-// repeat modes (set on p2.html web-page)
-#define RPT_OFF      0
-#define RPT_SECONDS  1
-#define RPT_MINUTES  2
-#define RPT_HOURS    3
-#define RPT_DAYS     4
-#define RPT_WEEKS    5
-#define RPT_MONTHLY  6
-#define RPT_YEARS    7
+// relay status in g_devStatus (up to 32 relays)
+#define DEV_STATUS_1    0
+#define DEV_STATUS_2    1
 
 // hardware timer
 #define HW_TIMER_FREQ 1000000 // use 1000000 for 1MHz
@@ -295,22 +411,43 @@ USING_NAMESPACE_APPLEMIDI
 
 #define LED_EEPROM_FLASH_TIME   3 // .5 sec units (indicated a value saved to eeprom)
 
-#define MAX_TIME_SLOTS          100 // EE_SLOT_xxx (xxx is 000 to 099)
-#define MAX_RECORD_SIZE         300
-#define MAX_FILE_SIZE           (2*MAX_TIME_SLOTS*MAX_RECORD_SIZE) // upper limit for incoming text-file; allow for comment-lines!\r\n"
-#define EVENT_LENGTH_SEC        29 // "umtrdssttX2020-06-05T23:59:59"
-#define EVENT_LENGTH_NOSEC      26 // "umtrdssttX2020-06-05T23:59"
 #define MAX_LOCKPASS_LENGTH     32
 
 #define T_ONE_HOUR (2*60*60)
 
-#define SER_IN_MAX             200
+#define SERIAL_PORT_MAX_INPUT   512
 
 // NOTE: "spiffs" in the filename differentiates a SPIFFS data .bin file from a main-program .bin file
 // during "over-the-air" programming! The web-server HTML files and javascript are in the fc.spiffs.bin file
 // and the main program is in fc.bin (or it might be in DTS_SMART_FAN_CONTROLLER.ino.esp32.bin)
 #define OTA_UPDATE_SPIFFS_VS_PGM_ID "spiffs"
 
+#if COMPILE_WITH_MIDI_LIBRARY
+#include <AppleMIDI.h>
+USING_NAMESPACE_APPLEMIDI
+#endif
+
+// note: AsyncTCP_SSL is available, AsyncHTTPSRequest_Generic is available and esp32_https_server is at
+// https://github.com/fhessel/esp32_https_server 
+// ESPAsyncWebServer has no working SSL version at this time... October 3, 2022
+//#include <WiFiUdp.h>
+//#include <AsyncUDP.h>
+//#include <MIDI.h>
+//#include <AsyncTCP.h>
+//#include <WiFiClient.h>
+//#include <WebServer.h>
+//#include <OneWire.h>
+//#include <DallasTemperature.h>
+//#define ARDUINOJSON_DECODE_UNICODE 0 // don't decode unicode escape sequences
+//#include <ArduinoJson.h> // define before MsgPack.h
+//#include <AsyncJson.h>
+//#include "FS.h" // add file-system functions https://arduino-esp8266.readthedocs.io/en/latest/filesystem.html
+
+#include "SPIFFS.h"
+#include "ESPAsyncWebServer.h"
+
+// define our custom structs before including our header files!!!!
+#define PERVALS_COUNT 6 // number of items in struct
 struct PerVals {
   uint8_t dutyCycleA = 0xff, dutyCycleB = 0xff, phase = 0xff; // saved in Preferences (units are %)
   uint8_t perUnits = 0xff, perVal = 0xff; // perUnits is an index to index.html select options
@@ -325,12 +462,31 @@ struct Stats {
   uint32_t AOnPrevCount, BOnPrevCount, PrevDConA, PrevDConB;
 };
 
+#include "CipherClass.h" // aes32-Encrypt library requires Seed_Arduino_mbedtls library
+#include "B64Class.h"
+#include "ValueListClass.h"
+#include "RepeatListClass.h"
+#include "MdnsListClass.h"
+#include "PrefsClass.h"
+#include "TimeSlotsClass.h"
+#include "HttpMsgClass.h"
+#include "TaskClass.h"
+#include "ChangeClass.h"
+
+#include "FCUtils.h"
+#include "FCTime.h"
+#include "FCWiFi.h"
+#include "WSHandlers.h"
+#include "HttpClientHandlers.h"
+#include "Cmd.h"
+#include "Tests.h"
+
 // function prototypes
 void SSR1On(uint32_t iPeriod);
 void SSR2On(uint32_t iPeriod);
 void serialEvent(); // event hndler for Serial
-void IRAM_ATTR onTimer();
-String SetTimeDate(String sVal);
+//void IRAM_ATTR onTimer();
+void onTimer();
 void dnsAndServerStart();
 void dnsAndServerStop();
 void print_wakeup_reason();
@@ -347,23 +503,27 @@ uint32_t ComputePhase();
 uint32_t GetTimeInterval(uint16_t perMax, uint8_t perUnits);
 void stopMIDI();
 void startMIDI();
-bool SendHttpReq(int idx);
 void TaskMidiChan(); // has to be in FanController.ino!
+void SendWithHeaders(AsyncWebServerRequest *request, String s);
 //String wsTemplateProc(const String& var);
-//#endif
 
-extern int g_slotCount, g_prevMdnsCount;
-extern int g_defToken, g_pendingDefToken, g_oldDefToken;
+extern int g_slotCount, g_prevMdnsCount, g_taskIdx;
+extern int g_defToken, g_origDefToken;
 extern int g_sct, g_minSct, g_maxSct;
+extern int g_oldDevStatus, g_devStatus;
+
 extern uint8_t g8_maxPower, g8_midiNoteA, g8_midiNoteB, g8_midiChan;
 extern uint8_t g8_ledFlashCount, g8_ledFlashCounter, g8_ledDigitCounter, g8_ledSaveMode, g8_ledMode, g8_ledSeqState;
 extern uint8_t g8_quarterSecondTimer, g8_fiveSecondTimer, g8_thirtySecondTimer, g8_ledFlashTimer, g8_clockSetDebounceTimer, g8_lockCount;
 extern uint8_t g8_digitArray[];
+
 extern uint16_t g16_pot1Value, g16_oldpot1Value; // variable for storing the potentiometer value
-extern uint16_t g16_oldMacLastTwo, g16_unlockCounter, g16_tokenSyncTimer, g16_sendDefTokenTimer;
+extern uint16_t g16_unlockCounter, g16_changeSyncTimer, g16_sendDefTokenTimer, g16_SNTPinterval;
 extern uint16_t g16_sendDefTokenTime, g16_sendHttpTimer, g16_asyncHttpIndex, g16_oddEvenCounter;
+
 extern uint32_t g32_periodTimer, g32_savePeriod, g32_dutyCycleTimerA, g32_dutyCycleTimerB, g32_phaseTimer, g32_nextPhase;
-extern String g_sHostName, g_sSSID, g_sApSSID, g_sKey, g_sMac, g_sLabelA, g_sLabelB, g_sSerIn, g_text;
+
+extern String g_sHostName, g_sSSID, g_sApSSID, g_sKey, g_sMac, g_sLabelA, g_sLabelB, g_sSerIn, g_text, g_sTimezone;
 
 extern bool g_bOldWiFiApSwOn, g_bOldWiFiStaSwOn;
 
@@ -382,8 +542,8 @@ extern uint8_t g8_ssr1ModeFromWeb, g8_ssr2ModeFromWeb;
 
 extern bool g_bWiFiConnected, g_bWiFiConnecting, g_bSoftAP, g_bMdnsOn, g_bWiFiDisabled, g_bResetOrPowerLoss, g_bTellP2WebPageToReload;
 extern bool g_bManualTimeWasSet, g_bWiFiTimeWasSet, g_bValidated, g_bRequestManualTimeSync, g_bRequestWiFiTimeSync, g_bMidiConnected;
-extern bool g_bSsr1On, g_bSsr2On, g_bOldSsr1On, g_bOldSsr2On, g_bTest, g_bLedOn;
-extern bool g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncToken, g_bSyncTime, g_bSyncEncrypt, g_bSyncMaster;
+extern bool g_bTest, g_bLedOn;
+extern bool g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncTime, g_bSyncEncrypt, g_bMaster;
 
 // cycle pulse-off
 extern uint8_t g8_pulseModeA, g8_pulseModeB;
@@ -392,17 +552,19 @@ extern uint8_t g8_pulseWidthTimerB, g8_pulseWidthB, g8_pulseMinWidthB, g8_pulseM
 extern uint16_t g16_pulsePeriodTimerA, g16_pulsePeriodA, g16_pulseMinPeriodA, g16_pulseMaxPeriodA;
 extern uint16_t g16_pulsePeriodTimerB, g16_pulsePeriodB, g16_pulseMinPeriodB, g16_pulseMaxPeriodB;
 
+extern uint16_t g16_restartExpirationTimer; 
+extern String g_sRestartKey, g_sRestartIp;
+
 extern time_t g_prevNow;
 extern Preferences PF;
 extern t_time_date g_prevDateTime;
-extern IPAddress g_httpTxIP;
+
 extern PerVals g_perVals, g_oldPerVals;
 extern Stats g_stats;
-
-extern const char EE_SLOT_PREFIX[], EE_HOSTNAME[], EE_MAC[], EE_SSID[], EE_OLDSSID[], EE_PWD[], EE_OLDPWD[], EE_APSSID[], EE_OLDAPSSID[], EE_APPWD[], EE_OLDAPPWD[], EE_LOCKPASS[], EE_LOCKCOUNT[];
-extern const char EE_PERMAX[], EE_PERUNITS[], EE_PERVAL[], EE_DC_A[], EE_DC_B[], EE_PHASE[], EE_RELAY_A[], EE_RELAY_B[], EE_MIDICHAN[], EE_MIDINOTE_A[], EE_MIDINOTE_B[];
-extern const char EE_SYNC[], EE_WIFI_DIS[], EE_LABEL_A[], EE_LABEL_B[], EE_TOKEN[], EE_MAX_POWER[], EE_CIPKEY[];
-extern const char EE_PULSE_OFF_MODE_A[], EE_PULSE_MINWID_A[], EE_PULSE_MAXWID_A[], EE_PULSE_MINPER_A[], EE_PULSE_MAXPER_A[];
-extern const char EE_PULSE_OFF_MODE_B[], EE_PULSE_MINWID_B[], EE_PULSE_MAXWID_B[], EE_PULSE_MINPER_B[], EE_PULSE_MAXPER_B[];
+extern IPAddress g_IpMaster;
 
 extern const char OBFUSCATE_STR[], SC_MAC_RANDOM[];
+extern const char NTP_SERVER1[], NTP_SERVER2[];
+
+//extern RTC_DATA_ATTR int bootCount;
+extern int bootCount;

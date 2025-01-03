@@ -19,17 +19,13 @@
 // used in the outer wrapper encoding/decoding of web-page messages. This is the industry-standatd base-64 encoding table and allows
 // communication via a standard HTTP web-URL WITHOUT percent-encoding!
 #define ENCODE_TABLE0 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" // 64 chars A-Z, a-z, 0-9, -, _
-// set ENCODE[1] to random sequence of A-Z, a-z, 0-9, _, - for internal messaging outer wrapper.
+// set ENCODE[1], ENCODE[2], ENCODE[3] to random sequence of A-Z, a-z, 0-9, _, -
 // use my Windows utility program Password Generator Sharp https://github.com/dxzl/password-generator-sharp
-// (if changed, must reflash all units!!!)
-#define ENCODE_TABLE1 "yEkO-cAoSUVdegifnzL49w_JK3R1hxlFqmIYa7THW2sQrpDGu6ZCtX0v8M5BNPbj" // 64 chars 
-// set ENCODE[2] to random sequence of A-Z, a-z, 0-9, _, - for internal messaging individual components such as *8Sh or &J2d
-// use my Windows utility program Password Generator Sharp https://github.com/dxzl/password-generator-sharp
-// (if changed, must reflash all units!!!)
-#define ENCODE_TABLE2 "hQygtSk0bRWxmALC1wJ7ZOTE65pHIX2UvBjfYziNoaM9DnG-drqVc8K4uePsF3l_" // 64 chars
-#define ENCODE_TABLE3 "PwFroTIXBzSJU0KZpWMCHsR6ye-NjudtaEVc3QiOhA8nDmk2_gYbvq7L91x5Glf4" // 64 chars
+// For internal messaging outer wrapper. If changed, must reflash all units!!!
+#define ENCODE_TABLE1 "UcPQWXB-YyIhTjOM8t1AxoD4lHdqmkuKivge3EGsnz_Fwrf92R60ZCSaJLb7pN5V" // 64 chars 
+#define ENCODE_TABLE2 "M-9mhCiKb5fdVNDjPL0yX43JTGFvOt8rS7aIWkoncu6px2RQgY_U1EeHAwlqzsBZ" // 64 chars
+#define ENCODE_TABLE3 "BnFbw_AWQJizIOLYsf2G-6h15ujZrHcEMU4pRqCN8XPK3oxgm0yVTal7DSk9etvd" // 64 chars
 
-//#define B36_TABLE_SIZE 36
 #define B64_TABLE_SIZE 64
 
 // wait for _busy flag to clear...
@@ -90,11 +86,11 @@ class B64Class{
     int hnShiftDecode(String sIn, String &sOut, int tableIdx=-1, int token=0);
     String hnShiftDecode(String sIn, int tableIdx=-1, int token=0);
 
-    String hnEncodeStr(String sIn, int tableIdx, int token);
-    String hnDecodeStr(String sIn, int tableIdx, int token);
+    String hnEncodeStr(String sIn, int tableIdx=-1, int token=0);
+    String hnDecodeStr(String sIn, int tableIdx=-1, int token=0);
 
-    int B64Dec(String& sIn);
-    String B64Enc(int n);
+    int32_t B64Dec(String& sIn);
+    String B64Enc(int32_t n);
 };
 #endif
 

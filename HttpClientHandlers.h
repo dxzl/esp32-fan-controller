@@ -7,14 +7,30 @@
 #define MAX_HEADER_LENGTH 200
 #define MINUTES_AFTER_DEF_TOKEN_FAIL_TO_INITIATE_RESET 2 // 0 is OFF
 
-#define CANRX_TOKEN_SHIFT 2 // 1-5
-#define HTTP_SERVER_IP_HEADER_NAME         "NmrU" // receiving unit's IP added to response via custom header 
-#define HTTP_CLIENT_MAC_HEADER_NAME        "LdWo" // last two octets of MAC address added to client-send via custom header
-#define HTTP_SERVER_MAC_HEADER_NAME        "KrXC" // last two octets of MAC address added to response via custom header
+#define MIN_VALUE_LENGTH 1
+#define MIN_NAME_LENGTH 1
+#define MAX_VALUE_LENGTH 100
+#define MAX_NAME_LENGTH 20
+
+#define CANRX_PARAMETER_COUNT 2 // fixed number of parameters in CanRx HTTP request
+#define MAINRX_PARAM_COUNT 2
+
+// 24 => 32 bit int - 3 bits in canrx half-token + 3 bits in rxtx half-token and 1 bit as a right-justified "always 1" marker
+// used for "unshifting" - we want to steer clear of bit 31 (the int's sign-bit) so 32-(3+3+1+1)=24
+#define MAX_CANRX_TOKEN_SHIFT 12 // 1-24 (24 in theory but better stick with 12 or under for less processing and length...)
+
+//#define HTTP_SERVER_IP_HEADER_NAME  "evdo" // receiving unit's IP added to response via custom header 
+#define HTTP_CLIENT_MAC_HEADER_NAME "UskRe" // last two octets of MAC address added to client-send via custom header
+#define HTTP_SERVER_MAC_HEADER_NAME "yWsfM" // last two octets of MAC address added to response via custom header
 
 // HTTP commands sent in the HTTP_CANRX_PARAM_COMMAND field
-#define HTTP_COMMAND_CANRX                 "Ndhb"
+#define HTTP_COMMAND_CANRX          "LdExo"
 
+// 7/17/2024 - we'll invoke the "Can Rx?" HTTP query to set the Rx/Tx tokens when we try to send and find they are NO_TOKEN
+// The "CanRx" query token is initially set randomly and it will fail... but the fail-process then sets a CanRx
+// token using g_defToken to encode/decode that new token - and two successive failures causes g_origDefToken
+// to be used in encoding/decoding the new CanRx token - which should succeed on the next attempt...
+//
 // OK - all of the below is out the window (it's implimented in version 2.37 but never tested)... new way...
 // We send "Can Rx?" query. Receiver either can or can't decode it. We add
 // the last two octets of the receiver's MAC as a header (going both ways) and encoded with ****. On a good decode, the remaining bits
@@ -45,34 +61,50 @@
 // range 200-255
 #define HTTPCODE_OK           200      // standard HTTP success code, don't change!
 #define HTTPRESP_OK           "OK"     // (used in OTA programming [so don't change!])
-#define HTTPCODE_PARAM_OK     211
-#define HTTPRESP_PARAM_OK     "dhne"
-#define HTTPCODE_TOK_OK       222
-#define HTTPRESP_TOK_OK       "YDng"
 #define HTTPCODE_CANRX_OK     244      // response data has other 3-bits of new Rx/Tx token pair shifted left 5
+#define HTTPCODE_PROCESSING_OK 255
+#define HTTPRESP_PROCESSING_OK "MeIse" // reply to sender's callback from HandleHttpAsyncReq() in wsHandlers.cpp
 
 // range 400-511
+// codes used by HandleHttpAsyncReq()
 #define HTTPCODE_FAIL           400         // standard HTTP fail code, don't change!
 #define HTTPRESP_FAIL           "FAIL"      // (used in OTA programming [so don't change!])
-#define HTTPCODE_PARAM_FAIL     501         // good remote decode but error in remote mDNS command string processing
-#define HTTPRESP_PARAM_FAIL     "FwUD"
-#define HTTPCODE_DECODE_FAIL    502         // bad remote decode, remote has set rxToken NO_TOKEN
-#define HTTPRESP_DECODE_FAIL    "LEmi"
-#define HTTPCODE_DECPREV_FAIL   503         // bad remote decode, remote has moved rxPrevToken to rxToken
-#define HTTPRESP_DECPREV_FAIL   "MsrV"
-#define HTTPCODE_ADDIP_FAIL     504
-#define HTTPRESP_ADDIP_FAIL     "Mwtx"
-#define HTTPCODE_TOK_FAIL       505
-#define HTTPRESP_TOK_FAIL       "hjwP"
-#define HTTPCODE_CANRX_FAIL     507
-#define HTTPRESP_CANRX_FAIL     "NeTs"
-#define HTTPCODE_CANRX_DECODE_FAIL 508      // response data has new default token to set (can be 255 = NO_TOKEN)
-#define HTTPCODE_CANRX_NOMAC_FAIL 509       // response data has NO_TOKEN because we don't yet have MAC and don't know who's "more master"
-#define HTTPCODE_RXDISABLED     510 // sent to HttpClientCallback if "c sync rx off" command (g_bSyncRx = false)
-#define HTTPRESP_RXDISABLED     "eivW"
-#define HTTPCODE_TIMESET_FAIL   511
-#define HTTPRESP_RXTOKEN_FAIL   "RNiJ"
-#define HTTPCODE_RXTOKEN_FAIL   512
+#define HTTPCODE_NOIP_FAIL      501
+#define HTTPRESP_NOIP_FAIL      "VesAm"
+#define HTTPCODE_RXTOKEN_FAIL   502
+#define HTTPRESP_RXTOKEN_FAIL   "esdIb"
+#define HTTPCODE_RXDISABLED     503 // sent to HttpClientCallback if "c sync rx off" command (g_bSyncRx = false)
+#define HTTPRESP_RXDISABLED     "eucjt"
+#define HTTPCODE_PARAM_TOOSHORT 504
+#define HTTPRESP_PARAM_TOOSHORT "KDheV"
+#define HTTPCODE_PARAM_TOOLONG  505
+#define HTTPRESP_PARAM_TOOLONG  "Odesf"
+
+// codes sent by HandleHttpAsyncCanRxReq()
+// unencoded:
+//HTTPCODE_RXDISABLED, HTTPRESP_RXDISABLED (above)
+//HTTPCODE_ADDIP_FAIL, HTTPRESP_ADDIP_FAIL
+// encoded:
+//HTTPCODE_CANRX_FAIL, HTTPRESP_CANRX_FAIL
+//HTTPCODE_CANRX_DECODE_FAIL, HTTPRESP_CANRX_FAIL
+//HTTPCODE_CANRX_OK, with low 3-bits of both the next canrx token and next tx token
+#define HTTPCODE_ADDIP_FAIL         510
+#define HTTPRESP_ADDIP_FAIL         "mejDp"
+#define HTTPCODE_CANRX_FAIL         511
+#define HTTPRESP_CANRX_FAIL         "KEidG"
+#define HTTPCODE_CANRX_DECODE_FAIL  513 // response data has new default token to set (can be 255 = NO_TOKEN)
+
+#define MAX_PROC_CODE_LENGTH 3 // (0-255) max decoded sProcCode string-length for all digits allowing for +/- sign (if any)
+// codes below will be left-shifted 4 and bits 0-3 made random
+#define PROCESSED_CODE_CHANGE_OK       2 // these codes should all be positive, greater than 0, up to 16
+#define PROCESSED_CODE_PARAM_OK     3
+#define PROCESSED_CODE_NOPARMS      4
+#define PROCESSED_CODE_PARAM_FAIL   5
+#define PROCESSED_CODE_DECODE_FAIL  6
+#define PROCESSED_CODE_NORXTOKEN    7
+#define PROCESSED_CODE_NOLINK       8
+#define PROCESSED_CODE_BADIP        9
+#define PROCESSED_CODE_DECPREV_FAIL 10
 
 // after resetting wifi-parameters flash-memory via "c reset wifi", this device will try
 // to connect to a router called MyRouter with password MyRouterPass. you can use the USB command-interface
@@ -84,13 +116,24 @@
 // data-exchange is done via the AsyncHTTPRequest library, SendHttpReq(), and the HttpClientCallback() method.
 // NOTE: tie GPIO18 high and GPIO19 low (it has an internal pulldown!) for WiFi AP-mode (access-point-mode)
 
-void ClearLinkOk(int code);
+// ------------------ web-client handlers -------------------
+// These pertain to http get requests from our client-library (HttpClientHandlers.cpp)
+// the strings can be freely changed for security... but if you change them, ALL devices must be updated!
+const char HTTP_ASYNCREQ_CANRX[] = "/heyc";
+const char HTTP_ASYNCREQ_CANRX_PARAM_COMMAND[] = "meusi";
+const char HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS[] = "wigd";
+
+const char HTTP_ASYNCREQ[] = "/qlpb";
+const char HTTP_ASYNCREQ_PARAM_COMMAND[] = "eyidp";
+const char HTTP_ASYNCREQ_PARAM_PROCCODE[] = "wgdu";
+
+void ClearLinkOk(String sIp, int code);
 void InitHttpClientHandlers();
-bool SendHttpCanRxReq(int idx);
-bool SendHttpReq(IPAddress ip);
+bool SendHttpCanRxReq(String sIp);
+bool SendHttpReq(String sIp);
 String GetHttpCodeString(int httpCode);
 
 #endif
 
-extern const char HTTP_ASYNCREQ[], HTTP_ASYNCREQ_PARAM_COMMAND[],  HTTP_ASYNCREQ_PARAM_TIMESET[];
-extern const char HTTP_ASYNCREQ_CANRX[], HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS[];
+//extern const char HTTP_ASYNCREQ[], HTTP_ASYNCREQ_PARAM_COMMAND[], HTTP_ASYNCREQ_PARAM_PROCCODE[];
+//extern const char HTTP_ASYNCREQ_CANRX[], HTTP_ASYNCREQ_CANRX_PARAM_COMMAND[], HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS[];

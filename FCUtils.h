@@ -64,60 +64,88 @@
 //    return buffer;
 //}
 
+String CommandStrToPrintable(String sIn);
+int StringToPerVals(String sPerVals, PerVals& perVals);
+String PerValsToString(PerVals perVals);
+String GetEmbeddedVersionString();
+
+String PrintCharsWithEscapes(String sIn);
+String Unescape(String sIn);
+int hexCharToInt(char c);
 bool alldigits(String &sIn);
+//String convertUnicode(String unicodeStr);
+bool isHex(char c);
+String genRandMessage(int iMin, int iMax);
+//String genRandPositioning(String sIn, int iMin, int iMax);
+//bool isIp(String sIn);
+bool isHexOrDigit(char c);
+
+String UIntToIp(uint32_t ip_uint);
+uint32_t IpToUInt(IPAddress ip);
+uint32_t IpToUInt(String sIp);
+
 //String urlencode(String str);
 //String urldecode(String str);
+
 String ZeroPad(byte val);
-String GetStringIP();
+String GetStringInfo();
 void IpToArray(uint16_t ipLastOctet);
 String GetPerUnitsString(int perUnitsIndex);
 String GetPhaseString(int phase);
 String GetPerDCString(int iVal);
-
-void ReadPot1();
-void ReadSpdtSwitches();
-void ReadWiFiSwitch();
-
 String PercentOnToString(uint32_t totalDCon, uint32_t totalTime);
 String SsrModeToString(uint8_t ssrMode);
-void SetSSR(uint8_t gpout, bool bSetSsrOn);
-void SetSSRMode(uint8_t gpout, uint8_t ssrMode);
 
-uint8_t* MacStringToByteArray(const char* pMac, uint8_t* pbyAddress);
-String MacArrayToString(uint8_t* pMacArray);
-bool isHex(char c);
+//String translateEncryptionType(wifi_auth_mode_t encryptionType);
+void twiddle(String& s);
 
-String TimeToString();
-bool SetTimeManually(int myYear, int myMonth, int myDay, int myHour, int myMinute, int mySecond);
-bool InitTimeManually();
-struct tm* ReadInternalTime(time_t* pEepochSeconds, struct tm* pTm);
-int Make12Hour(int iHour, bool &pmFlag);
-void ResetPeriod();
-void LimitPeriod();
-//void WiFiApInfo();
-String WiFiScan(String sInit);
-int GetWiFiChan();
-String translateEncryptionType(wifi_auth_mode_t encryptionType);
-void StartNewRandomToken();
-
-void printLocalTime(struct tm &timeInfo);
+void PrintCycleTiming();
 void PrintSpiffs(String sFile);
 void PrintMidiChan();
 void PrintMidiNote(uint8_t note);
 void PrintSsrMode(uint8_t ssrMode);
 void PrintPreferences();
 void PrintPulseFeaturePreferences();
+
 void prtln(String s);
 void prt(String s);
 
-void twiddle(String& s);
+bool WeAreMaster();
+bool IsAnyMacZero();
+uint16_t GetOurDeviceMacLastTwoOctets();
+uint16_t GetHighestMac(int& iIdx);
+void RefreshGlobalMasterFlagAndIp();
+
+#if ESP32_S3
+void ReadSsrSwitches();
+#endif
+
+void ReadPot1();
+void ReadPotModeSwitch();
+void ReadWiFiSwitch();
+
+void SetSSR(uint8_t gpout, bool bSetSsrOn);
+void SetSSRMode(uint8_t gpout, uint8_t ssrMode);
+
+uint8_t* MacStringToByteArray(const char* pMac, uint8_t* pbyAddress);
+String MacArrayToString(uint8_t* pMacArray);
+
+void ResetPeriod();
+void LimitPeriod();
+//void WiFiApInfo();
+String WiFiScan(String sInit);
+int GetWiFiChan();
+
+bool MasterStartRandomDefaultTokenChange();
+bool MasterStartSynchronizedChange(int iChangeCmd, int iChangeFlags, String sChangeData);
+bool QueueSynchronizedChange(int iChangeCmd, int iChangeFlags, String sChangeData);
+
 void RefreshSct();
 int GetSct(int &minSct, int &maxSct);
+int GetRandToken();
 
 int ComputeTimeToOnOrOffA();
 int ComputeTimeToOnOrOffB();
-
-void CheckMasterStatus();
 
 bool IsLockedAlertGetPlain(AsyncWebServerRequest *request, bool bAllowInAP=false);
 bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bAllowInAP=false);
@@ -131,27 +159,23 @@ void FlashSequencerStop();
 void FlashSequencer();
 void FlashLED();
 
-String genRandMessage(int iMin, int iMax);
-//String genRandPositioning(String sIn, int iMin, int iMax);
-
 //String AddThreeDigitBase10Checksum(String sIn);
 String AddTwoDigitBase16Checksum(String sIn);
 //String SubtractThreeDigitBase10Checksum(String sIn);
 String SubtractTwoDigitBase16Checksum(String sIn);
 
-String MyEncodeStr(String s, int table, int token, int context);
-String MyDecodeStr(String s, int table, int token, int context);
-String MyEncodeNum(unsigned int uiIn, int table, int token, int context);
-int MyDecodeNum(String s, int table, int token, int context);
+int MyEncodeStr(String& sInOut, int table, int token, int context);
+int MyDecodeStr(String& sInOut, int table, int token, int context);
+String MyEncodeNum(int iIn, int table, int token, int context);
+int MyDecodeNum(int& iOut, String s, int table, int token, int context);
 
-String GetEmbeddedVersionString();
 void InitMAC();
 
 void TaskProcessPulseOffFeatureTiming();
 void TaskSetPulseOffFeatureVars();
 void TaskStatisticsMonitor();
 
-int SendText(String sIP, String sText);
+int SendText(String sIp, String sText);
 int SendText(String sText);
 int SendText(int idx, String sText);
 

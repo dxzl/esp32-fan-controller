@@ -1,6 +1,10 @@
 // this file B64Class.cpp
 #include "FanController.h"
 
+// 7/11/2024 - Have updated B64Dec() and B64Enc() in B64Class.hpp and also in sct.js (JavaScript) to fix a bug that
+// disallowed negative numbers. You can now encode/decode the full int32_t data type. Bug fix, FYI, was to change
+// _base to (_base-1) and in sct.js to change "64" to "63".
+
 B64Class B64C;
 
 // Source for parts of this code:
@@ -83,7 +87,7 @@ String B64Class::hnEncNum(int iIn, int tableIdx, int token){
   return hnShiftEncode(sEnc, tableIdx, token);
 }
 
-// call to encode a number without hnEncode() of it
+// call to encode a number without hnShiftEncode() of it
 // returns empty string if error
 String B64Class::hnEncNumOnly(int iIn, int tableIdx, int token){
   SetTableAndBusy(tableIdx, token);
@@ -158,7 +162,7 @@ String B64Class::hnShiftDecode(String sIn, int tableIdx, int token){
   String sOut;
   int errorCode = hnShiftDecode(sIn, sOut, tableIdx, token);
   if (errorCode < 0)
-    prtln("hnDecode error: " + String(errorCode));
+    prtln("B64Class::hnShiftDecode() error: " + String(errorCode));
   return sOut;
 }
 
@@ -170,7 +174,7 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
   SetTableAndBusy(tableIdx, token);
 
   int errorCode, strLen, arrSize, idx, iTmp;
-  int sct, minSct, maxSct; // these need to be able to receing negative error...
+  int sct, minSct, maxSct; // these need to be able to represent negative error...
   uint32_t cs;
   std::wstring wstr;
   std::string u8str;
@@ -184,7 +188,7 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
 
   // a,b,c,d (seven chars minimum expected...)
   if (strLen < 7){
-    prtln("B64Class::hnDecode(): decoded string is too short! strLen=" + String(strLen));
+    prtln("B64Class::hnShiftDecode() error: decoded string is too short! strLen=" + String(strLen));
     errorCode = -2;
     goto finally; // no good...
   }
@@ -196,7 +200,7 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
   }
 
   if (arrSize < 4){
-    prtln("B64Class::hnDecode(): array has wrong data! arrSize=" + String(arrSize));
+    prtln("B64Class::hnShiftDecode(): array has wrong data! arrSize=" + String(arrSize));
     errorCode = -3;
     goto finally;
   }
@@ -209,6 +213,7 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
     goto finally;
   }
   sct = iTmp;
+//prtln("SCT: " + String(sct));
   iTmp = B64getNext(sIn, idx, strLen);
   if (iTmp < 0){
     prtln("B64Class::hnDecode(): minSct B64getNext() error: " + String(iTmp));
@@ -216,6 +221,7 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
     goto finally;
   }
   minSct = iTmp;
+//prtln("MINSCT: " + String(minSct));
   iTmp = B64getNext(sIn, idx, strLen);
   if (iTmp < 0){
     prtln("B64Class::hnDecode(): maxSct B64getNext() error: " + String(iTmp));
@@ -223,6 +229,7 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
     goto finally;
   }
   maxSct = iTmp;
+//prtln("MAXSCT: " + String(maxSct));
 
   if (sct < minSct || sct > maxSct){
     prtln("B64Class::hnDecode(): validation prefix is out of range!");
@@ -231,6 +238,7 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
   }
 
   cs = sct+minSct+maxSct; // checksum
+
   wstr = L"";
   
 //  for (JsonVariant v: arr){
@@ -245,7 +253,7 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
       goto finally;
     }
 
-    uint16_t u = (uint16_t)iTmp;
+    uint32_t u = (uint32_t)iTmp;
     
     for (int jj = 0; jj < sct; jj++){
       bool lsbSet = (u & 1) ? true : false;
@@ -264,14 +272,19 @@ int B64Class::hnShiftDecode(String sIn, String &sOut, int tableIdx, int token){
   // last char, unshifted, is the 2's compliment checksum (18-bit number!)
   iTmp = B64getNext(sIn, idx, strLen); 
   if (iTmp < 0){
-    prtln("B64Class::hnDecode(): cs B64getNext() error: " + String(iTmp));
+    prtln("B64Class::hnShiftDecode(): cs B64getNext() error: " + String(iTmp));
     errorCode = -9;
     goto finally;
   }
   cs += iTmp;
 
   if ((cs&0x3ffff) != 0){
-    prtln("B64Class::hnDecode(): bad checksum on encoded string!");
+//!!!!!!!!!!!!!!!!!!!!!    
+//u8str = _cvt.to_bytes(wstr);
+//sOut = String(u8str.c_str());
+//prtln("BAD STRING: " + sOut);
+//!!!!!!!!!!!!!!!!!!!!!    
+    prtln("B64Class::hnShiftDecode(): bad checksum on encoded string!");
     errorCode = -10;
     goto finally; // no good...
   }
@@ -411,9 +424,9 @@ String B64Class::B64DecStr(String& sIn) {
   return sOut;
 }
 
-// handles only positive numbers!
-String B64Class::B64Enc(int n){
-  int residual = n;
+// handles full int32_t range of positive and negative numbers
+String B64Class::B64Enc(int32_t n){
+  uint32_t residual = n;
   String sOut;
   for(;;) {
     sOut = _b64T[(residual+_token)%_base] + sOut;
@@ -424,12 +437,9 @@ String B64Class::B64Enc(int n){
   return sOut;
 }
 
-// handles only positive numbers!
-// returns -2 if error!
-int B64Class::B64Dec(String& sIn){
-  if (sIn.isEmpty())
-    return -2;
-  int result = 0;
+// handles full int32_t range of positive and negative numbers
+int32_t B64Class::B64Dec(String& sIn){
+  int32_t result = 0;
   int len = sIn.length();
   for (int i=0; i<len; i++)
     result = (result*_base) + B64getTableIndex(sIn[i]);
@@ -440,11 +450,11 @@ int B64Class::B64getTableIndex(char& c){
   for (int i=0; i<_base; i++)
     if (c == _b64T[(i+_token)%_base])
       return i;
-  return 0;
+  prtln("ERROR: B64Class::B64getTableIndex() returning -1!!!");
+  return -1;
 }
 
-int B64Class::GetSct(int &minSct, int &maxSct)
-{
+int B64Class::GetSct(int &minSct, int &maxSct){
   return ::GetSct(minSct, maxSct);
 }
 

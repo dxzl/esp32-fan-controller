@@ -7,52 +7,25 @@ MdnsListClass IML;
 //-------------------------------------------------------------
 // Functions for MdnsListClass (a C++ vector)
 //-------------------------------------------------------------
-int MdnsListClass::GetRxToken(int idx) { return arr[idx].rxToken; }
-int MdnsListClass::GetRxPrevToken(int idx) { return arr[idx].rxPrevToken; }
-void MdnsListClass::SetRxToken(int idx, int val) { arr[idx].rxToken = val; }
-void MdnsListClass::SetRxPrevToken(int idx, int val) { arr[idx].rxPrevToken = val; }
-int MdnsListClass::GetTxToken(int idx) { return arr[idx].txToken; }
-int MdnsListClass::GetTxPrevToken(int idx) { return arr[idx].txPrevToken; }
-int MdnsListClass::GetTxNextToken(int idx) { return arr[idx].txNextToken; }
-int MdnsListClass::GetSaveToken(int idx) { return arr[idx].saveToken; }
-void MdnsListClass::SetTxToken(int idx, int val) { arr[idx].txToken = val; }
-void MdnsListClass::SetTxPrevToken(int idx, int val) { arr[idx].txPrevToken = val; }
-void MdnsListClass::SetTxNextToken(int idx, int val) { arr[idx].txNextToken = val; }
-void MdnsListClass::SetSaveToken(int idx, int val) { arr[idx].saveToken = val; }
+int MdnsListClass::GetToken(int idx, int iToken) { return arr[idx].tokens[iToken]; }
+void MdnsListClass::SetToken(int idx, int iToken, int val) { arr[idx].tokens[iToken] = val; }
+
 uint16_t MdnsListClass::GetMdnsMAClastTwo(int idx) { return arr[idx].mac_last_two_octets; }
 void MdnsListClass::SetMdnsMAClastTwo(int idx, uint16_t val) { arr[idx].mac_last_two_octets = val; }
-String MdnsListClass::GetSendStr(int idx) { return arr[idx].sSend; }
-void MdnsListClass::SetSendStr(int idx, String val) { arr[idx].sSend = val; }
-String MdnsListClass::GetUtilStr(int idx) { return arr[idx].sUtil; }
-void MdnsListClass::SetUtilStr(int idx, String val) { arr[idx].sUtil = val; }
-String MdnsListClass::GetRxTxtStr(int idx) { return arr[idx].sRxTxt; }
-void MdnsListClass::SetRxTxtStr(int idx, String val) { arr[idx].sRxTxt = val; }
-bool MdnsListClass::GetSendTimeFlag(int idx) { return arr[idx].bSendTime; }
-void MdnsListClass::SetSendTimeFlag(int idx, bool val) { arr[idx].bSendTime = val; }
-bool MdnsListClass::GetSendOkFlag(int idx) { return arr[idx].bSendOk; }
-void MdnsListClass::SetSendOkFlag(int idx, bool val) { arr[idx].bSendOk = val; }
-void MdnsListClass::SetSendOkFlag(IPAddress ipFind, bool val) {
-  int idx = FindMdnsIp(ipFind);
-  if (idx >= 0)
-    arr[idx].bSendOk = val;
-}
-bool MdnsListClass::GetLinkOkFlag(int idx) { return arr[idx].bLinkOk; }
-void MdnsListClass::SetLinkOkFlag(int idx, bool val) { arr[idx].bLinkOk = val; }
-void MdnsListClass::SetLinkOkFlag(IPAddress ipFind, bool val) {
-  int idx = FindMdnsIp(ipFind);
-  if (idx >= 0)
-    arr[idx].bLinkOk = val;
-}
+String MdnsListClass::GetStr(int idx, int iString) { return arr[idx].strings[iString]; }
+void MdnsListClass::SetStr(int idx, int iString, String val) { arr[idx].strings[iString] = val; }
 
-bool MdnsListClass::GetTokOkFlag(int idx) { return arr[idx].bTokOk; }
-void MdnsListClass::SetTokOkFlag(int idx, bool val) { arr[idx].bTokOk = val; }
-void MdnsListClass::SetTokOkFlag(IPAddress ipFind, bool val) {
+bool MdnsListClass::GetFlag(int idx, int iFlag){ return arr[idx].flags[iFlag]; }
+void MdnsListClass::SetFlag(int idx, int iFlag, bool val){ arr[idx].flags[iFlag] = val; }
+void MdnsListClass::SetFlag(IPAddress ipFind, int iFlag, bool val){
   int idx = FindMdnsIp(ipFind);
   if (idx >= 0)
-    arr[idx].bTokOk = val;
+    SetFlag(idx, iFlag, val);
 }
 int MdnsListClass::GetSendCount(int idx) { return arr[idx].sendCount; }
 void MdnsListClass::SetSendCount(int idx, int val) { arr[idx].sendCount = val; }
+int MdnsListClass::GetStatus(int idx) { return arr[idx].devStatus; }
+void MdnsListClass::SetStatus(int idx, int val) { arr[idx].devStatus = val; }
 int MdnsListClass::GetMinute(int idx) { return arr[idx].iMin; }
 void MdnsListClass::SetMinute(int idx, int val) { arr[idx].iMin = val; }
 IPAddress MdnsListClass::GetIP(int idx) { return arr[idx].ip; }
@@ -61,95 +34,76 @@ int MdnsListClass::GetCount(void) { return arr.size(); }
 void MdnsListClass::Clear(void) { arr.resize(0); }
 //-------------------------------------------------------------
 
-bool MdnsListClass::AreWeMaster(){
-  // if we're the only unit, no need for "master"
-  if (GetCount() == 0)
+bool MdnsListClass::IsGoodIndex(int idx){
+  int count = GetCount();
+  if (!count || idx < 0 || idx >= count)
     return false;
-  // if any IPs in list with no MAC, we can't determine the master yet...
-  if (IsAnyMacZero())
-    return false;
-  return GetOurDeviceMacLastTwoOctets() > GetHighestMac();
+  return true;
 }
 
-uint16_t MdnsListClass::GetOurDeviceMacLastTwoOctets(){
-  uint8_t buf[6]; // order 5:4:3:2:1:0
-  WiFi.macAddress(buf);
-//  Serial.println(buf[5],16);
-//  Serial.println(buf[4],16);
-//  Serial.println(buf[3],16);
-//  Serial.println(buf[2],16);
-//  Serial.println(buf[1],16);
-//  Serial.println(buf[0],16);
-  return (buf[1] << 8) | buf[0];
-}
- 
-// return highest "last two octets" of MACs stored in arr
-uint16_t MdnsListClass::GetHighestMac(){
-  uint16_t highestMac = 0;
+bool MdnsListClass::IsFlagSetForAnyIP(int iFlag){
   int count = GetCount();
   for (int ii=0; ii<count; ii++){
-    uint16_t thisMac = GetMdnsMAClastTwo(ii);
-    if (thisMac > highestMac)
-      highestMac = thisMac;
-  }
-  return highestMac;  
-}
-
-// return true if any stored MAC is 0 (remote has not sent it to us)
-bool MdnsListClass::IsAnyMacZero(){
-  int count = GetCount();
-  for (int ii=0; ii<count; ii++)
-    if (GetMdnsMAClastTwo(ii) == 0)
+    if (GetFlag(ii, iFlag))
       return true;
+  }
   return false;  
 }
 
-bool MdnsListClass::AreAllTokOkFlagsSet(){
+bool MdnsListClass::IsFlagSetForAllIP(int iFlag){
   int count = GetCount();
   for (int ii=0; ii<count; ii++){
-    if (!GetTokOkFlag(ii))
+    if (!GetFlag(ii, iFlag))
       return false;
   }
   return true;  
 }
 
-void MdnsListClass::ClearAllTokOkFlags(){
+void MdnsListClass::SetFlagForAllIP(int iFlag, bool val){
   int count = GetCount();
   for (int ii=0; ii<count; ii++)
-    arr[ii].bTokOk = false;
-}
-
-void MdnsListClass::ClearAllLinkOkFlags(){
-  int count = GetCount();
-  for (int ii=0; ii<count; ii++)
-    arr[ii].bLinkOk = false;
+    SetFlag(ii, iFlag, val);
 }
 
 void MdnsListClass::XferRxTokens(int idx){
-  if (arr[idx].rxToken != NO_TOKEN)
-    arr[idx].rxPrevToken = arr[idx].rxToken;
-}
-
-void MdnsListClass::XferTxTokens(int idx){
-  if (arr[idx].txToken != NO_TOKEN && arr[idx].txNextToken != NO_TOKEN){
-    arr[idx].txPrevToken = arr[idx].txToken;
-    arr[idx].txToken = arr[idx].txNextToken;
-    arr[idx].txNextToken = NO_TOKEN;
+  if (arr[idx].tokens[MDNS_TOKEN_RX] != NO_TOKEN)
+    arr[idx].tokens[MDNS_TOKEN_RXPREV] = arr[idx].tokens[MDNS_TOKEN_RX];
+  if (arr[idx].tokens[MDNS_TOKEN_RXNEXT] != NO_TOKEN){
+    arr[idx].tokens[MDNS_TOKEN_RX] = arr[idx].tokens[MDNS_TOKEN_RXNEXT];
+    arr[idx].tokens[MDNS_TOKEN_RXNEXT] = NO_TOKEN;
   }
 }
 
-void MdnsListClass::SetAllTokens(int idx, int val){
-  arr[idx].txPrevToken = val;
-  arr[idx].txNextToken = val;
-  arr[idx].txToken = val;
-  arr[idx].rxToken = val;
-  arr[idx].rxPrevToken = val;
+void MdnsListClass::XferTxTokens(int idx){
+  if (arr[idx].tokens[MDNS_TOKEN_TX] != NO_TOKEN)
+    arr[idx].tokens[MDNS_TOKEN_TXPREV] = arr[idx].tokens[MDNS_TOKEN_TX];
+  if (arr[idx].tokens[MDNS_TOKEN_TXNEXT] != NO_TOKEN){
+    arr[idx].tokens[MDNS_TOKEN_TX] = arr[idx].tokens[MDNS_TOKEN_TXNEXT];
+    arr[idx].tokens[MDNS_TOKEN_TXNEXT] = NO_TOKEN;
+  }
 }
 
-// returns true if success, false if buffer full
+void MdnsListClass::InitTokens(int idx){
+  for (int ii=0; ii<TOKEN_COUNT_MDNS; ii++)
+    arr[idx].tokens[ii] = NO_TOKEN;
+}
+
+void MdnsListClass::InitFlags(int idx){
+  for (int ii=0; ii<FLAG_COUNT_MDNS; ii++)
+    arr[idx].flags[ii] = false;
+}
+
+void MdnsListClass::InitStrings(int idx){
+  for (int ii=0; ii<STRING_COUNT_MDNS; ii++)
+    arr[idx].strings[ii] = "";
+}
+
+// returns index of newly added IP or negative if error
 int MdnsListClass::AddMdnsIp(String sIP){
   IPAddress ipNew;
   ipNew.fromString(sIP);
+  if ((uint32_t)ipNew == 0)
+    return -1;
   return AddMdnsIp(ipNew);
 }
 
@@ -164,8 +118,8 @@ int MdnsListClass::AddMdnsIp(IPAddress ipNew){
     if (GetIP(ii) == ipNew){
       // found pre-existing ip? update time, bLinkOk Etc. and return
       SetMinute(ii, iMin);
-      if (!GetLinkOkFlag(ii)){
-        SetLinkOkFlag(ii, true);
+      if (!GetFlag(ii, MDNS_FLAG_LINK_OK)){
+        SetFlag(ii, MDNS_FLAG_LINK_OK, true);
         RestorePrevTokens(ii);
       }
       return ii;
@@ -184,61 +138,47 @@ int MdnsListClass::AddMdnsIp(IPAddress ipNew){
     return -3;
     
   arr[count].ip = ipNew;
+  
+  // we store current minute and delete this mDNS IP entry if not refreshed within 10 min.
   arr[count].iMin = iMin;
+  
   arr[count].mac_last_two_octets = 0; // set this later via SetMdnsMacAndToken()
-  arr[count].saveToken = NO_TOKEN;
-  SetAllTokens(count, NO_TOKEN); // we'll invoke the "Can Rx?" HTTP query to set these when set to NO_TOKEN!
-  ClearMdnsSendInfo(count);
+  arr[count].devStatus = 0; // up to 32 bits device status per unit
+  
+  InitTokens(count);
+  InitFlags(count);
+  InitStrings(count);
   
   // initialize with a request for this IP's last-two MAC address octets
   // (NOTE: Two MACs are now exchanged via the SendHttpCanRxReq() query initiated by NO_TOKEN in Rx/Tx mDNS
   // slot and passed to the callback as an added header!)
-  //arr[count].sSend = HMC.AddRangeCommand(CMreqMacMin, CMreqMacMax);
+  //arr[count].sSendAll = HMC.AddRangeCommand(CMreqMacMin, CMreqMacMax);
 
-  arr[count].sUtil = "";
-  arr[count].sRxTxt = "";
+  SetFlag(count, MDNS_FLAG_LINK_OK, true);
 
-  arr[count].bLinkOk = true;
-
-  if (g_bSyncMaster){
-    g_bSyncMaster = false; // master-status needs re-evaluation with addition of new remote device!
+  if (g_bMaster){
+    g_bMaster = false; // master-status needs re-evaluation with addition of new remote device!
     prtln("temporarily revoking master-status - new remote detected...");
   }
-  g_bOldSsr1On = !g_bSsr1On;
-  g_bOldSsr2On = !g_bSsr2On;
 
-  // to also force send of other parameters to be sent the first time...
+  g_oldDevStatus = ~g_devStatus;
+  
+  // to force additional parameters to be sent the first time...
   //g_oldPerVals.dutyCycleA = 0xff;
   //g_oldPerVals.dutyCycleB = 0xff;
   //g_oldPerVals.phase = 0xff;
   //g_oldPerVals.perVal = 0xff;
   //g_oldPerVals.perUnits = 0xff;
   //g_oldPerVals.perMax = 0xffff;
-  //g16_oldMacLastTwo = 0;
-  //g_oldDefToken = 0;
 
-  ClearAllTokOkFlags();
-  g_pendingDefToken = NO_TOKEN;
   g16_sendDefTokenTimer = 0;
-  g16_tokenSyncTimer = 0;
   
   return count;
 }
 
 void MdnsListClass::RestorePrevTokens(int idx){
-  arr[idx].rxToken = arr[idx].rxPrevToken;
-  arr[idx].txToken = arr[idx].txPrevToken;
-}
-
-// delete oldest mDNS entry with link down...
-// returns the new count of remote ESP32 units
-int MdnsListClass::DeleteOldestNoLinkMdnsEntry(){
-  int count = GetCount();
-  for (int ii=0; ii<count; ii++)
-    if (!GetLinkOkFlag(ii))
-      if (DelMdnsIp(ii))
-        break;
-  return GetCount();
+  arr[idx].tokens[MDNS_TOKEN_RX] = arr[idx].tokens[MDNS_TOKEN_RXPREV];
+  arr[idx].tokens[MDNS_TOKEN_TX] = arr[idx].tokens[MDNS_TOKEN_TXPREV];
 }
 
 bool MdnsListClass::ClearMdnsSendInfo(IPAddress ipClear){
@@ -247,19 +187,22 @@ bool MdnsListClass::ClearMdnsSendInfo(IPAddress ipClear){
 bool MdnsListClass::ClearMdnsSendInfo(int idx){
   if (idx < 0 || idx >= GetCount())
     return false;
-  arr[idx].sSend = "";
-  arr[idx].bSendTime = false;
-  arr[idx].bSendOk = false;
-  arr[idx].bTokOk = false;
-  arr[idx].sendCount = 0;
+  if (g_bMaster){
+    SetStr(idx, MDNS_STRING_SEND_ALL, "");
+    SetStr(idx, MDNS_STRING_SEND_SPECIFIC, "");
+  }
+  else{
+    // if we are not the master then we only SendHttpReq() to the master. In doing this,
+    // we combined all sSendSpecific into CMto bundled commands and sent them together with
+    // sSendAll for the master's mDNS entry. So we need to clear ALL sSend strings!
+    int iCount = GetCount();
+    for (int ii=0; ii < iCount; ii++){
+      SetStr(ii, MDNS_STRING_SEND_ALL, "");
+      SetStr(ii, MDNS_STRING_SEND_SPECIFIC, "");
+    }
+  }
+  SetSendCount(idx, 0);
   return true;
-}
-
-// set bSendTime flags for each IP in mDNS array
-void MdnsListClass::SetAllSendTimeFlags(){
-  int count = GetCount();
-  for (int ii=0; ii<count; ii++)
-    arr[ii].bSendTime = true;
 }
 
 // returns true if found and removed
@@ -279,21 +222,25 @@ bool MdnsListClass::DelMdnsIp(int idx){
     arr[ii] = arr[ii+1];
   count--;
   SetSize(count);
-  CheckMasterStatus();
-  ClearAllTokOkFlags();
-  g_pendingDefToken = NO_TOKEN;
+  RefreshGlobalMasterFlagAndIp();
   g16_sendDefTokenTimer = 0;
-  g16_tokenSyncTimer = 0;
   g_prevMdnsCount = 0;
   return true;
 }
 
 // returns index if found, -1 if not found
-int MdnsListClass::FindMdnsIp(String sIP){
-  if (sIP.isEmpty())
+int MdnsListClass::FindMdnsIp(uint32_t iIp){
+  if (!iIp)
     return -1;
+  return FindMdnsIp(IPAddress(iIp));
+}
+
+// returns index if found, -1 if not found
+int MdnsListClass::FindMdnsIp(String sIP){
   IPAddress ip;
   ip.fromString(sIP);
+  if ((uint32_t)ip == 0)
+    return -1;
   return FindMdnsIp(ip);
 }
 
@@ -305,8 +252,8 @@ int MdnsListClass::FindMdnsIp(IPAddress ipFind){
   return -1;
 }
 
-// if mDNS not detected for a long time, clear the bLinkOk flag for that unit
-void MdnsListClass::ClearLinkOkFlagsForExpiredMdnsIps(){
+// if mDNS not detected for a long time, delete the entry for that unit...
+void MdnsListClass::DeleteExpiredMdnsIps(){
   int iMin = millis()/60000;
   int count = GetCount();
   for (int ii=0; ii<count; ii++){
@@ -317,8 +264,19 @@ void MdnsListClass::ClearLinkOkFlagsForExpiredMdnsIps(){
     // this is because the more units there are, the longer it takes to recheck for mDNS on a particular unit
     // we add/refresh a unit every 30-sec, so for 10 units it might take 5 minutes to refresh our unit and update u8min
     if (delta > (count/2)+2)
-      SetLinkOkFlag(ii, false);
+      DelMdnsIp(ii);
   }
+}
+
+// delete oldest mDNS entry with link down...
+// returns the new count of remote ESP32 units
+int MdnsListClass::DeleteOldestNoLinkMdnsEntry(){
+  int count = GetCount();
+  for (int ii=0; ii<count; ii++)
+    if (!GetFlag(ii, MDNS_FLAG_LINK_OK))
+      if (DelMdnsIp(ii))
+        break;
+  return GetCount();
 }
 
 // return true if success
@@ -328,17 +286,32 @@ bool MdnsListClass::SetSize(int newSize)
   return (newSize == GetCount()) ? true : false;
 }
 
-void MdnsListClass::PrintInfo(){
+void MdnsListClass::PrintMdnsInfo(){
   int count = GetCount();
   if (count){
     prtln("Count of other ESP32s found: " + String(count));
+    int iMaster = -1;
+    if (g_bMaster)
+      prtln("!!!THIS UNIT IS THE MASTER!!!");
+    else
+      GetHighestMac(iMaster);
     for (int ii=0; ii < count; ii++){
-      String sTemp = GetLinkOkFlag(ii) ? "UP" : "DOWN";
-      prtln("--- index: " + String(ii) + ", link is " + sTemp + ", sSend=\"" + GetSendStr(ii) + "\"");
-      sTemp = IML.AreWeMaster() ? ", we are master!" : "";
+      String sTemp = GetFlag(ii, MDNS_FLAG_LINK_OK) ? "UP" : "DOWN";
+      prtln("--- index: " + String(ii) + ", link is " + sTemp);
+      sTemp = "";
+      String sSendAll = GetStr(ii, MDNS_STRING_SEND_ALL);
+      if (!sSendAll.isEmpty())
+        sTemp += " sSendAll=\"" + CommandStrToPrintable(sSendAll) + "\"";
+      String sSendSpecific = GetStr(ii, MDNS_STRING_SEND_SPECIFIC);
+      if (!sSendSpecific.isEmpty())
+        sTemp += " sSendSpecific=\"" + CommandStrToPrintable(sSendSpecific) + "\"";
+      if (!sTemp.isEmpty())
+        prtln(sTemp);
+      sTemp = (ii == iMaster) ? ", !!!MASTER!!!" : "";
       prtln("--- ip: " + GetIP(ii).toString() + ", macLastTwo: " + String(GetMdnsMAClastTwo(ii)) + sTemp);
-      prtln("--- rxToken: " + String(GetRxToken(ii)) + ", txToken: " + String(GetTxToken(ii)));
-      prtln("--- rxPrevToken: " + String(GetRxPrevToken(ii)) + ", txPrevToken: " + String(GetTxPrevToken(ii)));
+      prtln("--- rxToken: " + String(GetToken(ii, MDNS_TOKEN_RX)) + ", txToken: " + String(GetToken(ii, MDNS_TOKEN_TX)));
+      prtln("--- rxPrevToken: " + String(GetToken(ii, MDNS_TOKEN_RXPREV)) + ", txPrevToken: " + String(GetToken(ii, MDNS_TOKEN_TXPREV)));
+      prtln("--- status flags: 0x" + String(GetStatus(ii), HEX));
     }
   }
   else
@@ -375,9 +348,8 @@ bool MdnsListClass::CheckMdnsSearchResult(){
   // size_t txt_count - number of txt items
   // mdns_ip_addr_t *addr - linked list of IP addresses found
   mdns_result_t* result = NULL;
-  uint8_t mdns_count = 0;
   //bool mdns_query_async_get_results(mdns_search_once_t* search, uint32_t timeout, mdns_result_t ** results, uint8_t * num_results);
-  if (!mdns_query_async_get_results(g_pMdnsSearch, 0, &result, &mdns_count)) // 0 is infinite timeout? timeout is in ms
+  if (!mdns_query_async_get_results(g_pMdnsSearch, 0, &result, NULL)) // 0 is no timeout.
     return false;
 
   if (result){

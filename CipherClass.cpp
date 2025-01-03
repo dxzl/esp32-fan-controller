@@ -13,8 +13,6 @@
 //Cipher * cipher = new Cipher();
 CipherClass CIP;
 
-const char CIPH_PADDING[CIPKEY_MAX+1] = HTTP_CIPKEY_INIT;
-
 // Constructor/destructor (not used since we don't instantiate as an object using "new",
 // The code representing this class is stored in flash, not RAM!)
 CipherClass::CipherClass(){
@@ -35,9 +33,11 @@ void CipherClass::setCiphKey(uint8_t* key){
 void CipherClass::setCiphKey(String sKey){
   
   generateInitializationVector();
+
+  String sInit = HTTP_CIPKEY_INIT;
   
   if (sKey.isEmpty()){
-    sKey = HTTP_CIPKEY_INIT;
+    sKey = sInit;
     prtln("CipherClass::setKey() key is empty!!! Using HTTP_CIPKEY_INIT");
   }
   
@@ -47,7 +47,7 @@ void CipherClass::setCiphKey(String sKey){
   for (ii=0; ii<len && ii<CIPKEY_MAX; ii++)
     _ciphKeyArr[ii] = sKey[ii];
   for (; ii<CIPKEY_MAX; ii++)
-    _ciphKeyArr[ii] = CIPH_PADDING[ii];
+    _ciphKeyArr[ii] = sInit[ii];
   _ciphKeyArr[CIPKEY_MAX] = '\0';
   
   if (len > CIPKEY_MAX)

@@ -7,13 +7,13 @@ It is for a custom PCB I ordered using EasyEDA upon which the ESP32 module is so
 
 The device is controlled via an ordinary web-browser over WiFi and can be remotely updated. There is a switch to switch between WiFi access-point mode and station mode (router connection). I use the AP mode to enter WiFi router credentials then flip the switch to connect to my router.
 
-NOTE: This is built with the Old Arduino IDE (1.8.19) and ESP32 tools for Arduino 3.0.1  
+NOTE: This is built with the Old Arduino IDE (1.8.19) and ESP32 tools for Arduino 3.0.5  
 
 NOTE: 6/18/2024 Updated for an ESP32S3 Dev Board when you set "#define ESP32_S3 true" in Fancontroller.h
 
-Create a new folder in your Arduino IDE sketches called FanControllerS3 and unzip these files into it.
+Create a new folder in your Arduino IDE "projects" or "sketches" folder called FanControllerS3 and unzip these files into it.
 
-You need to use my custom versions of two libraries: misc\ESPAsyncWebServerFor3-0-1.zip and misc\MyPreferences.zip. Unzip them into your libraries folder.
+In the same folder that has your "projects" or "sketches", create a "tools" folder and a "libraries" folder. Unzip the custom-modified "libraries" into the "libraries" folder. Unzip the files in "tools" into your "tools" folder.
 
 Useful links:
 

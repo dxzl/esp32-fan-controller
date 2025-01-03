@@ -1,6 +1,64 @@
 // this file FCWiFi.cpp
 #include "FanController.h"
 
+//#include <WiFi.h>
+//#include "esp_wifi.h"
+
+// not presently used - this would allow us to get ip-address and MAC
+// of networks connected to us when we are an access-point.
+//void WiFiApInfo(){
+//
+//  //WiFi.softAP("MyESP32AP");
+//
+//  //uint8_t bssid[6] MAC address of AP
+//  //uint8_t ssid[33] SSID of AP (S.S. - guess this is in UTF-8 - maybe a 16 unicode char limit?)
+//  //uint8_t primary channel of AP
+//  //wifi_second_chan_tsecond secondary channel of AP
+//  //int8_t rssi signal strength of AP
+//  //wifi_auth_mode_tauthmode authmode of AP
+//  //wifi_cipher_type_tpairwise_cipher pairwise cipher of AP
+//  //wifi_cipher_type_tgroup_cipher group cipher of AP
+//  //wifi_ant_tant antenna used to receive beacon from AP
+//  //uint32_t phy_11b : 1 bit: 0 flag to identify if 11b mode is enabled or not
+//  //uint32_t phy_11g : 1 bit: 1 flag to identify if 11g mode is enabled or not
+//  //uint32_t phy_11n : 1 bit: 2 flag to identify if 11n mode is enabled or not
+//  //uint32_t phy_lr : 1 bit: 3 flag to identify if low rate is enabled or not
+//  //uint32_t wps : 1 bit: 4 flag to identify if WPS is supported or not
+//  //uint32_t reserved : 27 bit: 5..31 reserved
+//  //wifi_country_tcountry country information of AP
+//  wifi_sta_list_t wifi_sta_list;
+//
+//  tcpip_adapter_sta_list_t adapter_sta_list;
+//
+//  memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
+//  memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
+//
+//  esp_wifi_ap_get_sta_list(&wifi_sta_list); // Get information of AP which the ESP32 station is associated with
+//  tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
+//
+//  for (int i = 0; i < adapter_sta_list.num; i++){
+//
+//    tcpip_adapter_sta_info_t station = adapter_sta_list.sta[i];
+//
+//    prtln("station " + i);
+//    prt("MAC: ");
+//
+//    for(int j = 0; j< 6; j++){
+//      Serial.printf("%02X", station.mac[j]);
+//      if(j<5)Serial.print(':');
+//    }
+//
+//    prtln("\nIP: ");
+//    Serial.print(ip4addr_ntoa(&station.ip));
+//  }
+//}
+
+IPAddress GetLocalIp(){
+if (WiFi.status() == WL_CONNECTED)
+  return WiFi.localIP();
+return IPAddress(0,0,0,0);
+}
+
 void PollWiFiSwitch(){
   ReadWiFiSwitch();
 
@@ -80,7 +138,7 @@ void WiFiMonitorConnection(bool bDisconnect){
     if (WiFiStatus == WL_CONNECTED){
       g_bWiFiConnected = true;
       g_bWiFiConnecting = false;
-      prtln(GetStringIP()); // set g_bWiFiConnected before calling GetStringIP()!
+      prtln(GetStringInfo()); // set g_bWiFiConnected before calling GetStringInfo()!
       dnsAndServerStart();
       FlashSequencerInit(g8_ledMode_SLOWFLASH); // start the sequence of flashing out the last octet of IP address...
     }
@@ -92,7 +150,7 @@ void WiFiMonitorConnection(bool bDisconnect){
       //prt(".");
     }
     else if (g_sSSID.length() != 0 && g8_wifiModeFromSwitch == WIFI_SW_MODE_STA){ // connect to router
-      QueueTask(TASK_WIFI_STA_CONNECT); // fetch pw from flash and connect
+      TSK.QueueTask(TASK_WIFI_STA_CONNECT); // fetch pw from flash and connect
       g8_ledMode = g8_ledMode_FASTFLASH;
       g_bWiFiConnecting = true;
       prtln("queueing connection task: " + g_sSSID);
@@ -136,14 +194,14 @@ void WiFiStartAP(bool bDisconnect){
   if (bDisconnect)
     WiFiStop(false);
   else if (!g_bSoftAP && g_sApSSID.length() != 0){
-    QueueTask(TASK_WIFI_AP_CONNECT); // fetch pw from flash and connect
+    TSK.QueueTask(TASK_WIFI_AP_CONNECT); // fetch pw from flash and connect
   }
 }
 
 // https://github.com/espressif/arduino-esp32/blob/master/libraries/WiFi/src/WiFiGeneric.h
 // https://github.com/espressif/esp-idf/blob/master/components/esp_wifi/include/esp_wifi_types.h
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  if (g_bWiFiConnected){ // | g_bSoftAP???
+  if (g_bWiFiConnected){ // || g_bSoftAP???
 //  if (info.disconnected.reason > WIFI_REASON_BEACON_TIMEOUT && g_bWiFiConnected){
     g_bWiFiConnected = false; // clear this BEFORE calling WiFiStop()!
     WiFiStop(false);
@@ -182,7 +240,7 @@ void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
 //      Serial.printf("%02X", info.connected.bssid[i]);
 //
 //      if(i<5){
-//        Serial.print(":");
+//        Serial.print(':');
 //      }
 //    }
 //

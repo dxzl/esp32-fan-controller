@@ -1,127 +1,100 @@
 // this file FCUtils.cpp
 #include "FanController.h"
 
-// may want to do this on program init!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-//std::ios_base::sync_with_stdio(false);
-//wcout.imbue(locale("en_US.UTF-8"));
-//locale("en_US.UTF-8");
-
-bool isHex(char c)
-{
-  return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-}
-
-String ZeroPad(byte val){
-  String s = (val < 10) ? "0" : "";
-  s += String(val);
-  return s;
-}
-
-// copied this function from CodeProject's site...
-// https://www.codeproject.com/Articles/35103/Convert-MAC-Address-String-into-Bytes
-String MacArrayToString(uint8_t* pMacArray){
-  String s;
-  char cbuf[3];
-  for(int ii = 0; ii < 6; ii++){
-    sprintf(cbuf,"%02X", *pMacArray++);
-    s += String(cbuf);
-    if (ii < 5)
-      s += ":";
+void RefreshGlobalMasterFlagAndIp(){
+  bool bIsMaster = WeAreMaster();
+  // have to check this every time because a 0 MAC address may now be populated...
+  if (!bIsMaster && g_bMaster){
+//    prtln("This IP is NOT a master...");
+    g_bMaster = false;
+    int iHighestMacIndex = -1; // get by-reference...
+    GetHighestMac(iHighestMacIndex);
+    g_IpMaster = (iHighestMacIndex >= 0) ? IML.GetIP(iHighestMacIndex) : IPAddress("0.0.0.0");
+    g16_sendDefTokenTimer = 0;
   }
-  return s;
+  else if (bIsMaster && !g_bMaster){
+//    prtln("This IP is a master...");
+    g_bMaster = true;
+    g_IpMaster = GetLocalIp(); // this will be 0.0.0.0 unless connected!
+  }
 }
 
-uint8_t* MacStringToByteArray(const char *pMac, uint8_t* pBuf){
-  char cSep = ':';
+//void InitGlobalIpAndMasterFlag(){
+//  g_bIsMaster = WeAreMaster();
+//  if (g_bIsMaster)
+//    g_IpMaster = GetLocalIp();
+//  else{
+//    int iHighestMacIndex = -1; // get by-reference...
+//    GetHighestMac(iHighestMacIndex);
+//    g_IpMaster = (iHighestMacIndex >= 0) ? IML.GetIP(iHighestMacIndex) : IPAddress("0.0.0.0");
+//  }
+//}
 
-  for (int ii = 0; ii < 6; ii++){
-    unsigned int iNumber = 0;
+bool WeAreMaster(){
+  // if we're the only unit, no need for "master"
+  if (IML.GetCount() == 0)
+    return false;
+  // if any IPs in list with no MAC, we can't determine the master yet...
+  if (IsAnyMacZero())
+    return false;
+  int iIdx = -1;
+  uint16_t iMacHighest = GetHighestMac(iIdx);
+  return GetOurDeviceMacLastTwoOctets() > iMacHighest;
+}
 
-    //Convert letter into lower case.
-    char ch = tolower(*pMac++);
+//  uint8_t local_buf[6] = {0}; // order 5:4:3:2:1:0
+//  uint8_t uni_buf[6] = {0}; // order 5:4:3:2:1:0
+//  esp_derive_local_mac(local_buf, uni_buf);
+// this just does same as WiFi.macAddress(buf)
+//  esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, buf);
+//  if (ret != ESP_OK)
+//    return 0;
+// this returns 0 if offline!
+//  WiFi.macAddress(buf);
+//  Serial.println(local_buf[5],16);
+//  Serial.println(local_buf[4],16);
+//  Serial.println(local_buf[3],16);
+//  Serial.println(local_buf[2],16);
+//  Serial.println(local_buf[1],16);
+//  Serial.println(local_buf[0],16);
+uint16_t GetOurDeviceMacLastTwoOctets(){
+  uint8_t base_buf[6] = {0}; // order 5:4:3:2:1:0
+  esp_efuse_mac_get_default(base_buf);
+  esp_read_mac(base_buf, ESP_MAC_WIFI_STA);
+  
+//  Serial.println(base_buf[5],16);
+//  Serial.println(base_buf[4],16);
+//  Serial.println(base_buf[3],16);
+//  Serial.println(base_buf[2],16);
+//  Serial.println(base_buf[1],16);
+//  Serial.println(base_buf[0],16);
 
-    if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f'))
-      return NULL;
+  return (base_buf[1] << 8) | base_buf[0];
+}
 
-    //Convert into number.
-    // a. If chareater is digit then ch - '0'
-    // b. else (ch - 'a' + 10) it is done because addition of 10 takes correct value.
-    iNumber = isdigit(ch) ? (ch - '0') : (ch - 'a' + 10);
-    ch = tolower(*pMac);
-
-    if ((ii < 5 && ch != cSep) || (ii == 5 && ch != '\0' && !isspace(ch))){
-      pMac++;
-
-      if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f'))
-        return NULL;
-
-      iNumber <<= 4;
-      iNumber += isdigit(ch) ? (ch - '0') : (ch - 'a' + 10);
-      ch = *pMac;
-
-      if (ii < 5 && ch != cSep)
-        return NULL;
+// return highest "last two octets" of MACs stored in arr
+// return index by-reference
+uint16_t GetHighestMac(int& iIdx){
+  uint16_t highestMac = 0;
+  int count = IML.GetCount();
+  iIdx = -1;
+  for (int ii=0; ii<count; ii++){
+    uint16_t thisMac = IML.GetMdnsMAClastTwo(ii);
+    if (thisMac > highestMac){
+      highestMac = thisMac;
+      iIdx = ii;
     }
-    /* Store result.  */
-    pBuf[ii] = (uint8_t)iNumber;
-    /* Skip cSep.  */
-    pMac++;
   }
-  return pBuf;
+  return highestMac;  
 }
 
-String GetStringIP(){
-  //Static IP address configuration
-  //IPAddress staticIP(192, 168, 43, 90); //ESP static ip
-  //IPAddress gateway(192, 168, 43, 1);   //IP Address of your WiFi Router (Gateway)
-  //IPAddress subnet(255, 255, 255, 0);  //Subnet mask
-  //IPAddress dns(8, 8, 8, 8);  //DNS
-
-  IPAddress apip = WiFi.softAPIP();
-  String sInfo = "Host \"" + g_sHostName + "\" (" + apip.toString() + ") ";
-  if (g_bSoftAP){
-    IpToArray(apip[3]); // needed for IP last-octet flasher!
-    sInfo += "on channel " + String(GetWiFiChan()) + " is an access point.";
-  }
-  else if (g_bWiFiConnected){
-    IPAddress loip = WiFi.localIP();
-    IpToArray(loip[3]); // needed for IP last-octet flasher!
-    sInfo += "on channel " + String(GetWiFiChan()) + " connected to router " + WiFi.SSID() + " at " + loip.toString();
-  }
-  else
-    sInfo += "is not presently connected to WiFi.";
-  return sInfo;
-}
-
-int GetWiFiChan(){
-  uint8_t chan;
-  wifi_second_chan_t chan2;
-  if (esp_wifi_get_channel(&chan, &chan2) == ESP_OK)
-    return chan;
-  return -1;
-}
-
-// Used to flash out the last octet of the IP address on the ESP32 built-in LED
-// puts the last octet of an IP Address into a global array
-// so that we can flash it out on the LED
-// For example:
-//   .8 => [0] = 8, [1] = 0
-//   .32 => [0] = 2, [1] = 3, [2] = 0
-//   .192 => [0] = 2, [1] = 9, [2] = 1, [3] = 0
-void IpToArray(uint16_t ipLastOctet){
-  if (ipLastOctet == 0){
-    g8_digitArray[0] = 0;
-    return;
-  }
-
-  uint16_t hundreds = ipLastOctet/100;
-  ipLastOctet -= hundreds*100;
-  uint16_t tens = ipLastOctet/10;
-  ipLastOctet -= tens*10;
-  g8_digitArray[0] = ipLastOctet; // 1s
-  g8_digitArray[1] = tens;
-  g8_digitArray[2] = hundreds;
-  g8_digitArray[3] = 0; // end marker
+// return true if any stored MAC is 0 (remote has not sent it to us)
+bool IsAnyMacZero(){
+  int count = IML.GetCount();
+  for (int ii=0; ii<count; ii++)
+    if (IML.GetMdnsMAClastTwo(ii) == 0)
+      return true;
+  return false;  
 }
 
 void ReadPot1(){
@@ -142,12 +115,12 @@ void ReadPot1(){
 
     if (g8_potModeFromSwitch == 0){
       // period range: 0 - 100% (of perMax)
-      QueueTask(TASK_PARMS, SUBTASK_PERVAL, (int)percent);
+      TSK.QueueTask(TASK_PARMS, SUBTASK_PERVAL, (int)percent);
 //prtln("DEBUG: ReadPot1(): perval changed!: " + String((int)percent));
     }
     else if (g8_potModeFromSwitch == 1){
       // phase range: 0 - 100%
-      QueueTask(TASK_PARMS, SUBTASK_PHASE, (int)percent);
+      TSK.QueueTask(TASK_PARMS, SUBTASK_PHASE, (int)percent);
 //prtln("DEBUG: ReadPot1(): phase changed!: " + String((int)percent));
     }
 
@@ -183,28 +156,8 @@ void ReadWiFiSwitch(){
 #endif
 }
 
-void ReadSpdtSwitches(){
 #if ESP32_S3
-  bool sw1On = digitalRead(GPIN_POT_MODE_SW1);
-  bool sw2On = digitalRead(GPIN_POT_MODE_SW2);
-  if (sw1On != g_bOldPotModeSw1On || sw2On != g_bOldPotModeSw2On){
-    if (sw1On){
-      g8_potModeFromSwitch = 1;
-      prtln("Pot Mode Switch: 1");
-    }
-    else if (sw2On){
-      g8_potModeFromSwitch = 2;
-      prtln("Pot Mode Switch: 2");
-    }
-    else{
-      g8_potModeFromSwitch = 0;
-      prtln("Pot Mode Switch: OFF");
-    }
-
-    g_bOldPotModeSw1On = sw1On;
-    g_bOldPotModeSw2On = sw2On;
-  }
-
+void ReadSsrSwitches(){
   bool swManOn = digitalRead(GPIN_SSR1_MODE_SW_MAN);
   bool swAutOn = digitalRead(GPIN_SSR1_MODE_SW_AUT);
   if (swManOn != g_bOldSsr1ModeManSwOn || swAutOn != g_bOldSsr1ModeAutSwOn){
@@ -246,7 +199,30 @@ void ReadSpdtSwitches(){
     g_bOldSsr2ModeAutSwOn = swAutOn;
     SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
   }
+}
+#endif  
 
+void ReadPotModeSwitch(){
+#if ESP32_S3
+  bool sw1On = digitalRead(GPIN_POT_MODE_SW1);
+  bool sw2On = digitalRead(GPIN_POT_MODE_SW2);
+  if (sw1On != g_bOldPotModeSw1On || sw2On != g_bOldPotModeSw2On){
+    if (sw1On){
+      g8_potModeFromSwitch = 1;
+      prtln("Pot Mode Switch: 1");
+    }
+    else if (sw2On){
+      g8_potModeFromSwitch = 2;
+      prtln("Pot Mode Switch: 2");
+    }
+    else{
+      g8_potModeFromSwitch = 0;
+      prtln("Pot Mode Switch: OFF");
+    }
+
+    g_bOldPotModeSw1On = sw1On;
+    g_bOldPotModeSw2On = sw2On;
+  }
 #else  
   bool bPotModeSwOn = (digitalRead(GPIN_POT_MODE_SW) == HIGH) ? true : false;
 
@@ -263,9 +239,9 @@ void ReadSpdtSwitches(){
 #endif  
 }
 
-// Usage: SetSSRMode(GPOUT_SSR2, SSR_MODE_ON) sets g_bSsr2On true 
-//        SetSSRMode(GPOUT_SSR2, SSR_MODE_AUTO) sets g_bSsr2On false 
-//        SetSSRMode(GPOUT_SSR2, SSR_MODE_OFF) sets g_bSsr2On false 
+// Usage: SetSSRMode(GPOUT_SSR2, SSR_MODE_ON) sets DEV_STATUS_2 bit
+//        SetSSRMode(GPOUT_SSR2, SSR_MODE_AUTO) clears DEV_STATUS_2 bit
+//        SetSSRMode(GPOUT_SSR2, SSR_MODE_OFF) clears DEV_STATUS_2 bit
 void SetSSRMode(uint8_t gpout, uint8_t ssrMode){
   if (ssrMode == SSR_MODE_ON)
     SetSSR(gpout, true);
@@ -273,8 +249,7 @@ void SetSSRMode(uint8_t gpout, uint8_t ssrMode){
     SetSSR(gpout, false);
 }
 
-// sets global g_bSsr1On to bSsrOn's value if val is GPIO32_SSR_1
-// sets global g_bSsr2On to bSsrOn's value if val is GPIO23_SSR_2
+// sets global g_devStatus (DEV_STATUS_1/DEV_STATUS2) bits to reflect the GPOUT_SSR1/GPOUT/SSR2 states
 void SetSSR(uint8_t gpout, bool bSetSsrOn){
   bool bIsOn = (digitalRead(gpout) == HIGH) ? true : false;
 
@@ -298,14 +273,14 @@ void SetSSR(uint8_t gpout, bool bSetSsrOn){
     if (!bIsOn)
       digitalWrite(gpout, HIGH);
     if (gpout == GPOUT_SSR1){
-      g_bSsr1On = true;
+      g_devStatus |= DEV_STATUS_1;
       g_stats.AOnCounter++;
 #if ESP32_S3
       digitalWrite(GPOUT_SSR1_LED, HIGH);
 #endif
     }
     else if (gpout == GPOUT_SSR2){
-      g_bSsr2On = true;
+      g_devStatus |= DEV_STATUS_2;
       g_stats.BOnCounter++;
 #if ESP32_S3
       digitalWrite(GPOUT_SSR2_LED, HIGH);
@@ -315,13 +290,13 @@ void SetSSR(uint8_t gpout, bool bSetSsrOn){
   else if (bIsOn){ // Set to OFF or AUTO
     digitalWrite(gpout, LOW);
     if (gpout == GPOUT_SSR1){
-      g_bSsr1On = false;
+      g_devStatus &= ~DEV_STATUS_1;
 #if ESP32_S3
       digitalWrite(GPOUT_SSR1_LED, LOW);
 #endif
     }
     else if (gpout == GPOUT_SSR2){
-      g_bSsr2On = false;
+      g_devStatus &= ~DEV_STATUS_2;
 #if ESP32_S3
       digitalWrite(GPOUT_SSR2_LED, LOW);
 #endif
@@ -345,261 +320,6 @@ String SsrModeToString(uint8_t ssrMode){
   return "";
 }
 
-// returns NULL if fail.
-// pass in a pointer to a time_t version we export
-// or set it NULL if not needed!
-// set pTm to struct tm pointer we export
-struct tm* ReadInternalTime(time_t* pEpochSeconds, struct tm* pTm){
-  struct timeval tv = { .tv_sec = 0, .tv_usec = 0 };
-
-  // fill tv.tv_sec
-  if (gettimeofday(&tv, NULL) < 0) // -1 if fail
-    return NULL;
-
-  // these return the same - as expected!
-  //prtln("time(0)=" + String(time(0)) + ", epochSeconds:" + String(tv.tv_sec));
-
-  // passing in time_t epoch-seconds - getting out time broken into a struct tm
-  if (localtime_r(&tv.tv_sec, pTm) == NULL)
-    return NULL;
-
-  // export as a time_t if user has supplied a nonzero pointer
-  if (pEpochSeconds)
-    *pEpochSeconds = tv.tv_sec; //FYI: suseconds_t us = tv.tv_usec;
-
-  mktime(pTm); // set day of week (used in repeat mode)
-
-  return pTm; // return NULL if failure
-}
-
-// set internal time to a known "time is not set!" state
-// sets year to DEF_YEAR which may be used to indicate "time is unset"
-// only call this once - on reset
-// return true if success
-bool InitTimeManually(){
-  prtln("Initializing clock to DEF_YEAR: " + String(DEF_YEAR));
-
-  g_bManualTimeWasSet = false; // we are setting the "not set" time - so disable time-events!
-  g_bWiFiTimeWasSet = false;
-  g_bRequestManualTimeSync = false;
-  g_bRequestWiFiTimeSync = false;
-
-  struct tm timeInfo = {0}; // https://www.cplusplus.com/reference/ctime/tm/
-
-  // set time manually (to an old date so we won't delete any time-slots automatically)
-  timeInfo.tm_year = DEF_YEAR - EPOCH_YEAR;
-  timeInfo.tm_mon = 0; // 0-11
-  timeInfo.tm_mday = 1; // 1-31
-  timeInfo.tm_hour = 0;
-  timeInfo.tm_min = 0;
-  timeInfo.tm_sec = 0;
-  timeInfo.tm_isdst = -1; // auto-get DST 0 = DST off, 1 = DST on + 1 hour
-
-  time_t epochSeconds = mktime(&timeInfo); // get timestamp - # seconds since midnight 1-1-1970 (sets day of week also)
-
-  struct timeval tv = { .tv_sec = epochSeconds, .tv_usec = 0  };
-  if (settimeofday(&tv, NULL) < 0) // returns -1 if fail
-    return false;
-  return true;
-}
-
-// returns time and date as: 2020-11-31T04:32:00pm
-String TimeToString(){
-
-  String sRet;
-
-  // read internal time
-  struct tm timeInfo = {0};
-  if (ReadInternalTime(NULL, &timeInfo) != NULL) // get current time as struct tm
-  {
-    bool bPmFlag; // by ref
-    int hr12 = Make12Hour(timeInfo.tm_hour, bPmFlag);
-    String sPm = bPmFlag ? "pm" : "am";
-    sRet = String(timeInfo.tm_year+EPOCH_YEAR) + "-" +
-      ZeroPad(timeInfo.tm_mon+1) + "-" + ZeroPad(timeInfo.tm_mday) + "T" +
-      String(hr12) + ":" + ZeroPad(timeInfo.tm_min) + ":" + ZeroPad(timeInfo.tm_sec) + sPm;
-  }
-  return sRet;
-}
-
-bool SetTimeManually(int myYear, int myMonth, int myDay, int myHour, int myMinute, int mySecond){
-  if (g8_clockSetDebounceTimer != 0)
-    return true; // don't return error if just a "bouncy" web-request!
-
-  g8_clockSetDebounceTimer = MANUAL_CLOCK_SET_DEBOUNCE_TIME;
-
-  if (myYear <= DEF_YEAR){
-    prtln("Warning! Years less than or equal to DEF_YEAR not allowed: " + String(DEF_YEAR));
-    return false;
-  }
-
-  if (myYear > MAX_YEAR)
-    prtln("Warning! Year being set is over Y2038 MAX_YEAR: " + String(MAX_YEAR));
-
-  struct tm timeInfo = {0}; // https://www.cplusplus.com/reference/ctime/tm/
-  timeInfo.tm_year = myYear - EPOCH_YEAR;
-  timeInfo.tm_mon = myMonth-1;
-  timeInfo.tm_mday = myDay;
-  timeInfo.tm_hour = myHour;
-  timeInfo.tm_min = myMinute;
-  timeInfo.tm_sec = mySecond;
-  timeInfo.tm_isdst = -1; // auto-get DST 0 = DST off, 1 = DST on + 1 hour
-
-  time_t epochSeconds = mktime(&timeInfo); // get timestamp - # seconds since midnight 1-1-1970 (sets day of week also)
-
-  struct timeval tv = { .tv_sec = epochSeconds, .tv_usec = 0  };
-  if (settimeofday(&tv, NULL) == 0){ // returns -1 if fail
-    prtln("Requesting manual time-sync...");
-    g_bRequestManualTimeSync = true;
-    return true;
-  }
-
-  prtln("Failed to set internal clock...");
-
-  // this is used in ProcessTimeSlot() to facilitate
-  // the repeat modes (see p2.html in the data folder)
-  // I.E. every hour, day, Etc. following a time-event
-  // trigger.
-  g_prevDateTime = {0};
-  g_bManualTimeWasSet = false; // stop processing events on manual time...
-  return false;
-}
-
-// takes hour in 24 hour and returns 12-hour
-// and pmFlag by reference
-int Make12Hour(int iHour, bool &pmFlag){
-  pmFlag = (iHour >= 12) ? true : false;
-  iHour %= 12; // 0-11 we get 0-11, for 12-23 we get 0-11
-  if (iHour == 0) iHour = 12; // the hour '0' should be '12'
-  return iHour;
-}
-
-// eastern  = -5
-// central  = -6 (me)
-// mountain = -7
-// pacific  = -8
-// so -6 * 60 * 60 = -6 * 3600 = -21600ms
-//const long  gmtOffset_sec = -21600;
-//const int   daylightOffset_sec = +3600; // offset +3600 if DST (daylight savings time) (spring forward)
-
-// Before calling printLocalTime() call configTime!
-void printLocalTime(struct tm &timeInfo){
-  // timeinfo members http://www.cplusplus.com/reference/ctime/tm/
-  //tm_sec  int seconds after the minute 0-61 (tm_sec is generally 0-59. The extra range is to accommodate for leap seconds in certain systems.)
-  //tm_min  int minutes after the hour 0-59
-  //tm_hour int hours since midnight 0-23
-  //tm_mday int day of the month 1-31
-  //tm_mon  int months since January 0-11
-  //tm_year int years since 1900
-  //tm_wday int days since Sunday 0-6
-  //tm_yday int days since January 1, 0-365
-  //tm_isdst  int Daylight Saving Time flag
-  //The Daylight Saving Time flag (tm_isdst) is greater than zero if Daylight Saving Time is in effect,
-  //zero if Daylight Saving Time is not in effect, and less than zero if the information is not available.
-
-  //%A  returns day of week
-  //%B  returns month of year
-  //%d  returns day of month
-  //%Y  returns year
-  //%H  returns hour
-  //%M  returns minutes
-  //%S  returns seconds
-#if PRINT_ON
-  Serial.println(&timeInfo, "%A, %B %d %Y %H:%M:%S");
-#endif
-
-  //time_t lastSync = NTP.getLastSync();
-  //char buff[20];
-  //strftime(buff, 20, "%H:%M:%S - %d-%m-%Y ", localtime(&lastSync));
-
-}
-
-void PrintPreferences(){
-  prtln("period units: " + String(g_perVals.perUnits));
-  prtln("max period: " + String(g_perVals.perMax));
-  String sTemp = (g_perVals.perVal == 0) ? "random" : String(g_perVals.perVal) + "%";
-  prtln("period: " + sTemp);
-  prtln("period (.5 sec units): " + String(g32_savePeriod));
-  prtln("A duty-cycle:" + String(g_perVals.dutyCycleA) + "%");
-  prtln("B duty-cycle: " + String(g_perVals.dutyCycleB) + "%");
-  prtln("phase: " + String(g_perVals.phase) + "%");
-  prt(SyncFlagStatus());
-  prt("SSR1 Mode: ");
-  PrintSsrMode(g8_ssr1ModeFromWeb);
-  prt("SSR2 Mode: ");
-  PrintSsrMode(g8_ssr2ModeFromWeb);
-  PrintMidiChan();
-  prt("A: ");
-  PrintMidiNote(g8_midiNoteA);
-  prt("B: ");
-  PrintMidiNote(g8_midiNoteB);
-  prtln("wifi disable flag: " + String(g_bWiFiDisabled));
-  prtln("labelA: \"" + g_sLabelA + "\"");
-  prtln("labelB: \"" + g_sLabelB + "\"");
-  prtln("cipher key: \"" + String(g_sKey) + "\"");
-  prtln("token: " + String(g_defToken));
-  prtln("max power (.25dBm per step): " + String(g8_maxPower));
-}
-
-void PrintPulseFeaturePreferences(){
-  prtln("pulse-off mode A: " + String(g8_pulseModeA));
-  prtln("pulse-off min width A: " + String(g8_pulseMinWidthA));
-  prtln("pulse-off max width A: " + String(g8_pulseMaxWidthA));
-  prtln("pulse-off min period A: " + String(g16_pulseMinPeriodA));
-  prtln("pulse-off max period A: " + String(g16_pulseMaxPeriodA));
-  prtln("pulse-off mode B: " + String(g8_pulseModeB));
-  prtln("pulse-off min width B: " + String(g8_pulseMinWidthB));
-  prtln("pulse-off max width B: " + String(g8_pulseMaxWidthB));
-  prtln("pulse-off min period B: " + String(g16_pulseMinPeriodB));
-  prtln("pulse-off max period B: " + String(g16_pulseMaxPeriodB));
-}
-
-void PrintSsrMode(uint8_t ssrMode){
-  String s;
-  if (ssrMode == SSR_MODE_OFF)
-    s = "OFF";
-  else if (ssrMode == SSR_MODE_ON)
-    s = "ON";
-  else if (ssrMode == SSR_MODE_AUTO)
-    s = "AUTO";
-  else
-    s = "(unknown)";
-  prtln(s);
-}
-
-void PrintMidiNote(uint8_t note){
-  String s;
-  if (note == MIDINOTE_ALL)
-    s = "ALL";
-  else
-    s = String(note);
-  prtln("Midi note set to:" + s);
-}
-
-void PrintMidiChan(){
-  String s;
-  if (g8_midiChan == MIDICHAN_OFF)
-    s = "OFF";
-  else if (g8_midiChan == MIDICHAN_ALL)
-    s = "ALL";
-  else
-    s = String(g8_midiChan);
-  prtln("Midi channel set to:" + s);
-}
-
-// sFile: "/test.txt"
-void PrintSpiffs(String sFile){
-  File file = SPIFFS.open(sFile);
-  if(!file){
-    Serial.println("Failed to open file for reading");
-    return;
-  }
-  Serial.println("File Content:");
-  while(file.available())
-    Serial.write(file.read());
-  file.close();
-}
-
 void ResetPeriod()
 {
   g32_dutyCycleTimerA = 0;
@@ -620,58 +340,6 @@ void LimitPeriod(){
     g32_dutyCycleTimerB = MIN_PERIOD_TIMER;
 }
 
-//#include <WiFi.h>
-//#include "esp_wifi.h"
-
-// not presently used - this would allow us to get ip-address and MAC
-// of networks connected to us when we are an access-point.
-//void WiFiApInfo(){
-//
-//  //WiFi.softAP("MyESP32AP");
-//
-//  //uint8_t bssid[6] MAC address of AP
-//  //uint8_t ssid[33] SSID of AP (S.S. - guess this is in UTF-8 - maybe a 16 unicode char limit?)
-//  //uint8_t primary channel of AP
-//  //wifi_second_chan_tsecond secondary channel of AP
-//  //int8_t rssi signal strength of AP
-//  //wifi_auth_mode_tauthmode authmode of AP
-//  //wifi_cipher_type_tpairwise_cipher pairwise cipher of AP
-//  //wifi_cipher_type_tgroup_cipher group cipher of AP
-//  //wifi_ant_tant antenna used to receive beacon from AP
-//  //uint32_t phy_11b : 1 bit: 0 flag to identify if 11b mode is enabled or not
-//  //uint32_t phy_11g : 1 bit: 1 flag to identify if 11g mode is enabled or not
-//  //uint32_t phy_11n : 1 bit: 2 flag to identify if 11n mode is enabled or not
-//  //uint32_t phy_lr : 1 bit: 3 flag to identify if low rate is enabled or not
-//  //uint32_t wps : 1 bit: 4 flag to identify if WPS is supported or not
-//  //uint32_t reserved : 27 bit: 5..31 reserved
-//  //wifi_country_tcountry country information of AP
-//  wifi_sta_list_t wifi_sta_list;
-//
-//  tcpip_adapter_sta_list_t adapter_sta_list;
-//
-//  memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
-//  memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
-//
-//  esp_wifi_ap_get_sta_list(&wifi_sta_list); // Get information of AP which the ESP32 station is associated with
-//  tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
-//
-//  for (int i = 0; i < adapter_sta_list.num; i++){
-//
-//    tcpip_adapter_sta_info_t station = adapter_sta_list.sta[i];
-//
-//    prtln("station " + i);
-//    prt("MAC: ");
-//
-//    for(int j = 0; j< 6; j++){
-//      Serial.printf("%02X", station.mac[j]);
-//      if(j<5)Serial.print(":");
-//    }
-//
-//    prtln("\nIP: ");
-//    Serial.print(ip4addr_ntoa(&station.ip));
-//  }
-//}
-
 // This provides an HTML select list of available wifi networks.
 String WiFiScan(String sInit){
   String s = "<option value='" + sInit + "'>";
@@ -688,36 +356,12 @@ String WiFiScan(String sInit){
   return s;
 }
 
-// decode unicode hex: /u00e1, etc
-//String convertUnicode(String unicodeStr){
-//  String out = "";
-//  int len = unicodeStr.length();
-//  char iChar;
-//  char* endPtr; // will point to next char after numeric code
-//  for (int i = 0; i < len; i++){
-//     iChar = unicodeStr[i];
-//     if(iChar == '\\'){ // got escape char
-//       iChar = unicodeStr[++i];
-//       if(iChar == 'u'){ // got unicode hex
-//         char unicode[6];
-//         unicode[0] = '0';
-//         unicode[1] = 'x';
-//         for (int j = 0; j < 4; j++){
-//           iChar = unicodeStr[++i];
-//           unicode[j + 2] = iChar;
-//         }
-//         long unicodeVal = strtol(unicode, &endPtr, 16); //convert the string
-//         out += (char)unicodeVal;
-//       } else if(iChar == '/'){
-//         out += iChar;
-//       } else if(iChar == 'n'){
-//         out += '\n';
-//       }
-//     } else {
-//       out += iChar;
-//     }
-//  }
-//  return out;
+//bool isIp(String sIn){
+//  IPAddress ip;
+//  ip.fromString(sIn);
+//  if ((uint32_t)ip == 0)
+//    return false;
+//  return true;
 //}
 
 bool alldigits(String &sIn){
@@ -738,70 +382,101 @@ bool alldigits(String &sIn){
   return true;
 }
   
-//    String encryptionTypeDescription = translateEncryptionType(WiFi.encryptionType(i));
-//    Serial.println(encryptionTypeDescription);
-//String translateEncryptionType(wifi_auth_mode_t encryptionType) {
-//  switch (encryptionType) {
-//    case (0):
-//      return "Open";
-//    case (1):
-//      return "WEP";
-//    case (2):
-//      return "WPA_PSK";
-//    case (3):
-//      return "WPA2_PSK";
-//    case (4):
-//      return "WPA_WPA2_PSK";
-//    case (5):
-//      return "WPA2_ENTERPRISE";
-//    default:
-//      return "UNKOWN";
-//  }
-//}
-
 // start process of sending out new "pending" default token to all
 // remote units. As the response "TOKOK" comes back, we set the bTokOk flag for each mDNS IP.
 // When all have been set, we set the new token for ourself (in flash)
-void StartNewRandomToken(){
+// StartNewRandomDefaultToken() is usually called when a g_bMaster has incrimented g16_sendDefTokenTimer
+// up to g16_sendDefTokenTime... But - a non-master WILL call this when CanRx succeeds after first failing and
+// being "repaired" with a new CanRx tx token... (see Tasks.cpp)
+// Only call if master!
+bool MasterStartRandomDefaultTokenChange(){
+  if (!g_bWiFiConnected || !g_bMaster)
+    return false;
+    
   int newToken = g_defToken;
   while (newToken == g_defToken)
-    newToken = random(0, MAX_TOKEN+1); // generate new random base 64 default token for currently linked ESP32s
-  if (HMC.AddTableCommandAll(CMtoken, newToken) > 0){
-    IML.ClearAllTokOkFlags(); // cancel any preceding token-change operation...
-    g_pendingDefToken = newToken;
-  }
+    newToken = GetRandToken(); // generate new random base 64 default token for currently linked ESP32s
+  // Master will send CMchangeData command to all non-master units
+  return MasterStartSynchronizedChange(CD_CMD_TOKEN, 0, String(newToken));
 }
 
-// return by-reference...
-void twiddle(String& s){
-  int len = s.length();
-  if (len > 2){
-    char s0, s1, s2;
-    if (len & 1){
-      s0 = 'e';
-      s1 = 'm';
-      s2 = 'R';
-    }
-    else{
-      s0 = 'R';
-      s1 = 'e';
-      s2 = 'm';
-    }
-    char c1 = s[0];
-    char c2 = s[1];
-    if (c1 == 'c')
-      s[0] = s0;
-    else if (c1 == s0)
-      s[0] = 'c';
-    else if (c1 == 'C')
-      s[0] = s1;
-    else if (c1 == s1)
-      s[0] = 'C';
-    if (c2 == ' ')
-      s[1] = s2;
-    else if (c2 == s2)
-      s[1] = ' ';
+int GetRandToken(){
+  return random(MIN_TOKEN, MAX_TOKEN+1);
+}
+
+// called when a user sets a new default token from the command-interface while
+// connected to the WiFi router or from MasterStartRandomDefaultTokenChange(), CD_CMD_TOKEN,
+// or from Tasks.cpp TASK_MAC after a new MAC address has been saved in flash CD_CMD_RECONNECT.
+// Also called for the command "c synchronize"
+// Call if either master or slave
+bool QueueSynchronizedChange(int iChangeCmd, int iChangeFlags, String sChangeData){
+  if (!g_bWiFiConnected || !IML.GetCount())
+    return false;
+    
+  if (g_bMaster)
+    return MasterStartSynchronizedChange(iChangeCmd, iChangeFlags, sChangeData);
+
+  // non-masters need to send a request to the master to initiate a default token-change
+  int iIdx = IML.FindMdnsIp(g_IpMaster);
+  if (iIdx < 0)
+    return false;
+    
+  switch(iChangeCmd){
+    case CD_CMD_TOKEN:
+      prtln("this non-master is requesting system-wide default token-change...");
+    break;
+    
+    case CD_CMD_RECONNECT:
+      prtln("this non-master is requesting system-wide WiFi reset and mDNS IP purge...");
+    break;
+    
+    case CD_CMD_CYCLE_PARMS:
+      prtln("this non-master is requesting system-wide cycle-timing propigation...");
+    break;
+    
+    default:
+      return false;
+    break;
+  };
+
+  // send CMchangeReq to master
+  HMC.AddCMchangeReq(iChangeCmd, iChangeFlags, sChangeData, iIdx, MDNS_STRING_SEND_SPECIFIC);
+  
+  return true;
+}
+
+// Only call if master
+bool MasterStartSynchronizedChange(int iChangeCmd, int iChangeFlags, String sChangeData){
+  if (!g_bWiFiConnected || !g_bMaster)
+    return false;
+    
+  bool bRet;
+  // Master will send CMchangeData command to all non-master units
+  if (HMC.AddCMchangeDataAll(iChangeCmd, iChangeFlags, sChangeData) > 0){
+    IML.SetFlagForAllIP(MDNS_FLAG_CHANGE_OK, false); // cancel any preceding token-change operation...
+    CNG.QueueChange(iChangeCmd, iChangeFlags, sChangeData);
+    bRet = true;
   }
+  else
+    bRet = false;
+    
+  switch(iChangeCmd){
+    case CD_CMD_TOKEN:
+      g16_sendDefTokenTimer = 0;
+      g16_sendDefTokenTime = random(SEND_DEF_TOKEN_TIME_MIN, SEND_DEF_TOKEN_TIME_MAX+1);
+    break;
+    
+    case CD_CMD_RECONNECT:
+    break;
+    
+    case CD_CMD_CYCLE_PARMS:
+    break;
+
+    default:
+    break;
+  };
+  
+  return bRet;
 }
 
 void RefreshSct(){
@@ -815,64 +490,12 @@ int GetSct(int &minSct, int &maxSct)
   return random(minSct, maxSct);
 }
 
-// from index.html
-//  <option value="0">1/2 sec</option>
-//  <option value="1">sec</option>
-//  <option value="2">min</option>
-//  <option value="3">hrs</option>
-String GetPerUnitsString(int perUnitsIndex){
-  String sRet;
-  switch(perUnitsIndex){
-    case 0:
-      sRet = "half-second";
-    break;
-    case 1:
-      sRet = "one second";
-    break;
-    case 2:
-      sRet = "one minute";
-    break;
-    case 3:
-      sRet = "one hour";
-    break;
-    default:
-      sRet = "Unknown!";
-    break;
-  };
-  return sRet + " units";
-}
-
-String GetPhaseString(int phase){
-  if (phase == 100)
-    return "random";
-  return String(phase);
-}
-
-String GetPerDCString(int iVal){
-  if (iVal == 0)
-    return "random";
-  return String(iVal);
-}
-
-// print wrappers
-void prtln(String s){
-#if PRINT_ON
-  Serial.println(s);
-#endif
-}
-
-void prt(String s){
-#if PRINT_ON
-  Serial.print(s);
-#endif
-}
-
 // Channel 1 (A) switches off when g32_dutyCycleTimerA decrements to 0.
 // It switches on when g32_periodTimer decrements to 0
 int ComputeTimeToOnOrOffA(){
   if (g8_ssr1ModeFromWeb != SSR_MODE_AUTO)
     return -1;
-  if (g_bSsr1On)
+  if (g_devStatus & DEV_STATUS_1)
     return g32_dutyCycleTimerA;
   return g32_periodTimer;
 }
@@ -883,26 +506,11 @@ int ComputeTimeToOnOrOffA(){
 int ComputeTimeToOnOrOffB(){
   if (g8_ssr2ModeFromWeb != SSR_MODE_AUTO)
     return -1;
-  if (g_bSsr2On)
+  if (g_devStatus & DEV_STATUS_2)
     return g32_dutyCycleTimerB;
   if (g32_phaseTimer)
     return g32_phaseTimer;
   return g32_periodTimer+g32_nextPhase;
-}
-
-void CheckMasterStatus(){
-  bool bIsMaster = IML.AreWeMaster();
-  // have to check this every time because a 0 MAC address may now be populated...
-  if (bIsMaster && !g_bSyncMaster){
-    prtln("This IP is a master...");
-    g_bSyncMaster = true;
-  }
-  else if (!bIsMaster && g_bSyncMaster){
-    prtln("This IP is NOT a master...");
-    g_bSyncMaster = false;
-    if (g16_sendDefTokenTimer)
-      g16_sendDefTokenTimer = 0;
-  }
 }
 
 // set sReloadUrl to P2_FILENAME Etc.
@@ -958,8 +566,6 @@ String SyncFlagStatus(){
   sOut += "tx sync to remote: " + sOnOff;
   sOnOff = g_bSyncCycle ? ON:OFF;
   sOut += "cycle sync to remote: " + sOnOff;
-  sOnOff = g_bSyncToken ? ON:OFF;
-  sOut += "token sync to remote: " + sOnOff;
   sOnOff = g_bSyncTime ? ON:OFF;
   sOut += "time sync to remote: " + sOnOff;
   sOnOff = g_bSyncEncrypt ? ON:OFF;
@@ -981,7 +587,7 @@ void FlashSequencerInit(uint8_t postFlashMode){
   g8_ledMode = g8_ledMode_PAUSED;
   g8_ledSeqState = LEDSEQ_PAUSED;
 #if ESP32_S3
-  neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off
+  rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off
 #else
   digitalWrite(GPOUT_ONBOARD_LED, LOW);
 #endif
@@ -1019,7 +625,7 @@ void FlashLED(){
   else if (g8_ledMode == g8_ledMode_OFF){
     if (!g_bLedOn){
 #if ESP32_S3
-        neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off
+        rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off
 #else
         digitalWrite(GPOUT_ONBOARD_LED, LOW);
 #endif
@@ -1031,7 +637,7 @@ void FlashLED(){
   else if (g8_ledMode == g8_ledMode_ON){
     if (!g_bLedOn){
 #if ESP32_S3
-      neopixelWrite(RGB_BUILTIN, 0, LED_GREEN, 0);  // On
+      rgbLedWrite(RGB_BUILTIN, 0, LED_GREEN, 0);  // On
 #else
       digitalWrite(GPOUT_ONBOARD_LED, HIGH);
 #endif
@@ -1044,7 +650,7 @@ void FlashLED(){
     if (--g8_ledFlashTimer == 0){
       if (!g_bLedOn){
 #if ESP32_S3
-        neopixelWrite(RGB_BUILTIN, 0, LED_GREEN, 0);  // On
+        rgbLedWrite(RGB_BUILTIN, 0, LED_GREEN, 0);  // On
 #else
         digitalWrite(GPOUT_ONBOARD_LED, HIGH);
 #endif
@@ -1052,7 +658,7 @@ void FlashLED(){
       }
       else{
 #if ESP32_S3
-        neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off
+        rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off
 #else
         digitalWrite(GPOUT_ONBOARD_LED, LOW);
 #endif
@@ -1070,45 +676,23 @@ void FlashLED(){
     g8_ledFlashTimer = 1;
 }
 
-// ensconses sIn "somewhere" within a random message
-//String genRandPositioning(String sIn, int iMin, int iMax){
-//  String sRand = genRandMessage(iMin, iMax);
-//  int iLen = sRand.length();
-//  if (iLen == 0)
-//    return sIn;
-//  int iIdx = random(0, iLen+1);
-//  if (iIdx == iLen)
-//    return sIn + sRand;
-//  if (iIdx == 0)
-//    return sRand + sIn;
-//  String sSub1, sSub2; 
-//  sSub1 = sRand.substring(0, iIdx); 
-//  sSub2 = sRand.substring(iIdx+1);
-//  return sSub1 + sIn + sSub2;
-//}
-
 // generate variable length random message
 String genRandMessage(int iMin, int iMax){
-  int N = random(iMin, iMax); // message 3-30 chars
+  int N = random(iMin, iMax+1); // message iMin-iMax chars
   if (N == 0)
     return "";
-  int it = 3*N;
-  char arr[it+1];
-  for (int ii=0; ii < N; ii++){
-     int mul = ii*3;
-     arr[mul+0] = random('a', 'z');
-     arr[mul+1] = random('A', 'Z');
-     arr[mul+2] = random('0', '9');
-  }
-  arr[it] = '\0';
+  char arr[N+1];
+  for (int ii=0; ii < N; ii++)
+     arr[ii] = random('\x20', '\x7f');
+  arr[N] = '\0';
   return String(arr);
 }
 
-// positive numbers only (need to test...)
-String MyEncodeNum(unsigned int uiIn, int table, int token, int context){
+// returns empty string if failure
+String MyEncodeNum(int iIn, int table, int token, int context){
   String s;
   if (g_bSyncEncrypt){
-    s = B64C.hnEncNumOnly(uiIn, table, token);
+    s = B64C.hnEncNumOnly(iIn, table, token);
 //prtln("MyEncodeNum(): 1: \"" + s + "\"");
     if (s.isEmpty())
       return "";
@@ -1123,88 +707,91 @@ String MyEncodeNum(unsigned int uiIn, int table, int token, int context){
     s = B64C.hnEncodeStr(s, table, token);
 //prtln("MyEncodeNum(): 4: \"" + s + "\"");
   }else
-    s = B64C.hnEncNum(uiIn, table, token);
+    s = B64C.hnEncNum(iIn, table, token);
 
   return s;
 }
 
 // positive numbers only (need to test...)
-// returns negative if error
-int MyDecodeNum(String s, int table, int token, int context){
+// returns negative if error, 0 if success, result is in iOut
+int MyDecodeNum(int& iOut, String s, int table, int token, int context){
+  iOut = 0;
   if (s.isEmpty())
-    return -2;
-  int iOut;
+    return -1;
   if (g_bSyncEncrypt){
 //prtln("MyDecodeNum(): 0: \"" + s + "\"");
     s = B64C.hnDecodeStr(s, table, token);
 //prtln("MyDecodeNum(): 1: \"" + s + "\"");
     if (s.isEmpty())
-      return -3;
+      return -2;
     s = CIP.decryptString(s, token, context);
 //prtln("MyDecodeNum(): 2: \"" + s + "\"");
     if (s.isEmpty())
-      return -4;
+      return -3;
     s = SubtractTwoDigitBase16Checksum(s);
 //prtln("MyDecodeNum(): 3: \"" + s + "\"");
-    if (s.isEmpty())
-      return -5;
+    if (s.isEmpty()){
+      prtln("FCUtils.cpp MyDecodeNum() SubtractTwoDigitBase16Checksum(): bad checksum!");
+      return -4;
+    }
     iOut = B64C.hnDecNumOnly(s, table, token);
 //prtln("MyDecodeNum(): 4: \"" + String(iOut) + "\"");
   }
   else
     iOut = B64C.hnDecNum(s, table, token);
-  return iOut;
+  return 0;
 }
 
-String MyEncodeStr(String s, int table, int token, int context){
-  if (s.isEmpty())
-    return "";
+int MyEncodeStr(String& sInOut, int table, int token, int context){
+  
+  if (sInOut.isEmpty())
+    return -1;
+    
   if (g_bSyncEncrypt){
-    s = AddTwoDigitBase16Checksum(s);
-    if (s.isEmpty())
-      return "";
-    s = CIP.encryptString(s, token, context);
-    if (s.isEmpty())
-      return "";
-    s = B64C.hnEncodeStr(s, table, token);
+    sInOut = AddTwoDigitBase16Checksum(sInOut);
+    if (sInOut.isEmpty())
+      return -2;
+    sInOut = CIP.encryptString(sInOut, token, context);
+    if (sInOut.isEmpty())
+      return -3;
+    sInOut = B64C.hnEncodeStr(sInOut, table, token);
+    if (sInOut.isEmpty())
+      return -4;
   }
-  else
-    s = B64C.hnShiftEncode(s, table, token);
-  return s;
+  else{
+    sInOut = B64C.hnShiftEncode(sInOut, table, token);
+    if (sInOut.isEmpty())
+      return -5;
+  }
+  return 0;
 }
 
-String MyDecodeStr(String s, int table, int token, int context){
-  if (s.isEmpty())
-    return "";
+// returns 0 if no error, negative error code
+int MyDecodeStr(String& sInOut, int table, int token, int context){
+  
+  if (sInOut.isEmpty())
+    return -1;
+    
   if (g_bSyncEncrypt){
-    s = B64C.hnDecodeStr(s, table, token);
-    if (s.isEmpty())
-      return "";
-    s = CIP.decryptString(s, token, context);
-    if (s.isEmpty())
-      return "";
-    s = SubtractTwoDigitBase16Checksum(s);
+    sInOut = B64C.hnDecodeStr(sInOut, table, token);
+    if (sInOut.isEmpty())
+      return -2;
+    sInOut = CIP.decryptString(sInOut, token, context);
+    if (sInOut.isEmpty())
+      return -3;
+    sInOut = SubtractTwoDigitBase16Checksum(sInOut);
+    if (sInOut.isEmpty()){
+      prtln("FCUtils.cpp MyDecodeStr() SubtractTwoDigitBase16Checksum(): bad checksum!");
+      return -4;
+    }
   }
-  else
-    s = B64C.hnShiftDecode(s, table, token);
-  return s;
+  else{
+    sInOut = B64C.hnShiftDecode(sInOut, table, token);
+    if (sInOut.isEmpty())
+      return -5;
+  }
+  return 0;
 }
-
-// add a three-digit base-10 checksum (000-255)
-//String AddThreeDigitBase10Checksum(String sIn){
-//  uint8_t cs = 0;
-//  int len = sIn.length();
-//  for (int i=0; i<len; i++)
-//    cs += (uint8_t)sIn[i];
-//  cs = ~cs+1;
-//  String sCs = String(cs, 10);
-//  len = sCs.length();
-//  if (len == 1)
-//    sCs = "00" + sCs;
-//  else if (len == 2)  
-//    sCs = "0" + sCs;
-//  return sIn + sCs;
-//}
 
 // add a two-digit base-16 checksum (00-ff)
 String AddTwoDigitBase16Checksum(String sIn){
@@ -1226,33 +813,6 @@ String AddTwoDigitBase16Checksum(String sIn){
 }
 
 // removes and checks a uint8_t 0-255 checksum expected at the end of the
-// string as three ASCII base-10 digits 000-255
-// returns empty string if bad checksum
-//String SubtractThreeDigitBase10Checksum(String sIn){
-//  uint8_t cs = 0;
-//  int len = sIn.length();
-//  if (len < 4)
-//    return "";
-//  String sCs = sIn.substring(len-3);
-//  
-//  int iCs = sCs.toInt();
-//  if (iCs < 0 || iCs > 255)
-//    return "";
-//  sIn = sIn.substring(0, len-3);
-//  len = sIn.length();
-//  uint8_t uCs = 0;
-//  for (int i=0; i<len; i++)
-//    uCs += (uint8_t)sIn[i];
-//  uCs += (uint8_t)iCs;
-//  if (uCs){
-//    prtln("FCUtils.cpp SubtractThreeDigitChecksum(): bad checksum!");
-//    return "";
-//  }
-//
-//  return sIn;
-//}
-
-// removes and checks a uint8_t 0-255 checksum expected at the end of the
 // string as two ASCII base-16 digits 00-ff
 // returns empty string if bad checksum
 String SubtractTwoDigitBase16Checksum(String sIn){
@@ -1272,22 +832,10 @@ String SubtractTwoDigitBase16Checksum(String sIn){
   for (int i=0; i<len; i++)
     uCs += (uint8_t)sIn[i];
   uCs += (uint8_t)iCs;
-  if (uCs){
-    prtln("FCUtils.cpp SubtractTwoDigitBase16Checksum(): bad checksum!");
+  if (uCs)
     return "";
-  }
 
   return sIn;
-}
-
-// 32 chars in DROM sector
-// set using PROJECT_VER
-String GetEmbeddedVersionString(){
-  const esp_app_desc_t *app_desc = esp_app_get_description();
-  // char version[32], char date[16]
-  if (app_desc == NULL)
-    return "";
-  return String(app_desc->version, 32);
 }
 
 // Pertains to the FanController.h conditional-compile boolean switches:
@@ -1399,9 +947,9 @@ void TaskStatisticsMonitor(){
   // we simply count time in .5 sec units when a channel is on
   // these get copied to g_stats.PrevDConA/B when monitor interval
   // rolls over
-  if (g_bSsr1On)
+  if (g_devStatus & DEV_STATUS_1)
     g_stats.DConA++;
-  if (g_bSsr2On)
+  if (g_devStatus & DEV_STATUS_2)
     g_stats.DConB++;
 }
 
@@ -1544,38 +1092,614 @@ void TaskSetPulseOffFeatureVars(){
 }
 
 // returns mDNS count or negative if error
-int SendText(String sIP, String sText){
-  if (sIP.isEmpty())
-    return -2;  
-  IPAddress ip;
-  ip.fromString(sIP);
-  int idx = IML.FindMdnsIp(ip);
-  return SendText(idx, sText);
-}
-// returns mDNS count or negative if error
 int SendText(String sText){
-  if (!g_bWiFiConnected)
-    return -2;  
-
-  if (sText.isEmpty() || sText.length() > MAXTXTLEN)
-    return -3;  
-
-  return HMC.AddTableCommandAll(CMtxt, sText);
-}
-// returns mDNS count or negative if error
-int SendText(int idx, String sText){
-  if (!g_bWiFiConnected)
-    return -2;  
-
-  if (sText.isEmpty() || sText.length() > MAXTXTLEN)
-    return -3;  
-
   int count = IML.GetCount();
   
-  if (!count || idx < 0 || idx >= count)
+  if (!count || !g_bWiFiConnected)
+    return -2;  
+
+  if (sText.isEmpty() || sText.length() > MAXTXTLEN)
+    return -3;  
+
+  return HMC.AddCommandAll(CMtxt, sText);
+}
+
+// returns mDNS count or negative if error
+int SendText(int idx, String sText){
+  int count = IML.GetCount();
+  
+  if (!count || !g_bWiFiConnected)
+    return -2;  
+
+  if (sText.isEmpty() || sText.length() > MAXTXTLEN)
+    return -3;  
+
+  if (idx < 0 || idx >= count)
     return -4;
 
-  HMC.AddTableCommand(CMtxt, sText, idx);
-prtln("DEBUG: SendText(): AddTableCommand(): \"" + sText + "\"");
+  HMC.AddCommand(CMtxt, sText, idx, MDNS_STRING_SEND_SPECIFIC); // add to sSendSpecific string rather than sSendAll!
+//prtln("DEBUG: SendText(): AddCommand(): \"" + sText + "\"");
   return count;
 }
+
+// returns mDNS count or negative if error
+int SendText(String sIp, String sText){
+  IPAddress ip;
+  ip.fromString(sIp);
+  if ((uint32_t)ip == 0)
+    return -5;
+  int idx = IML.FindMdnsIp(ip);
+  if (idx < 0)
+    return -6;
+  return SendText(idx, sText);
+}
+
+//---------------------------------------------------------------------------
+// Conversions to/from Int/String and print routines
+//---------------------------------------------------------------------------
+
+String CommandStrToPrintable(String sIn){
+  String sOut;
+  for (int ii=0; ii<sIn.length(); ii++){
+    char c = sIn[ii];
+    if (c > 0 && c <= CMSPECIALRANGESMAX)
+      sOut += "0x" + String((int)c, HEX);
+    else
+      sOut += c;
+  }
+  return sOut;
+}
+
+// perMax is 16 bit, all else is 8 bits
+// CNG.QueueChange(CD_CMD_CYCLE_PARMS, 0, PerValsToString(perVals));
+String PerValsToString(PerVals perVals){
+  return String(perVals.perMax) + ':' + 
+         String(perVals.phase) + ':' +
+         String(perVals.perVal) + ':' +
+         String(perVals.perUnits) + ':' +  
+         String(perVals.dutyCycleA) + ':' +
+         String(perVals.dutyCycleB) + ':'; // add terminating ':'
+}
+
+// perMax is 16 bit, all else are 8 bits
+// sPerVals format 0:0:0:0:0:0:
+// returns negative if error
+// returns perVals by reference
+int StringToPerVals(String sPerVals, PerVals& perVals){
+  int vals[PERVALS_COUNT] = {0};
+  int ii;
+  for (ii=0; ii < PERVALS_COUNT; ii++){
+    int idx = sPerVals.indexOf(':');
+    if (idx < 1)
+      return -2;
+    String sParam = sPerVals.substring(0, idx);
+    if (!alldigits(sParam))
+      return -3;
+    vals[ii] = sParam.toInt();
+    sPerVals = sPerVals.substring(idx+1);
+  }
+  if (ii < PERVALS_COUNT)
+    return -4;
+  perVals.perMax = (uint16_t)vals[0];
+  perVals.phase = (uint8_t)vals[1];
+  perVals.perVal = (uint8_t)vals[2];
+  perVals.perUnits = (uint8_t)vals[3];
+  perVals.dutyCycleA = (uint8_t)vals[4];
+  perVals.dutyCycleB = (uint8_t)vals[5];
+  return 0;
+}
+
+// 32 chars in DROM sector
+// set using PROJECT_VER
+String GetEmbeddedVersionString(){
+  const esp_app_desc_t *app_desc = esp_app_get_description();
+  // char version[32], char date[16]
+  if (app_desc == NULL)
+    return "";
+  return String(app_desc->version, 32);
+}
+
+// from index.html
+//  <option value="0">1/2 sec</option>
+//  <option value="1">sec</option>
+//  <option value="2">min</option>
+//  <option value="3">hrs</option>
+String GetPerUnitsString(int perUnitsIndex){
+  String sRet;
+  switch(perUnitsIndex){
+    case 0:
+      sRet = "half-second";
+    break;
+    case 1:
+      sRet = "one second";
+    break;
+    case 2:
+      sRet = "one minute";
+    break;
+    case 3:
+      sRet = "one hour";
+    break;
+    default:
+      sRet = "Unknown!";
+    break;
+  };
+  return sRet + " units";
+}
+
+String GetPhaseString(int phase){
+  if (phase == 100)
+    return "random";
+  return String(phase);
+}
+
+String GetPerDCString(int iVal){
+  if (iVal == 0)
+    return "random";
+  return String(iVal);
+}
+
+// return by-reference...
+void twiddle(String& s){
+  int len = s.length();
+  if (len > 2){
+    char s0, s1, s2;
+    if (len & 1){
+      s0 = 'e';
+      s1 = 'm';
+      s2 = 'R';
+    }
+    else{
+      s0 = 'R';
+      s1 = 'e';
+      s2 = 'm';
+    }
+    char c1 = s[0];
+    char c2 = s[1];
+    if (c1 == 'c')
+      s[0] = s0;
+    else if (c1 == s0)
+      s[0] = 'c';
+    else if (c1 == 'C')
+      s[0] = s1;
+    else if (c1 == s1)
+      s[0] = 'C';
+    if (c2 == ' ')
+      s[1] = s2;
+    else if (c2 == s2)
+      s[1] = ' ';
+  }
+}
+
+uint32_t IpToUInt(IPAddress ip){
+  return (uint32_t)ip;
+}
+
+uint32_t IpToUInt(String sIp){
+  IPAddress ip;
+  ip.fromString(sIp);
+//  uint32_t acc = ip[3];
+//  for (int ii=2; ii>=0; ii--){
+//    acc <<= 8;
+//    acc |= ip[ii];
+//  }
+//  return acc;
+
+  return (uint32_t)ip;
+}
+
+String UIntToIp(uint32_t ip_uint){
+  return IPAddress(ip_uint).toString();
+}
+
+bool isHex(char c){
+  return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+String ZeroPad(byte val){
+  String s = (val < 10) ? "0" : "";
+  s += String(val);
+  return s;
+}
+
+// copied this function from CodeProject's site...
+// https://www.codeproject.com/Articles/35103/Convert-MAC-Address-String-into-Bytes
+String MacArrayToString(uint8_t* pMacArray){
+  String s;
+  char cbuf[3];
+  for(int ii = 0; ii < 6; ii++){
+    sprintf(cbuf,"%02X", *pMacArray++);
+    s += String(cbuf);
+    if (ii < 5)
+      s += ':';
+  }
+  return s;
+}
+
+uint8_t* MacStringToByteArray(const char *pMac, uint8_t* pBuf){
+  char cSep = ':';
+
+  for (int ii = 0; ii < 6; ii++){
+    unsigned int iNumber = 0;
+
+    //Convert letter into lower case.
+    char ch = tolower(*pMac++);
+
+    if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f'))
+      return NULL;
+
+    //Convert into number.
+    // a. If chareater is digit then ch - '0'
+    // b. else (ch - 'a' + 10) it is done because addition of 10 takes correct value.
+    iNumber = isdigit(ch) ? (ch - '0') : (ch - 'a' + 10);
+    ch = tolower(*pMac);
+
+    if ((ii < 5 && ch != cSep) || (ii == 5 && ch != '\0' && !isspace(ch))){
+      pMac++;
+
+      if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f'))
+        return NULL;
+
+      iNumber <<= 4;
+      iNumber += isdigit(ch) ? (ch - '0') : (ch - 'a' + 10);
+      ch = *pMac;
+
+      if (ii < 5 && ch != cSep)
+        return NULL;
+    }
+    /* Store result.  */
+    pBuf[ii] = (uint8_t)iNumber;
+    /* Skip cSep.  */
+    pMac++;
+  }
+  return pBuf;
+}
+
+String GetStringInfo(){
+  //Static IP address configuration
+  //IPAddress staticIP(192, 168, 43, 90); //ESP static ip
+  //IPAddress gateway(192, 168, 43, 1);   //IP Address of your WiFi Router (Gateway)
+  //IPAddress subnet(255, 255, 255, 0);  //Subnet mask
+  //IPAddress dns(8, 8, 8, 8);  //DNS
+
+  String sInfo = "Our hostname: \"" + g_sHostName + "\"\r\n";
+  sInfo += "Current WiFi channel: " + String(GetWiFiChan()) + "\r\n";
+  sInfo += "Our access-point SSID: " + g_sApSSID + ", IP: " + String(DEF_AP_IP) +
+                        ", pass: \"" + PC.GetWiFiString(EE_APPWD, DEF_AP_PWD) + "\"\r\n";
+  sInfo += "Expected router SSID: " + g_sSSID + ", pass: \"" + PC.GetWiFiString(EE_PWD, DEF_PWD) + "\"\r\n";
+  if (g_bSoftAP){
+    IPAddress apip = WiFi.softAPIP();
+    IpToArray(apip[3]); // needed for IP last-octet flasher!
+    sInfo += "Acces-point ON! Soft AP IP: " + apip.toString() + "\r\n";
+  }
+  if (g_bWiFiConnected){
+    IPAddress loip = WiFi.localIP();
+    IpToArray(loip[3]); // needed for IP last-octet flasher!
+    sInfo += "Connected to router IP: " + loip.toString() + "\r\n";
+    sInfo += "Router SSID: " + WiFi.SSID() + ", gateway IP: " + WiFi.gatewayIP().toString() + "\r\n";
+    int iCount = IML.GetCount();
+    if (iCount){
+      sInfo += String(iCount+1) + " total units are networked. The master is " + g_IpMaster.toString() + "\r\n";
+      if (g_bMaster)
+        sInfo += " This unit is the master.";
+      else
+        sInfo += " This unit is not the master.";
+    }
+  }
+  else
+    sInfo += " is not presently connected to WiFi.";
+  return sInfo;
+}
+
+int GetWiFiChan(){
+  uint8_t chan;
+  wifi_second_chan_t chan2;
+  if (esp_wifi_get_channel(&chan, &chan2) == ESP_OK)
+    return chan;
+  return -1;
+}
+
+// Used to flash out the last octet of the IP address on the ESP32 built-in LED
+// puts the last octet of an IP Address into a global array
+// so that we can flash it out on the LED
+// For example:
+//   .8 => [0] = 8, [1] = 0
+//   .32 => [0] = 2, [1] = 3, [2] = 0
+//   .192 => [0] = 2, [1] = 9, [2] = 1, [3] = 0
+void IpToArray(uint16_t ipLastOctet){
+  if (ipLastOctet == 0){
+    g8_digitArray[0] = 0;
+    return;
+  }
+
+  uint16_t hundreds = ipLastOctet/100;
+  ipLastOctet -= hundreds*100;
+  uint16_t tens = ipLastOctet/10;
+  ipLastOctet -= tens*10;
+  g8_digitArray[0] = ipLastOctet; // 1s
+  g8_digitArray[1] = tens;
+  g8_digitArray[2] = hundreds;
+  g8_digitArray[3] = 0; // end marker
+}
+
+String PrintCharsWithEscapes(String sIn){
+  String sOut, sTemp;
+  int len = sIn.length();
+  for (int ii=0; ii < len; ii++){
+    sTemp = String(sIn[ii], 16);
+    if (sTemp.length() == 1)
+      sTemp = '0' + sTemp;
+    sOut += "\\x" + sTemp;
+  }
+  return sOut;
+}
+
+// convert \xff hex escape codes
+// in a cipher key, all \ chars must be escaped as \\
+// Examples "hello\x00" will return an error message since a null char isn't allowed in a string
+//          "hello\\" will become "hello\"
+//          "hello\\x00" will become "hello\x00"
+//          "hello\\\x20" will become "hello\ "
+String Unescape(String sIn){
+  String sOut;
+  int len = sIn.length();
+  for (int ii=0; ii < len; ii++){
+    if (ii <= len-2 && sIn[ii] == '\\' && sIn[ii+1] == '\\'){
+      sOut += '\\';
+      ii += 1;
+    }
+    else if (ii <= len-4 && sIn[ii] == '\\' && sIn[ii+1] == 'x' && isHexOrDigit(sIn[ii+2]) && isHexOrDigit(sIn[ii+3])){
+      int n = hexCharToInt(sIn[ii+2])*16 + hexCharToInt(sIn[ii+3]);
+      if (n <= 0) // error if \x00
+        return "";
+      if (n <= 255){
+        sOut += char(n);
+        ii += 3;
+      }
+      else
+        sOut += sIn[ii];
+    }
+    else
+      sOut += sIn[ii];
+  }
+  return sOut;
+}
+
+// returns 0-15 or -1 if not hex
+int hexCharToInt(char c){
+  if (c >= '0' && c <= '9')
+    return c-'0'; 
+  if (c >= 'a' && c <= 'f')
+    return c-'a'+10; 
+  if (c >= 'A' && c <= 'F')
+    return c-'A'+10; 
+  return -1;
+}
+
+bool isHexOrDigit(char c){
+  return isHex(c) || isDigit(c);
+}
+
+//---------------------------------------------------------------------------
+// Print routines
+//---------------------------------------------------------------------------
+
+void PrintPreferences(){
+  PrintCycleTiming();
+  prt(SyncFlagStatus());
+  prt("SSR1 Mode: ");
+  PrintSsrMode(g8_ssr1ModeFromWeb);
+  prt("SSR2 Mode: ");
+  PrintSsrMode(g8_ssr2ModeFromWeb);
+  PrintMidiChan();
+  prt("A: ");
+  PrintMidiNote(g8_midiNoteA);
+  prt("B: ");
+  PrintMidiNote(g8_midiNoteB);
+  prtln("wifi disable flag: " + String(g_bWiFiDisabled));
+  prtln("labelA: \"" + g_sLabelA + "\"");
+  prtln("labelB: \"" + g_sLabelB + "\"");
+  prtln("cipher key: \"" + String(g_sKey) + "\"");
+  prtln("token: " + String(g_defToken));
+  prtln("max power (.25dBm per step): " + String(g8_maxPower));
+  prtln("SNTP interval (hours): " + String(g16_SNTPinterval));
+  prtln("SNTP Timezone: " + g_sTimezone);
+}
+
+void PrintCycleTiming(){
+  prtln("period units: " + String(g_perVals.perUnits));
+  prtln("max period: " + String(g_perVals.perMax));
+  String sTemp = (g_perVals.perVal == 0) ? "random" : String(g_perVals.perVal) + "%";
+  prtln("period: " + sTemp);
+  prtln("period (.5 sec units): " + String(g32_savePeriod));
+  sTemp = (g_perVals.dutyCycleA == 0) ? "random" : String(g_perVals.dutyCycleA) + "%";
+  prtln("A duty-cycle: " + sTemp);
+  sTemp = (g_perVals.dutyCycleB == 0) ? "random" : String(g_perVals.dutyCycleB) + "%";
+  prtln("B duty-cycle: " + sTemp);
+  sTemp = (g_perVals.phase == 100) ? "random" : String(g_perVals.phase) + "%";
+  prtln("phase: " + sTemp);
+}
+
+void PrintPulseFeaturePreferences(){
+  prtln("pulse-off mode A: " + String(g8_pulseModeA));
+  prtln("pulse-off min width A: " + String(g8_pulseMinWidthA));
+  prtln("pulse-off max width A: " + String(g8_pulseMaxWidthA));
+  prtln("pulse-off min period A: " + String(g16_pulseMinPeriodA));
+  prtln("pulse-off max period A: " + String(g16_pulseMaxPeriodA));
+  prtln("pulse-off mode B: " + String(g8_pulseModeB));
+  prtln("pulse-off min width B: " + String(g8_pulseMinWidthB));
+  prtln("pulse-off max width B: " + String(g8_pulseMaxWidthB));
+  prtln("pulse-off min period B: " + String(g16_pulseMinPeriodB));
+  prtln("pulse-off max period B: " + String(g16_pulseMaxPeriodB));
+}
+
+void PrintSsrMode(uint8_t ssrMode){
+  String s;
+  if (ssrMode == SSR_MODE_OFF)
+    s = "OFF";
+  else if (ssrMode == SSR_MODE_ON)
+    s = "ON";
+  else if (ssrMode == SSR_MODE_AUTO)
+    s = "AUTO";
+  else
+    s = "(unknown)";
+  prtln(s);
+}
+
+void PrintMidiNote(uint8_t note){
+  String s;
+  if (note == MIDINOTE_ALL)
+    s = "ALL";
+  else
+    s = String(note);
+  prtln("Midi note set to:" + s);
+}
+
+void PrintMidiChan(){
+  String s;
+  if (g8_midiChan == MIDICHAN_OFF)
+    s = "OFF";
+  else if (g8_midiChan == MIDICHAN_ALL)
+    s = "ALL";
+  else
+    s = String(g8_midiChan);
+  prtln("Midi channel set to:" + s);
+}
+
+// sFile: "/test.txt"
+void PrintSpiffs(String sFile){
+  File file = SPIFFS.open(sFile);
+  if(!file){
+    Serial.println("Failed to open file for reading");
+    return;
+  }
+  Serial.println("File Content:");
+  while(file.available())
+    Serial.write(file.read());
+  file.close();
+}
+
+// print wrappers
+void prtln(String s){
+#if PRINT_ON
+  Serial.println(s);
+#endif
+}
+
+void prt(String s){
+#if PRINT_ON
+  Serial.print(s);
+#endif
+}
+
+//    String encryptionTypeDescription = translateEncryptionType(WiFi.encryptionType(i));
+//    Serial.println(encryptionTypeDescription);
+//String translateEncryptionType(wifi_auth_mode_t encryptionType) {
+//  switch (encryptionType) {
+//    case (0):
+//      return "Open";
+//    case (1):
+//      return "WEP";
+//    case (2):
+//      return "WPA_PSK";
+//    case (3):
+//      return "WPA2_PSK";
+//    case (4):
+//      return "WPA_WPA2_PSK";
+//    case (5):
+//      return "WPA2_ENTERPRISE";
+//    default:
+//      return "UNKOWN";
+//  }
+//}
+
+// decode unicode hex: /u00e1, etc
+//String convertUnicode(String unicodeStr){
+//  String out = "";
+//  int len = unicodeStr.length();
+//  char iChar;
+//  char* endPtr; // will point to next char after numeric code
+//  for (int i = 0; i < len; i++){
+//     iChar = unicodeStr[i];
+//     if(iChar == '\\'){ // got escape char
+//       iChar = unicodeStr[++i];
+//       if(iChar == 'u'){ // got unicode hex
+//         char unicode[6];
+//         unicode[0] = '0';
+//         unicode[1] = 'x';
+//         for (int j = 0; j < 4; j++){
+//           iChar = unicodeStr[++i];
+//           unicode[j + 2] = iChar;
+//         }
+//         long unicodeVal = strtol(unicode, &endPtr, 16); //convert the string
+//         out += (char)unicodeVal;
+//       } else if(iChar == '/'){
+//         out += iChar;
+//       } else if(iChar == 'n'){
+//         out += '\n';
+//       }
+//     } else {
+//       out += iChar;
+//     }
+//  }
+//  return out;
+//}
+
+// ensconses sIn "somewhere" within a random message
+//String genRandPositioning(String sIn, int iMin, int iMax){
+//  String sRand = genRandMessage(iMin, iMax);
+//  int iLen = sRand.length();
+//  if (iLen == 0)
+//    return sIn;
+//  int iIdx = random(0, iLen+1);
+//  if (iIdx == iLen)
+//    return sIn + sRand;
+//  if (iIdx == 0)
+//    return sRand + sIn;
+//  String sSub1, sSub2; 
+//  sSub1 = sRand.substring(0, iIdx); 
+//  sSub2 = sRand.substring(iIdx+1);
+//  return sSub1 + sIn + sSub2;
+//}
+
+// add a three-digit base-10 checksum (000-255)
+//String AddThreeDigitBase10Checksum(String sIn){
+//  uint8_t cs = 0;
+//  int len = sIn.length();
+//  for (int i=0; i<len; i++)
+//    cs += (uint8_t)sIn[i];
+//  cs = ~cs+1;
+//  String sCs = String(cs, 10);
+//  len = sCs.length();
+//  if (len == 1)
+//    sCs = "00" + sCs;
+//  else if (len == 2)  
+//    sCs = "0" + sCs;
+//  return sIn + sCs;
+//}
+
+// removes and checks a uint8_t 0-255 checksum expected at the end of the
+// string as three ASCII base-10 digits 000-255
+// returns empty string if bad checksum
+//String SubtractThreeDigitBase10Checksum(String sIn){
+//  uint8_t cs = 0;
+//  int len = sIn.length();
+//  if (len < 4)
+//    return "";
+//  String sCs = sIn.substring(len-3);
+//  
+//  int iCs = sCs.toInt();
+//  if (iCs < 0 || iCs > 255)
+//    return "";
+//  sIn = sIn.substring(0, len-3);
+//  len = sIn.length();
+//  uint8_t uCs = 0;
+//  for (int i=0; i<len; i++)
+//    uCs += (uint8_t)sIn[i];
+//  uCs += (uint8_t)iCs;
+//  if (uCs){
+//    prtln("FCUtils.cpp SubtractThreeDigitChecksum(): bad checksum!");
+//    return "";
+//  }
+//
+//  return sIn;
+//}

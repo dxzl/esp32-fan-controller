@@ -3,23 +3,6 @@
 
 /*********
   ------------------------------------------------------------------------ 
-  NOTE: 6/18/2024 Compile with ESP32 build-tools 3.0.1 and up
-
-  NOTE: you must use my custom-modified "MyPreferences.zip" library
-  and also, the web-server had to be modified to work with the latest
-  build (3.0.0). The modified web-server is in 
-  misc/ESPAsyncWebServerFor3-0-0.zip. On my PC, I install it into
-  \Documents\Arduino\libraries
-
-  Future potentially useful links as this project is eventually ported
-  to use the new "secure" versions of ESP32 (S3):
-
-  https://forum.arduino.cc/t/esp32-s3-n16r8-new-board/1099353
-  https://esp32s3.com/getting-started.html
-  https://github.com/vtunr/esp32_binary_merger
-  https://github.com/PBearson/Get-Started-With-ESP32-OTA
-  ------------------------------------------------------------------------
-  
   Install instructions:
   https://github.com/espressif/arduino-esp32/blob/master/docs/arduino-ide/windows.md
 
@@ -27,19 +10,90 @@
 
   WiFi Smart Fan Controller is by Scott Swift, Christian - Jesus is Lord!
 
-  NOTE: Build with ESP32 for Arduino 3.0.0 or higher
-  NOTE: Use the Arduino->Tools->Partition Scheme: Default 4MB with spiffs(1.2MB APP/1.5MB SPIFFS)
+  NOTE: Compile with ESP32 build-tools 3.0.5 and up.
+  NOTE: you should use the custom-modified library versions I've zipped and put in: misc\AAA_Libraries
+  and also the updated "me-no-dev" libraries: https://github.com/me-no-dev/ (ESPAsyncWebServer and ESPAsyncTCP).
+  On my PC, I install it into: \Documents\Arduino\libraries.
+  My "shetchbook" (projects) folder is: YourDrive:\Documents\Arduino
+  I locate this project in: YourDrive:\Documents\Arduino\projects\ESP32\FanControllerS3
+  On my PC I create the Output folder: YourDrive:\Documents\Arduino\projects\Output
+  I add this line to prererences.txt: build.path=YourDrive:\Documents\Arduino\projects\Output
+  On my PC, prererences.txt is located in: C:\Users\(you)\AppData\Local\Arduino15
+  The ESP32 build-tools are installed by boardsmanager into:
+    C:\Users\(you)\AppData\Local\Arduino15\packages\esp32
+  In File->Preferences, Additional Boards Manager URLS add:
+    https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+  Tools->Board->Boards Manager search for ESP32 and download and install the latest build tools
+  Restart the Arduino IDE then choose your board from the list in Tools->Board (I choose
+  either ESP32 Arduino->"Esp32 Dev Module" or "Esp32S3 Dev Module")
+  NOTE: For the old ESP Dev Module with 4MB select Tools->Partition Scheme: No OTA 2MB APP/2MB SPIFFS
+  (For the new boards with more memory, you can use OTA flash-uploading!)
 
-  I use Sketch->Export Compiled Binary then run FixName.bat to change the .bin file to fc.bin
-  Next, I run the ESP32 utility "mkspiffs.exe" via fcspiffs.bat
+  (Note: to compile for the S3 Board, set ESP32_S3 true in FanController.h and choose
+  Tools->Board->Esp32 Arduino->ESP32S3 Dev Module)
+  Compile using Sketch->Export Compiled Binary and you should see the output files in:
+    YourDrive:\Documents\Arduino\projects\Output
+  You can run pgm.bat to then upload the compiled main program binary to your board
+  You can run data.bat to upload the SPIFFS web-server-files to your board
+  The files for the web-server are in: YourDrive:\Documents\Arduino\projects\ESP32\FanControllerS3\data
+    
+  Links related to the new versions of ESP32 (S3) that can handle HTTPS:
+  https://forum.arduino.cc/t/esp32-s3-n16r8-new-board/1099353
+  https://esp32s3.com/getting-started.html
+
+  Other links:
+  https://github.com/vtunr/esp32_binary_merger
+  https://github.com/PBearson/Get-Started-With-ESP32-OTA
+  ------------------------------------------------------------------------
+  
+  I use Sketch->Export Compiled Binary then run fixname.bat to change the .bin file to fc.bin
+
+  Next, build the SPIFFS data webserver files as a binary. I run the ESP32 utility "mkspiffs.exe" via fcspiffs.bat
   fcspiffs.bat has "mkspiffs.exe -p 256 -b 4096 -s 0x30000 -c ..\data fc.spiffs.bin"
 
+  here is pgm.bat (flashes the main program int an old ESP32 Dev Kit):
+  @echo off
+  Set EspToolVer=4.6
+  Set MyVer=3.0.5
+  Set MyName=FancontrollerS3
+  Set /p "MyVer=Main Program Upload. Type version or Enter for %MyVer%: "
+  Set MyPort=4
+  Set /p "MyPort=Type port # (4,5...) or Enter for 4: "
+  Set MyPort=COM%MyPort%
+  Set MyDrive=G
+  Set /p "MyDrive=Type drive letter for Output folder (E,G, Etc...) or Enter for G: "
+  Set MyOut=%MyDrive%:\Documents\Arduino\projects\Output
+  Set MyEsp=%UserProfile%\AppData\Local\Arduino15\packages\esp32
+  "%MyEsp%\tools\esptool_py\%EspToolVer%\esptool.exe" --chip esp32 --port %MyPort% --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 80m --flash_size 4MB 0x1000 "%MyOut%\%MyName%.ino.bootloader.bin" 0x8000 "%MyOut%\%MyName%.ino.partitions.bin" 0xe000 "%MyEsp%\hardware\esp32\%MyVer%\tools\partitions\boot_app0.bin" 0x10000 "%MyOut%\%MyName%.ino.bin"
+  echo Upload complete!
+  pause
+    
+  here is data.bat (flashes the web-server files into an old ESP32 Dev Kit):
+  @echo off
+  Set EspToolVer=4.6
+  Set MyVer=3.0.5
+  Set MyName=FancontrollerS3
+  Set /p "MyVer=SPIFFS Upload. Type version or Enter for %MyVer%: "
+  Set MyPort=4
+  Set /p "MyPort=Type port # (4,5...) or Enter for 4: "
+  Set MyPort=COM%MyPort%
+  Set MyDrive=G
+  Set /p "MyDrive=Type drive letter for Output folder (E,G, Etc...) or Enter for G: "
+  Set MyOut=%MyDrive%:\Documents\Arduino\projects\Output
+  Set MyEsp=%UserProfile%\AppData\Local\Arduino15\packages\esp32
+  "%MyEsp%\tools\esptool_py\%EspToolVer%\esptool.exe" --chip esp32 --port %MyPort% --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 80m --flash_size 4MB 0x210000 "%MyOut%\%MyName%.spiffs.bin"
+  echo Upload complete!
+  pause
+
+  
   If you use Partition Scheme (Minimal 1.3MB App,700Kb SPIFFS), use:
   mkspiffs.exe -p 256 -b 4096 -s 1376256 -c ..\data fc.spiffs.bin
 
 *********/
 
+#if COMPILE_WITH_MIDI_LIBRARY
 APPLEMIDI_CREATE_INSTANCE(WiFiUDP, RTP_MIDI, "AppleMIDI-ESP32", DEFAULT_CONTROL_PORT);
+#endif
 
 const char OBFUSCATE_STR[] = "XqSmvn9CDfexnacQRbtcQM7zJ4jZoyXfeDMcg2atmk4nf3OykMe";
 
@@ -74,84 +128,30 @@ const char OBFUSCATE_STR[] = "XqSmvn9CDfexnacQRbtcQM7zJ4jZoyXfeDMcg2atmk4nf3OykM
 // https://espressif-docs.readthedocs-hosted.com/projects/arduino-esp32/en/latest/api/wifi.html
 // https://randomnerdtutorials.com/esp32-useful-wi-fi-functions-arduino/
 
-// The ESP32 has 8kB SRAM on the Real-TIme-Clock module called "RTC fast memory". The data saved here is not erased
-// during deep sleep. However, it is erased when you press the reset button (the button labeled EN on the ESP32 board).
-// To save data in the RTC memory, you just have to add RTC_DATA_ATTR before a variable definition.
-// The example saves the bootCount variable on the RTC memory. This variable will count how many times
-// the ESP32 has woken up from deep sleep.
-
-// set timezone
-// https://remotemonitoringsystems.ca/time-zone-abbreviations.php
-//Australia   Melbourne,Canberra,Sydney   EST-10EDT-11,M10.5.0/02:00:00,M3.5.0/03:00:00
-//Australia   Perth   WST-8
-//Australia   Brisbane  EST-10
-//Australia   Adelaide  CST-9:30CDT-10:30,M10.5.0/02:00:00,M3.5.0/03:00:00
-//Australia   Darwin  CST-9:30
-//Australia   Hobart  EST-10EDT-11,M10.1.0/02:00:00,M3.5.0/03:00:00
-//Europe  Amsterdam,Netherlands   CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Athens,Greece   EET-2EEST-3,M3.5.0/03:00:00,M10.5.0/04:00:00
-//Europe  Barcelona,Spain   CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Berlin,Germany  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Brussels,Belgium  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Budapest,Hungary  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Copenhagen,Denmark  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Dublin,Ireland  GMT+0IST-1,M3.5.0/01:00:00,M10.5.0/02:00:00
-//Europe  Geneva,Switzerland  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Helsinki,Finland  EET-2EEST-3,M3.5.0/03:00:00,M10.5.0/04:00:00
-//Europe  Kyiv,Ukraine  EET-2EEST,M3.5.0/3,M10.5.0/4
-//Europe  Lisbon,Portugal   WET-0WEST-1,M3.5.0/01:00:00,M10.5.0/02:00:00
-//Europe  London,GreatBritain   GMT+0BST-1,M3.5.0/01:00:00,M10.5.0/02:00:00
-//Europe  Madrid,Spain  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Oslo,Norway   CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Paris,France  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Prague,CzechRepublic  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Roma,Italy  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//Europe  Moscow,Russia   MSK-3MSD,M3.5.0/2,M10.5.0/3
-//Europe  St.Petersburg,Russia  MST-3MDT,M3.5.0/2,M10.5.0/3
-//Europe  Stockholm,Sweden  CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00
-//New Zealand   Auckland, Wellington  NZST-12NZDT-13,M10.1.0/02:00:00,M3.3.0/03:00:00
-//USA & Canada  Hawaii Time   HAW10
-//USA & Canada  Alaska Time   AKST9AKDT
-//USA & Canada  Pacific Time  PST8PDT
-//USA & Canada  Mountain Time   MST7MDT
-//USA & Canada  Mountain Time (Arizona, no DST)   MST7
-//USA & Canada  Central Time  CST6CDT
-//USA & Canada  Eastern Time  EST5EDT
-//Atlantic  Atlantic Time   AST4ADT
-//Asia  Jakarta   WIB-7
-//Asia  Jerusalem   GMT+2
-//Asia  Singapore   SGT-8
-//Asia  Ulaanbaatar, Mongolia   ULAT-8ULAST,M3.5.0/2,M9.5.0/2
-//Central and South America   Brazil,Sao Paulo  BRST+3BRDT+2,M10.3.0,M2.3.0
-//Central and South America   Argentina   UTC+3
-//Central and South America   Central America   CST+6
-const char TIMEZONE[] = "CST6CDT";
-const char NTP_SERVER1[] = "pool.ntp.org"; // you can have more than one URL, comma delimited!
-const char NTP_SERVER2[] = "time.nist.gov";
-
-// RTC_SLOW_ATTR, RTC_FAST_ATTR, RTC_RODATA_ATTR - read-only
-// (RTC_IRAM_ATTR can be used in a function declaration to put it in RTC memory!)
-RTC_DATA_ATTR int bootCount;
-
 // stackArray[] - Interesting! FYI
 //    t_event stackArray[g_slotCount];
-bool g_bWiFiConnected, g_bWiFiConnecting, g_bSoftAP, g_bMdnsOn, g_bWiFiDisabled;
-bool g_bResetOrPowerLoss, g_bTellP2WebPageToReload;
-bool g_bManualTimeWasSet, g_bWiFiTimeWasSet, g_bValidated;
-bool g_bRequestManualTimeSync, g_bRequestWiFiTimeSync, g_bMidiConnected;
-bool g_bSsr1On, g_bSsr2On, g_bOldSsr1On, g_bOldSsr2On, g_bTest, g_bLedOn;
-bool g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncToken, g_bSyncTime, g_bSyncEncrypt, g_bSyncMaster;
-
-bool g_bOldWiFiApSwOn, g_bOldWiFiStaSwOn;
 
 #if ESP32_S3
 bool g_bOldPotModeSw1On, g_bOldPotModeSw2On;
 bool g_bOldSsr1ModeManSwOn, g_bOldSsr1ModeAutSwOn;
 bool g_bOldSsr2ModeManSwOn, g_bOldSsr2ModeAutSwOn;
 uint8_t g8_ssr1ModeFromSwitch, g8_ssr2ModeFromSwitch;
+int bootCount;
 #else
 bool g_bOldPotModeSwOn;
+// RTC_SLOW_ATTR, RTC_FAST_ATTR, RTC_RODATA_ATTR - read-only
+// (RTC_IRAM_ATTR can be used in a function declaration to put it in RTC memory!)
+RTC_DATA_ATTR int bootCount;
 #endif
+
+bool g_bWiFiConnected, g_bWiFiConnecting, g_bSoftAP, g_bMdnsOn, g_bWiFiDisabled;
+bool g_bResetOrPowerLoss, g_bTellP2WebPageToReload;
+bool g_bManualTimeWasSet, g_bWiFiTimeWasSet, g_bValidated;
+bool g_bRequestManualTimeSync, g_bRequestWiFiTimeSync, g_bMidiConnected;
+bool g_bTest, g_bLedOn;
+bool g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncTime, g_bSyncEncrypt, g_bMaster;
+
+bool g_bOldWiFiApSwOn, g_bOldWiFiStaSwOn;
 
 uint8_t g8_potModeFromSwitch, g8_wifiModeFromSwitch;
 
@@ -176,29 +176,34 @@ uint8_t g8_quarterSecondTimer, g8_fiveSecondTimer, g8_thirtySecondTimer;
 uint8_t g8_ledFlashTimer, g8_clockSetDebounceTimer, g8_lockCount;
 
 uint16_t g16_pot1Value, g16_oldpot1Value; // variable for storing the potentiometer value
-uint16_t g16_oldMacLastTwo, g16_unlockCounter, g16_tokenSyncTimer, g16_sendDefTokenTimer;
+uint16_t g16_unlockCounter, g16_changeSyncTimer, g16_sendDefTokenTimer, g16_SNTPinterval;
 uint16_t g16_sendDefTokenTime, g16_sendHttpTimer, g16_asyncHttpIndex, g16_oddEvenCounter;
 
 // timers
 uint32_t g32_savePeriod, g32_periodTimer, g32_dutyCycleTimerA, g32_dutyCycleTimerB, g32_phaseTimer, g32_nextPhase;
 
-// counters for web-page hnDecode() routine
+// parameters for web-page hnDecode() routine
 int g_sct, g_minSct, g_maxSct;
 
-int g_slotCount, g_prevMdnsCount;
-int g_defToken, g_oldDefToken, g_pendingDefToken;
+int g_oldDevStatus, g_devStatus;
 
-Stats g_stats;
-PerVals g_perVals, g_oldPerVals;
+int g_slotCount, g_prevMdnsCount, g_taskIdx;
+int g_defToken, g_origDefToken;
 
 // previous time-date used to facilitate repeat functions
 // following initial time-slot trigger (see p2.html)
 time_t g_prevNow;
 Preferences PF; // create an instance of Preferences library
 t_time_date g_prevDateTime;
-IPAddress g_httpTxIP; // last IP we sent to in SendHttpReq()
 
-String g_sHostName, g_sSSID, g_sApSSID, g_sKey, g_sMac, g_sLabelA, g_sLabelB, g_sSerIn, g_text;
+PerVals g_perVals, g_oldPerVals;
+Stats g_stats;
+IPAddress g_IpMaster;
+
+uint16_t g16_restartExpirationTimer; 
+String g_sRestartKey, g_sRestartIp;
+
+String g_sHostName, g_sSSID, g_sApSSID, g_sKey, g_sMac, g_sLabelA, g_sLabelB, g_sSerIn, g_text, g_sTimezone;
 
 hw_timer_t * g_HwTimer;
 volatile SemaphoreHandle_t timerSemaphore;
@@ -226,7 +231,7 @@ void serialEvent() {
         g_sSerIn = "";
       }
     }
-    else if (g_sSerIn.length() < SER_IN_MAX)
+    else if (g_sSerIn.length() < SERIAL_PORT_MAX_INPUT)
       g_sSerIn += c;
     else{
       g_sSerIn = "";
@@ -248,7 +253,26 @@ void notFound(AsyncWebServerRequest *request) {
 //    // (don't need if just file's name...)
 //    return F(HELP2_FILENAME);
 //}
+//Serving specific file by name
+// Serve the file "/www/page.htm" when request url is "/page.htm"
+//server.serveStatic("/page.htm", SPIFFS, "/www/page.htm");
+//Serving files in directory
+//To serve files in a directory, the path to the files should specify a directory in SPIFFS and ends with "/".
+// Serve files in directory "/www/" when request url starts with "/"
+// Request to the root or if the file doesn't exist will try to server the defualt file name "index.htm" if exists
+//server.serveStatic("/", SPIFFS, "/www/");
+// Server with different default file
+//server.serveStatic("/", SPIFFS, "/www/").setDefaultFile("default.html");
+//Serving static files with authentication
+//server
+//    .serveStatic("/", SPIFFS, "/www/")
+//    .setDefaultFile("default.html")
+//    .setAuthentication("user", "pass");
 
+// may want to do this on program init????????
+//std::ios_base::sync_with_stdio(false);
+//wcout.imbue(locale("en_US.UTF-8"));
+//locale("en_US.UTF-8");
 void setup()
 {
   WiFi.disconnect(true, false); // turn off WiFi but don't clear AP credentials from NV memory
@@ -284,16 +308,18 @@ void setup()
   pinMode(GPOUT_SSR1_LED, OUTPUT); // (pin 32/44 right) GPIO35
   pinMode(GPOUT_SSR2_LED, OUTPUT); // (pin 33/44 right) GPIO36
 
+  rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off
+
+  prtln(String(DTS_VERSION) + " (for ESP32S3 Dev Module!)");
 #else
   // SW_SOFT_AP (all four POT pins are input only, no pullup/down!)
   pinMode(GPIN_POT_MODE_SW, INPUT); // GPIO34 toggle switch where a POT normally would go - used to boot to softAP WiFi mode
   pinMode(GPOUT_ONBOARD_LED, OUTPUT); // set internal LED (blue) as output
+  
+  digitalWrite(GPOUT_ONBOARD_LED, LOW);
+
+  prtln(String(DTS_VERSION) + " (for ESP32 Dev Module!)");  
 #endif
-
-  prtln("Boot number: " + String(++bootCount));
-
-  //Print the wakeup reason for ESP32
-  print_wakeup_reason();
 
   // I've not had any success reading GPIO0 (it's also the BOOT button)
 
@@ -307,6 +333,11 @@ void setup()
   //  FALLING Triggers interrupt when the pin goes from HIGH to LOW
   //  RISING  Triggers interrupt when the pin goes from LOW to HIGH
   //attachInterrupt(BTN_RESTORE_SSID_PWD, ISR, Mode);
+
+  //Print the wakeup reason for ESP32
+  print_wakeup_reason();
+
+  prtln("Boot number: " + String(++bootCount));
 
   // insure "old" values for POT the same
   g16_oldpot1Value = g16_pot1Value = analogRead(GPAIN_POT1);
@@ -344,21 +375,17 @@ void setup()
   g8_digitArray[0] = 0;
 
   g_bLedOn = false;
-#if ESP32_S3
-  neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off
-#else
-  digitalWrite(GPOUT_ONBOARD_LED, LOW);
-#endif
 
-  bootCount = 0;
   g8_clockSetDebounceTimer = 0;
   g16_sendDefTokenTimer = 0;
-  g16_tokenSyncTimer = 0;
+  g16_changeSyncTimer = 0;
   g16_oddEvenCounter = 0;
   g16_sendDefTokenTime = random(SEND_DEF_TOKEN_TIME_MIN, SEND_DEF_TOKEN_TIME_MAX+1);
   g16_sendHttpTimer = SEND_HTTP_TIME_MIN;
 
   g16_asyncHttpIndex = 0;
+
+  g16_restartExpirationTimer = 0;
 
   uint32_t cpu_freq = getCpuFrequencyMhz();
   prtln("Startup cpu freq is " + String(cpu_freq) + "MHz");
@@ -369,6 +396,8 @@ void setup()
     setCpuFrequencyMhz(CPU_FREQ);
   }
 
+  g_devStatus = 0;
+  g_taskIdx = 0;
   g_prevMdnsCount = 0;
   g8_lockCount = 0;
   g16_unlockCounter = 0;
@@ -385,7 +414,8 @@ void setup()
   g_bMdnsOn = false;
   g_bTellP2WebPageToReload = false;
   g_bValidated = false;
-  g_bSyncMaster = false;
+  
+  g_bMaster = false;
   
 #if HTTP_CLIENT_TEST_MODE
   g_bTest = true;
@@ -393,7 +423,8 @@ void setup()
   g_bTest = false;
 #endif
   
-  InitTasks();
+  TSK.InitTasks();
+  CNG.InitChanges();
 
   // https://randomnerdtutorials.com/esp32-external-wake-up-deep-sleep/
   //  ESP_SLEEP_WAKEUP_UNDEFINED In case of deep sleep, reset was not caused by exit from deep sleep.
@@ -419,7 +450,7 @@ void setup()
   // Pertains to the FanController.h conditional-compile boolean switches:
   // READ_WRITE_CUSTOM_BLK3_MAC, FORCE_NEW_EFUSE_BITS_ON, WRITE_PROTECT_BLK3
   InitMAC();
-  
+
   // NOTE: GetPreferences() sets period (which is in percent) and nvPeriodMax from
   // SPIFFS non-volitile memory
   #if RESET_PREFS
@@ -433,36 +464,38 @@ void setup()
     TSC.EraseTimeSlots();
   #endif
 
-  GetPreferences();
+  PC.GetPreferences(); // put this BEFORE the use of any preference-variable (such as g_defToken/g_origDefToken)
 
   // parameters NOT to send upon startup via HTTP client!
   g_oldPerVals = g_perVals;
-  g_bOldSsr1On = g_bSsr1On;
-  g_bOldSsr2On = g_bSsr2On;
-  g_oldDefToken = g_defToken; // Note: MdnsListClass.cpp sets this 0 (to force us to send it if we're g_bSyncMaster) when new mDNS IP added
-  g_pendingDefToken = NO_TOKEN; // "unset" state
-
-  // parameters TO send upon startup via HTTP client!
-  g16_oldMacLastTwo = 0;
-
-  GetWiFiPrefs();
+  g_oldDevStatus = g_devStatus;
+  
+  PC.GetWiFiPrefs();
 
   // init stats counter
   InitStats();
 
-  // example using usa eastern standard/eastern daylight time
-  // edt begins the second sunday in march at 0200
-  // est begins the first sunday in november at 0200
-  // "EST5EDT4,M3.2.0/02:00:00,M11.1.0/02:00:00"
+  // this might take a while since we have to cycle from 0-MAX_SLOTS
+  // trying to read each...
+  g_slotCount = TSC.CountFullTimeSlots();
+  prtln("Number of stored time-events: " + String(g_slotCount));
 
-  //setenv("TZ", "EST+5", 1); // Set timezone
+  // Note: don't call this between PF.begin and end. It will cause watchdog timer resets!
+  //long heap_size = ESP.getFreeHeap();
+  //prtln("Heap before variable size array: " + String(heap_size));
 
-// don't need this if calling configTzTime????
-//  setenv("TZ", TIMEZONE, 1); // Set timezone
-//  tzset();
+  // Route to serve .js files
+  webServer.serveStatic(P0JS_FILENAME, SPIFFS, JS_DIRECTORY P0JS_FILENAME);
+  webServer.serveStatic(P1JS_FILENAME, SPIFFS, JS_DIRECTORY P1JS_FILENAME);
+  webServer.serveStatic(P2JS_FILENAME, SPIFFS, JS_DIRECTORY P2JS_FILENAME);
+  webServer.serveStatic(JQUERY_FILENAME, SPIFFS, JS_DIRECTORY JQUERY_FILENAME);
+  webServer.serveStatic(SCT_FILENAME, SPIFFS, JS_DIRECTORY SCT_FILENAME);
   
-  // someday need to experiment with this... to eliminate some of the "on" statements below...
-//  webServer.serveStatic("/", SPIFFS, "/web/").setTemplateProcessor(wsTemplateProc); // serve files from "data\web\" folder
+  // Route to serve .css files
+  webServer.serveStatic(STYLE1_FILENAME, SPIFFS, CSS_DIRECTORY STYLE1_FILENAME);
+  webServer.serveStatic(STYLE2_FILENAME, SPIFFS, CSS_DIRECTORY STYLE2_FILENAME);
+  webServer.serveStatic(STYLE3_FILENAME, SPIFFS, CSS_DIRECTORY STYLE3_FILENAME);
+  webServer.serveStatic(STYLELED_FILENAME, SPIFFS, CSS_DIRECTORY STYLELED_FILENAME);
   
   webServer.onNotFound(notFound);
 
@@ -471,10 +504,6 @@ void setup()
   // for HTTP_ASYNCREQ_PARAM_COMMAND:
   // if all is well we send code HTTPCODE_PARAM_OK and HTTPRESP_PARAM_OK
   // if not, we send code HTTPCODE_FAIL along with a new base 36 encoded token
-  // for HTTP_ASYNCREQ_PARAM_TIMESET:
-  // if HTTP_ASYNCREQ_PARAM_COMMAND failed we won't try to process HTTP_ASYNCREQ_PARAM_TIMESET at all.
-  // if we are sending back HTTPRESP_PARAM_OK with code HTTPCODE_PARAM_OK, we decode the time-set string and add nothing more to the return string,
-  // but if time set fails we return code HTTPCODE_TIMESET_FAIL
   webServer.on(HTTP_ASYNCREQ_CANRX, HTTP_GET, [](AsyncWebServerRequest *request){
     HandleHttpAsyncCanRxReq(request);
   });
@@ -520,44 +549,6 @@ void setup()
 
   webServer.on(P2_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
     SendWithHeaders(request, P2_FILENAME);
-  });
-
-  webServer.on(P0JS_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, P0JS_FILENAME, "text/javascript");
-  });
-
-  webServer.on(PLJS_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, PLJS_FILENAME, "text/javascript");
-  });
-
-  webServer.on(P1JS_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, P1JS_FILENAME, "text/javascript");
-  });
-
-  webServer.on(P2JS_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, P2JS_FILENAME, "text/javascript");
-  });
-
-  webServer.on(JQUERY_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, JQUERY_FILENAME, "text/javascript");
-  });
-
-  webServer.on(SCT_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, SCT_FILENAME, "text/javascript");
-  });
-
-  // Route to load style.css files
-  webServer.on(STYLE1_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, STYLE1_FILENAME, "text/css");
-  });
-  webServer.on(STYLE2_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, STYLE2_FILENAME, "text/css");
-  });
-  webServer.on(STYLE3_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, STYLE3_FILENAME, "text/css");
-  });
-  webServer.on(STYLELED_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, STYLELED_FILENAME, "text/css");
   });
 
   // loginIndex is launched when we enter "c update" and press submit while on p1.html in AP mode
@@ -635,7 +626,7 @@ void setup()
       request->send(r);
 
       if (shouldReboot)
-        QueueTask(TASK_FIRMWARE_RESTART);
+        TSK.QueueTask(TASK_FIRMWARE_RESTART);
       else
         SendWithHeaders(request, SERVERINDEX_FILENAME);
     }
@@ -742,34 +733,25 @@ void setup()
     HandlePostP2Req(request);
  });
 
-  // Note: don't call this between PF.begin and end. It will cause watchdog timer resets!
-  //long heap_size = ESP.getFreeHeap();
-  //prtln("Heap before variable size array: " + String(heap_size));
-
-  // this might take a while since we have to cycle from 0-MAX_SLOTS
-  // trying to read each...
-  g_slotCount = TSC.CountFullTimeSlots();
-  prtln("g_slotCount = " + String(g_slotCount));
-
-  // Create webInputSemaphore
-//  webInputSemaphore = xSemaphoreCreateBinary();
-
   // needed to detect a disconnect...
 //  WiFi.ony7Event(WiFiEvent);
   WiFi.onEvent(WiFiStationDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 //  WiFi.onEvent(WiFiGotIP, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
+  // Create webInputSemaphore
+//  webInputSemaphore = xSemaphoreCreateBinary();
+
   // need this before configTime!
   // PROBLEM: this is creating some sort of WiFi broadcast "blip"
 //  WiFi.mode(WIFI_STA);
 
-  // void configTzTime(const char* TIMEZONE, const char* server1, const char* server2, const char* server3);
-  configTzTime(TIMEZONE, NTP_SERVER1, NTP_SERVER2);
-  //configTime(gmtOffset_sec, daylightOffset_sec, NTP_SERVER1, NTP_SERVER2); // init the (S)NTP internet time system
-
-  if (!InitTimeManually())
+  if (!InitTime())
     prtln("Failed to set initial time!");
-
+  else{
+    prtln("Initial Time/Date: \"" + TimeToString(false) + "\"");
+    InitOrRestartSNTP();
+  }
+    
   SetupAndStartHardwareTimeInterrupt();
   prtln("Timer started...");
 
@@ -780,74 +762,11 @@ void setup()
   RefreshSct();
   
   B64C.init(); // initialize B64Class in Encode.cpp
-
+  
   // tests... (in Tests.cpp)
   Tests();
-  QueueTask(TASK_PRINT_PREFERENCES); // make sure InitTasks() is called before this!
-}
-
-// set time and date from sVal such as "2022-12-31T23:59:59" (send hour in 24-hour format)
-// returns the current time and date: 2020-11-31T04:32:00pmTsetok (or Tlocked, Treload, Tnoset)
-// returns an empty string if unable to read the time back after setting it.
-// NOTE: if this is called and succeeds, we want to pass sVal over HTTP to other ESP32s which can
-// then set their local clock if g_bSyncRx is set.
-String SetTimeDate(String sVal){
-  String sRet;
-  bool bSetRequestedButLocked = false;
-  bool bTimeSetFailed = false;
-  bool bTimeSetSuccess = false;
-
-  // set our time if unlocked and it is present in input string
-  if (sVal.length() >= 19 && sVal != "0")
-  {
-    if (!IsLocked())
-    {
-      //prtln("setting clock to web browser's time (user pressed \"Set\" button!): \"" + sVal + "\"");
-
-      // parse date/time
-      String sT;
-      sT = sVal.substring(0,4);
-      int myYear = sT.toInt();
-      sT = sVal.substring(5,7);
-      int myMonth = sT.toInt();
-      sT = sVal.substring(8,10);
-      int myDay = sT.toInt();
-      sT = sVal.substring(11,13);
-      int myHour = sT.toInt();
-      sT = sVal.substring(14,16);
-      int myMinute = sT.toInt();
-      sT = sVal.substring(17,19);
-      int mySecond = sT.toInt();
-
-      if (SetTimeManually(myYear, myMonth, myDay, myHour, myMinute, mySecond))
-        bTimeSetSuccess = true;
-      else
-        bTimeSetFailed = true;
-    }
-    else
-      bSetRequestedButLocked = true;
-  }
-
-  sRet = TimeToString(); // time and date as: 2020-11-31T04:32:00pm
-
-  if (sRet.length() > 0){
-    // add a Tcommand to web-page p2.html via the formatted time and date it's polling for each second.
-    // That gives us a nice two-way communication path!
-    if (bSetRequestedButLocked)
-      sRet += "Tlocked"; // show locked alert
-    else if (bTimeSetSuccess){
-      sRet += "Tsetok"; // show "Time was set!" at web-page Javascript
-      IML.SetAllSendTimeFlags(); // set bSendTime flags for each IP in mDNS array
-    }
-    else if (bTimeSetFailed)
-      sRet += "Tnoset"; // show "Time set failed..." at web-page Javascript
-    if (g_bTellP2WebPageToReload){
-      sRet += "Treload";
-      g_bTellP2WebPageToReload = false;
-    }
-  }
-
-  return sRet;
+  TSK.QueueTask(TASK_PRINT_PREFERENCES); // make sure InitTasks() is called before this!
+  bootCount = 0;
 }
 
 //    response->addHeader("Access-Control-Allow-Headers", "origin, content-type, accept, authorization");
@@ -864,7 +783,8 @@ void SendWithHeaders(AsyncWebServerRequest *request, String s){
   request->send(r);
 }
 
-void IRAM_ATTR onTimer(){
+//void IRAM_ATTR onTimer(){
+void onTimer(){
   // Increment the counter and set the time of ISR
 //  portENTER_CRITICAL_ISR(&timerMux);
 //  isrCounter++;
@@ -984,59 +904,6 @@ void dnsAndServerStop(){
   }
 }
 
-void startMIDI(){
-    AppleRTP_MIDI.setName(g_sHostName.c_str());
-
-    // Set up some AppleMIDI callback handles
-    AppleRTP_MIDI.setHandleConnected(onAppleMidiConnected);
-    AppleRTP_MIDI.setHandleDisconnected(onAppleMidiDisconnected);
-//    AppleRTP_MIDI.setHandleError(onAppleMidiError);
-
-    // Initialize Control Surface (also calls MIDI.begin())
-//    Control_Surface.begin();
-//    MIDI.begin(2);
-//    MIDI.begin(MIDI_CHANNEL_OMNI);
-
-    RTP_MIDI.setHandleNoteOn(OnMidiNoteOn);
-    RTP_MIDI.setHandleNoteOff(OnMidiNoteOff);
-//    MIDI.setHandleNoteOn(OnMidiNoteOn);
-//    MIDI.setHandleNoteOff(OnMidiNoteOff);
-//  MIDI.setHandleAfterTouchPoly(OnAfterTouchPoly);
-//  MIDI.setHandleControlChange(OnControlChange);
-//  MIDI.setHandleProgramChange(OnProgramChange);
-//  MIDI.setHandleAfterTouchChannel(OnAfterTouchChannel);
-//  MIDI.setHandlePitchBend(OnPitchBend);
-//  MIDI.setHandleSystemExclusive(OnSystemExclusive);
-//  MIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQuarterFrame);
-//  MIDI.setHandleSongPosition(OnSongPosition);
-//  MIDI.setHandleSongSelect(OnSongSelect);
-//  MIDI.setHandleTuneRequest(OnTuneRequest);
-//  MIDI.setHandleClock(OnClock);
-//  MIDI.setHandleStart(OnStart);
-//  MIDI.setHandleContinue(OnContinue);
-//  MIDI.setHandleStop(OnStop);
-//  MIDI.setHandleActiveSensing(OnActiveSensing);
-//  MIDI.setHandleSystemReset(OnSystemReset);
-
-    // MIDI_CHANNEL_OMNI == MIDICHAN_ALL == 0, MIDI_CHANNEL_OFF == MIDICHAN_OFF == 17 and over
-    if (g8_midiChan == MIDICHAN_ALL)
-      RTP_MIDI.begin(MIDI_CHANNEL_OMNI);
-    else
-      RTP_MIDI.begin(g8_midiChan);
-
-    // Add service to MDNS-SD
-    MDNS.addService("apple-midi", "udp", AppleRTP_MIDI.getPort());
-
-    prtln("AppleMIDI started: " + g_sHostName);
-}
-
-void stopMIDI(){
-  if (g_bMidiConnected)
-    AppleRTP_MIDI.sendEndSession();
-  mdns_service_remove("_apple-midi", "_udp");
-  prtln("AppleMIDI stopped!");
-}
-
 // esp_deep_sleep_start();
 // esp_light_sleep_start();
 // esp_sleep_enable_timer_wakeup(); // enable RTC timer's wakeup
@@ -1065,23 +932,25 @@ void loop(){
 //  digitalWrite(RGB_BUILTIN, LOW);  // Turn the RGB LED off
 //  delay(1000);
 //
-//  neopixelWrite(RGB_BUILTIN, RGB_BRIGHTNESS, 0, 0);  // Red
+//  rgbLedWrite(RGB_BUILTIN, RGB_BRIGHTNESS, 0, 0);  // Red
 //  delay(1000);
-//  neopixelWrite(RGB_BUILTIN, 0, RGB_BRIGHTNESS, 0);  // Green
+//  rgbLedWrite(RGB_BUILTIN, 0, RGB_BRIGHTNESS, 0);  // Green
 //  delay(1000);
-//  neopixelWrite(RGB_BUILTIN, 0, 0, RGB_BRIGHTNESS);  // Blue
+//  rgbLedWrite(RGB_BUILTIN, 0, 0, RGB_BRIGHTNESS);  // Blue
 //  delay(1000);
-//  neopixelWrite(RGB_BUILTIN, 0, 0, 0);  // Off / black
+//  rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off / black
 //  delay(1000);
 //#endif  //Increment boot number (memory-location is in Real-Time-Clock module) and print it every reboot
 
+#if COMPILE_WITH_MIDI_LIBRARY
   // Listen to incoming notes
   RTP_MIDI.read();
   //Control_Surface.loop(); // handle all midi and control-surface messages
   //MIDI.read();
   //AppleMIDI.read();
+#endif
 
-  RunTasks();
+  TSK.RunTasks();
 
   // return if 1/4 sec. timer has not fired
   if (xSemaphoreTake(timerSemaphore, 0) != pdTRUE)
@@ -1095,12 +964,18 @@ void loop(){
 //  portEXIT_CRITICAL(&timerMux);
 
   // -------- do stuff every .25 sec here
+
+#if ESP32_S3
+  // For ESP32_S3 custom board (not yet existing) reads the SSR auto/on/off switch for each relay
+  ReadSsrSwitches();
+#endif
+  
   // read potentiometer and associated mode-switch every 1/4 second unless locked
   if (!IsLocked()){
     // For old ESP32 board, reads SPST POT mode switch (select phase or period to change with POT)
-    // For ESP32_S3 board, reads the DPDT mode switches for POT1, SSR1 and SSR2
-    ReadSpdtSwitches();
+    // For ESP32_S3 board, reads the DPDT mode switch for POT1
 #if !DISABLE_POTENTIOMETER    
+    ReadPotModeSwitch();
     ReadPot1();
 #endif
   }
@@ -1113,9 +988,9 @@ void loop(){
   g8_quarterSecondTimer = 0; // reset
 
   //-------- do stuff every .5 sec here
-  QueueTask(TASK_MAIN_TIMING_CYCLE);
-  QueueTask(TASK_PULSEOFF_TIMING_CYCLE);
-  QueueTask(TASK_STATS_MONITOR);
+  TSK.QueueTask(TASK_MAIN_TIMING_CYCLE);
+  TSK.QueueTask(TASK_PULSEOFF_TIMING_CYCLE);
+  TSK.QueueTask(TASK_STATS_MONITOR);
 
   //----------------------------------------------
   // Read RTC every .5 seconds of the hardware-timer - if it's changed
@@ -1133,30 +1008,23 @@ void loop(){
   if (now % 60 == 0){
     // -------- do stuff every 1 minute here
 
-    IML.ClearLinkOkFlagsForExpiredMdnsIps();
+    IML.DeleteExpiredMdnsIps();
     
-    int count = IML.GetCount();
+    int count = IML.GetCount(); // # of remote units connected
     if (count && g_bWiFiConnected){
       if (count == g_prevMdnsCount){
-        if (g_bSyncMaster && g_bSyncToken && ++g16_sendDefTokenTimer >= g16_sendDefTokenTime){
-          StartNewRandomToken();
-          g16_sendDefTokenTimer = 0;
-          g16_sendDefTokenTime = random(SEND_DEF_TOKEN_TIME_MIN, SEND_DEF_TOKEN_TIME_MAX+1);
-        }
+        if (g_bMaster && ++g16_sendDefTokenTimer >= g16_sendDefTokenTime)
+          MasterStartRandomDefaultTokenChange(); // start a system-wide default token reset
       }
       else{ // mDNS count changed...
         g_prevMdnsCount = count;
-        if (g16_sendDefTokenTimer)
-          g16_sendDefTokenTimer = 0;
+        g16_sendDefTokenTimer = 0;
       }
-      
-      IML.PrintInfo();
+      TSK.QueueTask(TASK_PRINT_MDNS_INFO);
     }
     else{
-      if (g16_sendDefTokenTimer)
-        g16_sendDefTokenTimer = 0;
-      if (g_prevMdnsCount)
-        g_prevMdnsCount = 0;
+      g_prevMdnsCount = 0;
+      g16_sendDefTokenTimer = 0;
     }
 
     // we have a brand new minute here - which means seconds == 00 on the RTC - but
@@ -1184,7 +1052,7 @@ void loop(){
     }
 
     // do stuff every minute here
-    QueueTask(TASK_PROCESS_ONE_MINUTE_TIME_SLOTS);
+    TSK.QueueTask(TASK_PROCESS_ONE_MINUTE_TIME_SLOTS);
   }
 
   // -------- do stuff every 1 sec here
@@ -1192,31 +1060,56 @@ void loop(){
   if (g8_clockSetDebounceTimer) // prevent multiple manual clock-set requests
     g8_clockSetDebounceTimer--;
 
-  // this timer is set either locally to set a master's default-token periodically, or it's initiated
-  // remotely via the CMsetToken command (HttpMsgClass.h). The timer value is passed as the data associated with
-  // CMsetToken - we pass whatever remaining time is on the master-unit's g16_tokenSyncTimer - and so all networked
-  // units will set their g_defToken at exactly the same second.
-  if (g16_tokenSyncTimer && --g16_tokenSyncTimer == 0){
-    if (g_pendingDefToken != NO_TOKEN){
-      g_defToken = g_pendingDefToken;
-      g_oldDefToken = g_defToken; // don't re-transmit it!
-      g_pendingDefToken = NO_TOKEN;
-      prtln("New default token auto-set (it will restore to user's setting on powerup): " + String(g_defToken));
-    }
+  // expiration for "c restart ip key" command
+  if (g16_restartExpirationTimer && --g16_restartExpirationTimer == 0){
+    g_sRestartKey = "";
+    g_sRestartIp = "";
   }
-  
+
+
+  // this timer is set either locally to set a master's default-token periodically, or it's initiated
+  // remotely via the CMchangeSet command (HttpMsgClass.h). The timer value is passed as the data associated with
+  // CMchangeSet - we pass whatever remaining time is on the master-unit's g16_changeSyncTimer - and so all networked
+  // units will set their g_defToken at exactly the same second.
+  if (g16_changeSyncTimer && --g16_changeSyncTimer == 0)
+    while (CNG.RunChanges()); // do all queued changes
+    
   // set number of services by reference...
   if (g_bWiFiConnected){
-    QueueTask(TASK_CHECK_MDNS_SEARCH_RESULT);
+    TSK.QueueTask(TASK_CHECK_MDNS_SEARCH_RESULT);
     
-    // if esp32s were found on the network, cycle through them one every 10-30 seconds, sending info
+    // if esp32s were found on the network, cycle through them one every 5-10 seconds, sending info
     if (--g16_sendHttpTimer == 0){
-      QueueTask(TASK_CYCLE_THROUGH_MDNS_IPS);
+      int count = IML.GetCount();
+      if (count){
+        if (g16_asyncHttpIndex >= count)
+          g16_asyncHttpIndex = 0;
+        // After command "c test on", g16_oddEvenCounter lets us fold-in transmit of a random text
+        // message every other 10-30 second interval...
+        if (g_bTest && (g16_oddEvenCounter++ & 1))
+          SendText(g16_asyncHttpIndex, genRandMessage(1, TEST_TEXT_MAX_LENGTH));
+        else{
+          String sIp = IML.GetIP(g16_asyncHttpIndex).toString();
+          int txToken = IML.GetToken(g16_asyncHttpIndex, MDNS_TOKEN_TX);
+          if (txToken == NO_TOKEN)
+            // NOTE: this will send our MAC (last-two-octets) to the remote and receive
+            // the remote's MAC (last-two-octets). Also it will set this IP's tx-token and canRx tx token
+            // as well as the remote's rx-token and canRx rx token. It does not set this IP's rx-token
+            // Etc. The remote will send this IP a CanRx requext to establish the remaining tokens.
+            // Once all of that finishes, we begin calling SendHttpReq() if we are a master. The MAC addresses
+            // are used to determine a master... (highest last-two octets of all the MACs will be the master)
+            TSK.QueueTask(TASK_SEND_CANRX_REQ, sIp);
+          else if (g_bMaster){
+            TSK.QueueTask(TASK_SEND_HTTP_REQ, sIp);
+          }
+        }
+        g16_asyncHttpIndex++;
+      }
       g16_sendHttpTimer = random(SEND_HTTP_TIME_MIN, SEND_HTTP_TIME_MAX+1);
     }
   }
 
-  QueueTask(TASK_PROCESS_ONE_SECOND_TIME_SLOTS);
+  TSK.QueueTask(TASK_PROCESS_ONE_SECOND_TIME_SLOTS);
 
   if (++g8_fiveSecondTimer >= FIVE_SECOND_TIME){
     // -------- do stuff every 5 sec here
@@ -1231,11 +1124,11 @@ void loop(){
       g_bTellP2WebPageToReload = false;
 
     // Encoded base 10 changed-parameter transmit strings for each IP in t_ip_time struct in MdnsClass.h
-    QueueTask(TASK_ENCODE_CHANGED_PARAMETERS);
+    TSK.QueueTask(TASK_ENCODE_CHANGED_PARAMETERS);
 
-    QueueTask(TASK_POLL_WIFI_SWITCH); // also monitors WiFi connection!
+    TSK.QueueTask(TASK_POLL_WIFI_SWITCH); // also monitors WiFi connection!
 
-    QueueTask(TASK_SET_PULSEOFF_VARS);
+    TSK.QueueTask(TASK_SET_PULSEOFF_VARS);
 
     // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
     // https://github.com/esp8266/Arduino/blob/master/libraries/esp8266/examples/NTP-TZ-DST/NTP-TZ-DST.ino
@@ -1253,7 +1146,7 @@ void loop(){
   if (++g8_thirtySecondTimer >= THIRTY_SECOND_TIME){
     // initiate asynchronous search for new esp32s on the network infrequently...
     if (g_bWiFiConnected)
-      QueueTask(TASK_QUERY_MDNS_SERVICE);
+      TSK.QueueTask(TASK_QUERY_MDNS_SERVICE);
     g8_thirtySecondTimer = 0;
   }
 }
@@ -1389,6 +1282,60 @@ bool CheckForWiFiTimeSync(){
 // ====================================================================================
 // Event handlers for incoming MIDI messages
 // ====================================================================================
+#if COMPILE_WITH_MIDI_LIBRARY
+
+void startMIDI(){
+    AppleRTP_MIDI.setName(g_sHostName.c_str());
+
+    // Set up some AppleMIDI callback handles
+    AppleRTP_MIDI.setHandleConnected(onAppleMidiConnected);
+    AppleRTP_MIDI.setHandleDisconnected(onAppleMidiDisconnected);
+//    AppleRTP_MIDI.setHandleError(onAppleMidiError);
+
+    // Initialize Control Surface (also calls MIDI.begin())
+//    Control_Surface.begin();
+//    MIDI.begin(2);
+//    MIDI.begin(MIDI_CHANNEL_OMNI);
+
+    RTP_MIDI.setHandleNoteOn(OnMidiNoteOn);
+    RTP_MIDI.setHandleNoteOff(OnMidiNoteOff);
+//    MIDI.setHandleNoteOn(OnMidiNoteOn);
+//    MIDI.setHandleNoteOff(OnMidiNoteOff);
+//  MIDI.setHandleAfterTouchPoly(OnAfterTouchPoly);
+//  MIDI.setHandleControlChange(OnControlChange);
+//  MIDI.setHandleProgramChange(OnProgramChange);
+//  MIDI.setHandleAfterTouchChannel(OnAfterTouchChannel);
+//  MIDI.setHandlePitchBend(OnPitchBend);
+//  MIDI.setHandleSystemExclusive(OnSystemExclusive);
+//  MIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQuarterFrame);
+//  MIDI.setHandleSongPosition(OnSongPosition);
+//  MIDI.setHandleSongSelect(OnSongSelect);
+//  MIDI.setHandleTuneRequest(OnTuneRequest);
+//  MIDI.setHandleClock(OnClock);
+//  MIDI.setHandleStart(OnStart);
+//  MIDI.setHandleContinue(OnContinue);
+//  MIDI.setHandleStop(OnStop);
+//  MIDI.setHandleActiveSensing(OnActiveSensing);
+//  MIDI.setHandleSystemReset(OnSystemReset);
+
+    // MIDI_CHANNEL_OMNI == MIDICHAN_ALL == 0, MIDI_CHANNEL_OFF == MIDICHAN_OFF == 17 and over
+    if (g8_midiChan == MIDICHAN_ALL)
+      RTP_MIDI.begin(MIDI_CHANNEL_OMNI);
+    else
+      RTP_MIDI.begin(g8_midiChan);
+
+    // Add service to MDNS-SD
+    MDNS.addService("apple-midi", "udp", AppleRTP_MIDI.getPort());
+
+    prtln("AppleMIDI started: " + g_sHostName);
+}
+
+void stopMIDI(){
+  if (g_bMidiConnected)
+    AppleRTP_MIDI.sendEndSession();
+  mdns_service_remove("_apple-midi", "_udp");
+  prtln("AppleMIDI stopped!");
+}
 
 void onAppleMidiConnected(const ssrc_t &ssrc, const char *name){
   g_bMidiConnected  = true;
@@ -1459,7 +1406,6 @@ void OnMidiNoteOff(uint8_t chan, uint8_t note, uint8_t velocity){
   if (note == g8_midiNoteB && g8_ssr2ModeFromWeb == SSR_MODE_OFF)
     SetSSR(GPOUT_SSR2, false);
 }
-
 // has to be in FanController.ino!
 void TaskMidiChan(){
   if (g_bWiFiConnected){
@@ -1471,7 +1417,7 @@ void TaskMidiChan(){
       startMIDI();
   }
 
-  PC.PutPrefByte(EE_MIDICHAN, g8_midiChan);
+  PC.PutPrefU8(EE_MIDICHAN, g8_midiChan);
   if (g8_midiChan == MIDICHAN_OFF)
     RTP_MIDI.setInputChannel(MIDI_CHANNEL_OFF);
   else if (g8_midiChan == MIDICHAN_ALL)
@@ -1480,3 +1426,13 @@ void TaskMidiChan(){
     RTP_MIDI.setInputChannel(g8_midiChan);
   PrintMidiChan();
 }
+#else
+void stopMIDI(){
+  
+}
+void startMIDI(){
+  
+}
+void TaskMidiChan(){
+}
+#endif

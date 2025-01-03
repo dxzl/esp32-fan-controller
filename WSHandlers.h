@@ -37,19 +37,22 @@
 #define HELP2_FILENAME    "/help2.html"
 #define P1_FILENAME       "/p1.html"
 #define P2_FILENAME       "/p2.html"
+#define LOGIN_FILENAME    "/loginIndex.html"
+#define INDEX_FILENAME    "/index.html"
+#define SERVERINDEX_FILENAME  "/serverIndex.html"
+
+#define JS_DIRECTORY "/js"
 #define P0JS_FILENAME     "/p0.js"
 #define P1JS_FILENAME     "/p1.js"
-#define PLJS_FILENAME     "/pl.js"
 #define P2JS_FILENAME     "/p2.js"
 #define JQUERY_FILENAME   "/jquery.min.js"
 #define SCT_FILENAME      "/sct.js"
+
+#define CSS_DIRECTORY "/css"
 #define STYLE1_FILENAME   "/style1.css"
 #define STYLE2_FILENAME   "/style2.css"
 #define STYLE3_FILENAME   "/style3.css"
 #define STYLELED_FILENAME "/led.css"
-#define LOGIN_FILENAME    "/loginIndex.html"
-#define INDEX_FILENAME    "/index.html"
-#define SERVERINDEX_FILENAME  "/serverIndex.html"
 
 // web-page entry points (if you change these, they must also be changed in the html/javascript files in "data")
 #define EP_POST_UPDATE     "/update"
@@ -62,6 +65,86 @@
 #define EP_GET_BUTTONS     "/getBut"
 #define EP_GET_HEART       "/getHeart"
 #define EP_GET_INDEX       "/getIndex"
+
+// Web-page placeholders we fill-in dynamically as the html file is "served"
+// index.html
+const char PH_HOSTNAME[] = "HOSTNAME";
+const char PH_MAXSCT[] = "MAXSCT";
+const char PH_PERVARS[] = "PERVARS";
+const char PH_LABEL_A[] = "LABELA";
+const char PH_LABEL_B[] = "LABELB";
+
+// p1.html
+const char PH_P1APMODE[] = "P1APMODE";
+const char PH_P1VARS[] = "P1VARS"; // combination script tag with vars for g8_midiChan, g8_midiNoteA, g8_midiNoteB
+
+// p2.html
+const char PH_P2DELSTYLE[] = "P2DELSTYLE";
+const char PH_P2DELITEMS[] = "P2DELITEMS";
+
+// ------------------ web-server handlers -------------------
+
+// NOTE: These all appear both here and in the .js files for the web-pages served out of SPIFFS file-system
+// by the AsyncWebServer library. You can best change via Notepad++ by opening all .html files and .js (in "origdata" folder)
+// files as well as this file and WSHandlers.h and use Find/Replace "in all opened documents". Then upload the changed .js files
+// to https://obfuscator.io/ and save obfuscated files in the "data" folder.
+
+// sct.js heartbeat /getHeart
+const char PARAM_HEARTBEAT[]   = "neihs";
+
+// index.html
+const char PARAM_HOSTNAME[]    = "hddsi"; // hnEnc
+const char PARAM_PERMAX[]      = "geuge"; // perMax
+const char PARAM_PERUNITS[]    = "djeuc"; // perUnits
+const char PARAM_PERVAL[]      = "rrksv"; // perVal
+const char PARAM_STATE1[]      = "mwial"; // stateTxtA
+const char PARAM_STATE2[]      = "uvohh"; // stateTxtB
+const char PARAM_LABEL_A[]     = "wjdte"; // labelTxtA
+const char PARAM_LABEL_B[]     = "meufw"; // labelTxtB
+const char PARAM_TEXT[]        = "ifhrv"; // text-message
+
+// loginIndex.html
+const char PARAM_UDID[]   = "bwihl"; // used in firmware update
+const char PARAM_UDPW[]   = "pdklt";
+
+// p1.html
+
+// (PARAM_BUTRST, PARAM_WIFINAME and PARAM_WIFIPASS can be changed without reprocessing the spiffs web-data)
+const char PARAM_BUTRST[]     = "neuqj"; // restore button press
+const char PARAM_WIFINAME[]   = "fgdje"; // set by hidden field on p1.html - variable %P1APMODE% is replaced by two edit-input fields
+const char PARAM_WIFIPASS[]   = "rsgyb"; // data submitted is handled in in ReplaceHtmlPercentSign().
+
+// changing these requires serching for the strings in p1.html/p1.js and changeing there too!
+const char PARAM_PHASE[]      = "jeita";
+const char PARAM_DC_A[]       = "neufb";
+const char PARAM_DC_B[]       = "xbmey";
+const char PARAM_MIDICHAN[]   = "ahejn";
+const char PARAM_MIDINOTE_A[] = "ehwdo";
+const char PARAM_MIDINOTE_B[] = "fjezm";
+
+// p2.html
+// received from p2.html when Add button pressed
+const char PARAM_MINUTE[] = "hriqn";
+const char PARAM_HOUR[] = "nwuds";
+const char PARAM_SECOND[] = "bbeis";
+const char PARAM_AMPM[] = "heidc";
+const char PARAM_DEVICE_MODE[] = "whrro";
+const char PARAM_DEVICE_ADDR[] = "ajedd";
+const char PARAM_REPEAT_MODE[] = "nriwq";
+const char PARAM_REPEAT_COUNT[] = "jegsi";
+const char PARAM_EVERY_COUNT[] = "ehitm";
+const char PARAM_DATE[] = "wjyrc";
+// when Edit button pressed on p2.html
+const char PARAM_EDITINDEX[] = "ejddo";
+const char PARAM_DELINDEX[] = "heifq";
+// received from p2.html
+const char PARAM_REPLACEINDEX[] = "jfrej";
+const char PARAM_INCLUDETIMINGCYCLE[] = "whsin";
+const char PARAM_TIMINGCYCLEINREPEATS[] = "ydjyz";
+const char PARAM_USEOLDTIMEVALS[] = "vjenw";
+const char PARAM_DATETIME[] = "gejcc";
+const char PARAM_FILEDATA[] = "wqjun";
+const char PARAM_ERASEDATA[] = "lkeism";
 
 // web-server handlers
 void HandleHeartbeatReq(AsyncWebServerRequest *request);
@@ -81,14 +164,14 @@ String ReplaceHtmlPercentSign(const String& var);
 
 #endif
 
-extern const char PARAM_HEARTBEAT[], PARAM_HOSTNAME[], PARAM_PERMAX[], PARAM_PERUNITS[];
-extern const char PARAM_PERVAL[], PARAM_STATE1[], PARAM_STATE2[], PARAM_LABEL_A[], PARAM_LABEL_B[], PARAM_TEXT[];
-extern const char PARAM_UDID[], PARAM_UDPW[], PARAM_BUTRST[], PARAM_WIFINAME[], PARAM_WIFIPASS[], PARAM_PHASE[];
-extern const char PARAM_DC_A[], PARAM_DC_B[], PARAM_MIDICHAN[], PARAM_MIDINOTE_A[], PARAM_MIDINOTE_B[];
-extern const char PARAM_MINUTE[], PARAM_HOUR[], PARAM_SECOND[], PARAM_AMPM[], PARAM_DEVICE_MODE[];
-extern const char PARAM_DEVICE_ADDR[], PARAM_REPEAT_MODE[], PARAM_REPEAT_COUNT[], PARAM_EVERY_COUNT[];
-extern const char PARAM_DATE[], PARAM_EDITINDEX[], PARAM_DELINDEX[], PARAM_REPLACEINDEX[], PARAM_INCLUDETIMINGCYCLE[];
-extern const char PARAM_TIMINGCYCLEINREPEATS[], PARAM_USEOLDTIMEVALS[], PARAM_DATETIME[], PARAM_FILEDATA[], PARAM_ERASEDATA[];
-
-extern const char PH_HOSTNAME[], PH_MAXSCT[], PH_PERVARS[], PH_LABEL_A[], PH_LABEL_B[];
-extern const char PH_P1APMODE[], PH_P1VARS[], PH_P2DELSTYLE[], PH_P2DELITEMS[];
+//extern const char PARAM_HEARTBEAT[], PARAM_HOSTNAME[], PARAM_PERMAX[], PARAM_PERUNITS[];
+//extern const char PARAM_PERVAL[], PARAM_STATE1[], PARAM_STATE2[], PARAM_LABEL_A[], PARAM_LABEL_B[], PARAM_TEXT[];
+//extern const char PARAM_UDID[], PARAM_UDPW[], PARAM_BUTRST[], PARAM_WIFINAME[], PARAM_WIFIPASS[], PARAM_PHASE[];
+//extern const char PARAM_DC_A[], PARAM_DC_B[], PARAM_MIDICHAN[], PARAM_MIDINOTE_A[], PARAM_MIDINOTE_B[];
+//extern const char PARAM_MINUTE[], PARAM_HOUR[], PARAM_SECOND[], PARAM_AMPM[], PARAM_DEVICE_MODE[];
+//extern const char PARAM_DEVICE_ADDR[], PARAM_REPEAT_MODE[], PARAM_REPEAT_COUNT[], PARAM_EVERY_COUNT[];
+//extern const char PARAM_DATE[], PARAM_EDITINDEX[], PARAM_DELINDEX[], PARAM_REPLACEINDEX[], PARAM_INCLUDETIMINGCYCLE[];
+//extern const char PARAM_TIMINGCYCLEINREPEATS[], PARAM_USEOLDTIMEVALS[], PARAM_DATETIME[], PARAM_FILEDATA[], PARAM_ERASEDATA[];
+//
+//extern const char PH_HOSTNAME[], PH_MAXSCT[], PH_PERVARS[], PH_LABEL_A[], PH_LABEL_B[];
+//extern const char PH_P1APMODE[], PH_P1VARS[], PH_P2DELSTYLE[], PH_P2DELITEMS[];

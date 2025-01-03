@@ -9,15 +9,14 @@ TimeSlotsClass TSC;
 int TimeSlotsClass::FindNextFullTimeSlot(int iStart){
   int iRet = -1;
 
-  PF.begin(EE_SLOTS_NAMESPACE);
+  PF.begin(EE_SLOTS_NAMESPACE, true); // read-only flag...
 
   for (int ii = iStart; ii < MAX_TIME_SLOTS; ii++){
     String sName = GetSlotNumAsString(ii);
 
     int len = PF.getBytesLength(sName.c_str()); // modified this in MyPreferences.cpp to not log an error
 
-    if (len == sizeof(t_event))
-    {
+    if (len == sizeof(t_event)){
       iRet = ii;
       break;
     }
@@ -35,7 +34,7 @@ int TimeSlotsClass::FindFirstEmptyTimeSlot(){
   int iSlot = -1;
   bool bNotZeroLength = false;
 
-  PF.begin(EE_SLOTS_NAMESPACE);
+  PF.begin(EE_SLOTS_NAMESPACE, true); // read-only flag...
   for (int ii = 0; ii < MAX_TIME_SLOTS; ii++){
     String sName = GetSlotNumAsString(ii);
 
@@ -66,55 +65,58 @@ int TimeSlotsClass::FindFirstEmptyTimeSlot(){
 }
 
 bool TimeSlotsClass::IsTimeSlotEmpty(int slotIndex){
-  int iSlot = -1;
-  bool bNotZeroLength = false;
-
-  PF.begin(EE_SLOTS_NAMESPACE);
   String sName = GetSlotNumAsString(slotIndex);
+  if (sName.isEmpty())
+    return false;
 
+  PF.begin(EE_SLOTS_NAMESPACE, true); // read-only flag...;
   int len = PF.getBytesLength(sName.c_str()); // modified this in MyPreferences.cpp to not log an error
-
-  if (len != sizeof(t_event)){
-    if (len != 0)
-      bNotZeroLength = true;
-    iSlot = slotIndex;
-  }
   PF.end();
 
+  if (len == sizeof(t_event))
+    return false; // not empty
+    
+  if (len == 0)
+    return true; // empty
+    
   // found a corrupt slot
-  if (iSlot >= 0 && bNotZeroLength){
-    prtln("Trying to delete corrupt slot: " + String(iSlot));
-    if (DeleteTimeSlot(iSlot)){ // try to clear it!
-      // recount...
-      g_slotCount = CountFullTimeSlots();
-      prtln("Corrupt slot deleted! slot-count: " + String(g_slotCount));
-    }
+  prtln("Trying to delete corrupt slot: " + sName);
+  if (DeleteTimeSlot(slotIndex)){ // try to clear it!
+    // recount...
+    g_slotCount = CountFullTimeSlots();
+    prtln("Corrupt slot deleted! slot-count: " + String(g_slotCount));
+    return true; // now it's empty!
   }
-
-  return (iSlot >= 0) ? true : false;
+  
+  return false; // can't make it empty...
 }
 
-// returns true if success
-bool TimeSlotsClass::PutTimeSlot(int slotIndex, t_event &t){
-  // key names are 15 chars max length
-  String sName = GetSlotNumAsString(slotIndex);
-  int bytesWritten = 0;
 
+// returns true if success
+// Note: call IsTimeSlotEmpty() first... if empty, call AddTimeSlot() instead
+// if not empty, calling this will replace a slot's data!
+bool TimeSlotsClass::PutTimeSlot(int slotIndex, t_event &t){
+  String sName = GetSlotNumAsString(slotIndex);
+  if (sName.isEmpty())
+    return false;
+    
+  int bytesWritten = 0;
   PF.begin(EE_SLOTS_NAMESPACE);
   bytesWritten = PF.putBytes(sName.c_str(), &t, sizeof(t_event));
   PF.end();
-
   yield();
-
   return (bytesWritten == sizeof(t_event));
 }
 
 // returns true if success
 bool TimeSlotsClass::GetTimeSlot(int slotIndex, t_event &t){
   String sName = GetSlotNumAsString(slotIndex);
+  if (sName.isEmpty())
+    return false;
+
   int bytesRead = 0;
 
-  PF.begin(EE_SLOTS_NAMESPACE);
+  PF.begin(EE_SLOTS_NAMESPACE, true); // read-only flag...;
   bytesRead = PF.getBytes(sName.c_str(), &t, sizeof(t_event));
   PF.end();
 
@@ -136,32 +138,46 @@ bool TimeSlotsClass::EnableTimeSlot(int slotIndex, bool bEnable){
   if (!PutTimeSlot(slotIndex, t))
     return false;
 
-  QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
+  TSK.QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
   return true;
 }
 
 // returns true if success
 bool TimeSlotsClass::DeleteTimeSlot(int slotIndex){
-  bool bRet = false;
   String sName = GetSlotNumAsString(slotIndex);
+  if (sName.isEmpty())
+    return false;
+
+  bool bRet = false;
 
   PF.begin(EE_SLOTS_NAMESPACE);
   bRet = PF.remove(sName.c_str());
   PF.end();
 
+  prt("delete slot " + String(slotIndex) + " ");
+
   if (bRet){
     IVL.RemoveIndexBySlot(slotIndex); // remove it from non-zero seconds list (if present)
     IRL.RemoveIndexBySlot(slotIndex);
     g_slotCount--;
-    QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
-
-    prtln("deleted slot " + String(slotIndex));
+    TSK.QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
+    prtln("success!");
   }
   else
-    prtln("delete slot " + String(slotIndex) + ", " + sName + " failed");
-
+    prtln("failed!");
+    
   return bRet;
 }
+
+//int TimeSlotsClass::GetSlotIndexFromName(String sName){
+//  int iStart = String(EE_SLOT_PREFIX).length();
+//  if (iStart < sName.length()){
+//    String sIdx = sName.substring(iStart);
+//    if (alldigits(sIdx))
+//      return sIdx.toInt();
+//  }
+//  return -1;
+//}
 
 bool TimeSlotsClass::AddTimeSlot(t_event &slotData, bool bVerbose){
   if (g_slotCount >= MAX_TIME_SLOTS){
@@ -187,7 +203,7 @@ bool TimeSlotsClass::AddTimeSlot(t_event &slotData, bool bVerbose){
       if (bVerbose)
         prtln("new g_slotCount= " + String(g_slotCount));
 
-      QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
+      TSK.QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
       return true;
     }
 
@@ -234,7 +250,7 @@ bool TimeSlotsClass::EraseTimeSlots(){
 int TimeSlotsClass::CountFullTimeSlots(){
   int iCount = 0;
 
-  PF.begin(EE_SLOTS_NAMESPACE);
+  PF.begin(EE_SLOTS_NAMESPACE, true);
 
   for (int ii = 0; ii < MAX_TIME_SLOTS; ii++){
     String sName = GetSlotNumAsString(ii);
@@ -252,7 +268,7 @@ int TimeSlotsClass::CountFullTimeSlots(){
   return iCount;
 }
 
-// EE_SLOT_xxx (xxx is 000 to 099)
+// EE_SLOT_xxx (xxx is 000 to 999)
 String TimeSlotsClass::GetSlotNumAsString(int val){
   String sSlotNum;
   if (val < 100)
@@ -279,7 +295,7 @@ String TimeSlotsClass::TimeSlotToCommaSepString(int idx, t_event &t){
 // This is used to format the p2.html select drop-down list to choose a slot to delete...
 // In the p2.html and p2.js webpage (in the "data" folder!), the user can load a plain text file that has timeslots formatted one per line as follows:
 // 100 time-events maximum allowed! Comments are allowed in the file that start with #
-//   Format example: (leading * if event is expired): "12/31/2020, 12:59:59pm, AB:auto r:65534, e:65534,t:min"
+//   Format example: (leading * if event is expired): "12/31/2020 12:59:59pm AB:auto r:inf e:65535 t:min"
 //      Options: am|pm, A|B|AB, off|on|auto, off|sec|min|hrs|day|wek|mon|yrs
 //      Optional cycle-timing: a:40,b:50,p:20,u:0-3,m:0-9,v:0-m,i:y (include cycle-timing), c:y (...in repeat events)
 String TimeSlotsClass::TimeSlotToSpaceSepString(t_event &t){
@@ -296,7 +312,7 @@ String TimeSlotsClass::TimeSlotToSpaceSepString(t_event &t){
       sDevAddr = "AB";
     break;
     default:
-      sDevAddr = "x";
+      sDevAddr = "???";
     break;
   }
 
@@ -313,10 +329,26 @@ String TimeSlotsClass::TimeSlotToSpaceSepString(t_event &t){
       sDevMode = "auto";
     break;
     default:
-      sDevMode = "x";
+      sDevMode = "???";
     break;
   }
 
+  // if repeatMode not "off", then add repeat count and every count
+
+  String sRptCount = " r:";
+    
+  if (t.repeatCount == 0)
+    sRptCount += "inf";
+  else
+    sRptCount += String(t.repeatCount);
+
+  String sEveryCount = " e:";
+
+  if (t.everyCount == 0)
+    sEveryCount += "off";
+  else
+    sEveryCount += String(t.everyCount);
+      
   //<option value="0">off</option>
   //<option value="1">second</option>
   //<option value="2">minute</option>
@@ -325,48 +357,39 @@ String TimeSlotsClass::TimeSlotToSpaceSepString(t_event &t){
   //<option value="5">weekly</option>
   //<option value="6">monthly</option>
   //<option value="7">yearly</option>
-  String sTmpMode;
+  
+  String sRptMode;
   switch(t.repeatMode){
-    default:
     case 0:
-      sTmpMode = "";
+      sRptMode = "off";
     break;
     case 1:
-      sTmpMode = "sec";
+      sRptMode = "sec";
     break;
     case 2:
-      sTmpMode = "min";
+      sRptMode = "min";
     break;
     case 3:
-      sTmpMode = "hrs";
+      sRptMode = "hrs";
     break;
     case 4:
-      sTmpMode = "day";
+      sRptMode = "day";
     break;
     case 5:
-      sTmpMode = "wek";
+      sRptMode = "wek";
     break;
     case 6:
-      sTmpMode = "mon";
+      sRptMode = "mon";
     break;
     case 7:
-      sTmpMode = "yrs";
+      sRptMode = "yrs";
+    break;
+    default:
+      sRptMode = "???";
     break;
   }
-
-  // if repeatMode not "off", then add repeat count and every count
-
-  String sRptMode = "";
-  if (sTmpMode != ""){
-    if (t.repeatCount == 0)
-      sRptMode = " r:inf";
-    else
-      sRptMode = " r:" + String(t.repeatCount);
-
-    sRptMode += " e:" + String(t.everyCount);
-    sRptMode += " t:" + sTmpMode;
-  }
-
+  sRptMode = " t:" + sRptMode;
+    
 //  String sDayOfWeek;
 //  switch(t.timeDate.dayOfWeek){
 //    case 0:
@@ -403,8 +426,8 @@ String TimeSlotsClass::TimeSlotToSpaceSepString(t_event &t){
   // sDayOfWeek - need to fit in? TODO
   // NOTE: this format will be stored in .txt files when the user saves events via the web-page
   String sRet = sEna + String(t.timeDate.month) + "/" + String(t.timeDate.day) + "/" + String(t.timeDate.year) + ", " +
-    String(my12Hour) + ":" + ZeroPad(t.timeDate.minute) + ":" + ZeroPad(t.timeDate.second) + sPm + ", " +
-      sDevAddr + ":" + sDevMode + sRptMode;
+    String(my12Hour) + ':' + ZeroPad(t.timeDate.minute) + ':' + ZeroPad(t.timeDate.second) + sPm + ", " +
+      sDevAddr + ':' + sDevMode + sRptCount + sEveryCount + sRptMode;
 
   // here are more...
   // a:40,b:50,p:20,u:0-3,m:0-9,v:0-m, c:y, i:y
@@ -578,6 +601,21 @@ int TimeSlotsClass::MyDayOfWeek(int d, int m, int y){
 //"# (optional cycle-timing: a:40,b:50,p:20,u:0-3,m:0-9,v:0-100,\n" +
 //"# i:y include cycle-timing, c:y ...in repeat events)\n";
 // NOTE: allow for time in 24-hour format (has no am/pm)
+//
+// A maximum of 100 time-events are allowed! Parameters may be separated by either a space or a comma.
+// Format example: (append a leading * if event is disabled (expired))
+// 12/31/2020, 12:59:59pm, AB:auto, r:65534, e:65534, t:min (r is repeat count [0 is inf], e is repeat every, t is repeat units (off|sec|min|hrs|day|wek|mon|yrs))
+// Optional cycle-timing: a:0-100,b:0-100,p:0-100,v:0-100,m:1-65535,u:0-3 (a and b are duty cycle, p is phase, v is period in percent)
+// (m is max-period 1-65535 of units, u is units [0=half-seconds, 1=seconds, 2=minutes, 3=hours])
+// Options: am|pm, A|B|AB, off|on|auto
+// i:y include cycle-timing, c:y ...in repeat events)
+// Setting 0 for a,b,v is random percentage
+// Setting 100 for p is random percentage
+// The actual cycle period is computed as (v*m)/100
+//
+// Example string to set a disabled timeslot:
+// *11/02/2024,9:20:00pm,AB:auto,r:inf,e:off,t:off,a:0,b:0,p:100,v:0,m:60,u:1,i:y
+//
 bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
   sIn.trim();
 
@@ -615,8 +653,8 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
   int32_t iPerMax;
   
   // init these to 0 - they are "optional" in input string - but need to be 0 if not present!
-  int16_t iRcount = 0;
-  int16_t iEcount = 0;
+  int16_t iRcount = 0; // infinite by default
+  int16_t iEcount = 1; // repeat every "one" of iRepeatMode by default
   int16_t iRepeatMode = 0; // off by default
   bool bCycleTimingInRepeats = false;
   bool bIncludeCycleTiming = false;
@@ -644,7 +682,6 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
         if (iCount == 0){
           if (!ParseDate(sOut, iMonth, iDay, iYear))
             return false;
-
           iCount++;
         }
         else if (iCount == 1){
@@ -658,58 +695,59 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
           iCount++;
         }
         else if (iCount > 2){ // the following are optional and can occur in any order
-          int idx = sOut.indexOf(":");
+          int idx = sOut.indexOf(':');
           if (idx > 0){
             // dutyCycleA, dutyCycleB, phase, units index 0-3, max slider index 0-9, value of slider 0-max
             // a:50,b:50,p:50,u:1,m:9,v:100
             char cmd = sOut[0];
             sOut = sOut.substring(idx+1);
             int iVal = sOut.toInt();
-            if (cmd == 't')
+            if (cmd == TSC_REPEAT_MODE)
               ParseRepeatMode(sOut, iRepeatMode); // by ref
-            else if (cmd == 'i'){
-              if (sOut == "y")
-                bIncludeCycleTiming = true;
-            }
-            else if (cmd == 'c'){
-              if (sOut == "y")
-                bCycleTimingInRepeats = true;
-            }
-            else if (cmd == 'r'){
-              if (sOut == "inf")
+            else if (cmd == TSC_REPEAT_COUNT){
+              if (sOut == TSC_INF)
                 iRcount = 0;
               else if (iVal >= 0)
                 iRcount = iVal;
             }
-            else if (cmd == 'e'){
-              if (iVal >= 0)
+            else if (cmd == TSC_EVERY_COUNT){
+              if (sOut == TSC_OFF)
+                iEcount = 0;
+              else if (iVal >= 0)
                 iEcount = iVal;
             }
-            else if (cmd == 'a'){
-              if (iVal >= 0)
-                g_perVals.dutyCycleA = iVal;
+            else if (cmd == TSC_INCLUDE_CYCLE_TIMING){
+              if (sOut == TSC_YES)
+                bIncludeCycleTiming = true;
             }
-            else if (cmd == 'b'){
-              if (iVal >= 0)
-                g_perVals.dutyCycleB = iVal;
+            else if (cmd == TSC_CYCLE_TIMING_IN_REPEATS){
+              if (sOut == TSC_YES)
+                bCycleTimingInRepeats = true;
             }
-            else if (cmd == 'p'){
+            else if (cmd == TSC_DUTY_CYCLE_A){
+              if (iVal >= 0)
+                iDcA = iVal;
+            }
+            else if (cmd == TSC_DUTY_CYCLE_B){
+              if (iVal >= 0)
+                iDcB = iVal;
+            }
+            else if (cmd == TSC_PHASE){
               if (iVal >= 0){
-                g_perVals.phase = iVal;
-                g32_nextPhase = ComputePhase();
+                iPhase = iVal;
               }
             }
-            else if (cmd == 'u'){
+            else if (cmd == TSC_UNITS){
               if (iVal >= 0)
-                g_perVals.perUnits = iVal;
+                iPerUnits = iVal;
             }
-            else if (cmd == 'm'){
+            else if (cmd == TSC_PERMAX){
               if (iVal >= 0)
-                g_perVals.perMax = iVal;
+                iPerMax = iVal;
             }
-            else if (cmd == 'v'){
+            else if (cmd == TSC_PERVAL){
               if (iVal >= 0)
-                g_perVals.perVal = iVal;
+                iPerVal = iVal;
             }
             else
               return false;
@@ -781,7 +819,7 @@ bool TimeSlotsClass::ParseRepeatMode(String &s, int16_t &iRepeatMode){
 }
 
 bool TimeSlotsClass::ParseDevAddressAndMode(String &s, int16_t &iDevAddr, int16_t &iDevMode){
-  int idx = s.indexOf(":");
+  int idx = s.indexOf(':');
   if (idx < 0)
     return false;
 
@@ -811,7 +849,8 @@ bool TimeSlotsClass::ParseDevAddressAndMode(String &s, int16_t &iDevAddr, int16_
 }
 
 // s is passed in trimmed
-// 12:59:59pm or 23:59:59
+// Examples 2:6:9pm or 23:59:59 or 1AM or 4:03pm or 12:59:00am
+// returns true if success
 bool TimeSlotsClass::ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int16_t &iSecond){
   bool bHaveHour = false;
   bool bHaveMinute = false;
@@ -823,10 +862,34 @@ bool TimeSlotsClass::ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int1
   iMinute = -1;
   iSecond = -1;
 
+  s.trim();
+  s.toLowerCase();
+
   int len = s.length();
 
+  bool bAm = false;
+  bool bPm = false;
+  if (len >= 2 && s[len-1] == 'm'){
+    if (s[len-2] == 'p')
+      bPm = true;
+    else if (s[len-2] == 'a')
+      bAm = true;
+  }
+  int maxHour, minHour;
+  if (bPm || bAm){
+    s = s.substring(0,len-2);
+    len = s.length();
+    maxHour = 12;
+    minHour = 1;
+  }
+  else{
+    maxHour = 23;
+    minHour = 0;
+  }
+  
   for (int ii = 0; ii < len; ii++){
-    if (s[ii] == ':'){
+    char c = s[ii];
+    if (c == ':'){
       if (sOut.length() > 0){
         if (bHaveHour){
           iTemp = sOut.toInt();
@@ -840,7 +903,7 @@ bool TimeSlotsClass::ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int1
         }
         else{
           iTemp = sOut.toInt();
-          if (iTemp >= 0 && iTemp <= 23){ // allow this to be 24-hour time
+          if (iTemp >= minHour && iTemp <= maxHour){
             iHour = iTemp;
             bHaveHour = true;
             sOut = "";
@@ -852,58 +915,46 @@ bool TimeSlotsClass::ParseTime(String &s, int16_t &iHour, int16_t &iMinute, int1
       else
         return false;
     }
+    else if (isdigit(c))
+      sOut += c;
     else
-      sOut += s[ii];
+      return false;
   }
 
-  if (bHaveMinute){
-    sOut.trim();
-
-    if (sOut.length() >= 2){
-      String sTemp = sOut.substring(0,2); // "00"
-      iTemp = sTemp.toInt();
-      if (iTemp >= 0 && iTemp <= 59){
-        iSecond = iTemp;
-        bHaveSecond = true;
-      }
-      else
-        return false;
+  // must have at least one digit in sOut!
+  if (sOut.isEmpty())
+    return false;
+    
+  iTemp = sOut.toInt();
+  if (!bHaveHour){
+    if (iTemp < minHour || iTemp > maxHour)
+      return false;
+    iHour = iTemp;
+    iMinute = 0;
+    iSecond = 0;
+  }
+  else if (iTemp >= 0 && iTemp <= 59){
+    if (!bHaveMinute){
+      iMinute = iTemp;
+      iSecond = 0;
     }
+    else
+      iSecond = iTemp;
   }
+  else
+    return false;
 
   // convert time in 12-hour format to 24-hour
-  // here we have the seconds still on sOut...
-  if (bHaveSecond){
-    if (sOut.length() >= 4){ // "59    am"
-       String sTemp = sOut.substring(2); // "    pm" or "am"
-       sTemp.trim();
-
-      // NOTE: if no am or pm we assume it's in 24-hour time already!
-      if (sTemp.isEmpty())
-        return true;
-
-      if (sTemp == "am"){
-        if (iHour < 1 || iHour > 12)
-          return false;
-
-        if (iHour == 12)
-          iHour = 0;
-
-        return true;
-      }
-
-      if (sTemp == "pm"){
-        if (iHour < 1 || iHour > 12)
-          return false;
-
-        if (iHour != 12)
-          iHour += 12;
-
-        return true;
-      }
-    }
+  if (bAm){
+    if (iHour == 12)
+      iHour = 0;
   }
-  return false;
+  else if (bPm){
+    if (iHour != 12)
+      iHour += 12;
+  }
+  
+  return true;
 }
 
 bool TimeSlotsClass::ParseDate(String &s, int16_t &iMonth, int16_t &iDay, int16_t &iYear){
@@ -1110,7 +1161,7 @@ void TimeSlotsClass::ProcessTimeSlot(int slotIndex, t_time_date timeDate, t_even
     // so disable it...
     if (slotData.repeatMode == RPT_OFF || IRL.IsStaleBySlot(slotIndex)){
       if (TSC.DisableTimeSlot(slotIndex)) // disable the slot
-        QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
+        TSK.QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
     }
     else{
 //      struct tm prevTimeInfo = {0};
@@ -1205,7 +1256,7 @@ void TimeSlotsClass::ProcessEvent(int slotIndex, t_event slotData){
       // autodelete if not infinite repeat (0) and if finished repeating...
       if(IRL.GetRptCount(ir_listIdx) != 0 && IRL.GetRptCounter(ir_listIdx) >= slotData.repeatCount)
         if (TSC.DisableTimeSlot(slotIndex)) // disable the slot
-          QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
+          TSK.QueueTask(TASK_PAGE_REFRESH_REQUEST); // delay and tell P2.html to reload
     }
   }
 }
@@ -1227,4 +1278,17 @@ void TimeSlotsClass::DoEvent(uint8_t deviceAddr, uint8_t deviceMode){
       ResetPeriod();
     }
   }
+}
+
+String TimeSlotsClass::PrintTimeSlots(){
+  String sOut;
+  sOut = "Total timeslots: " + String(g_slotCount);
+  if (g_slotCount > 0){
+    for (int ii = 0; ii < MAX_TIME_SLOTS; ii++){
+      t_event slotData = {0};
+      if (TSC.GetTimeSlot(ii, slotData)) // Get the time-slot into slotData by-reference
+        sOut += "\nTimeSlot " + String(ii) + " = \"" + TimeSlotToSpaceSepString(slotData) + "\"";
+    }
+  }
+  return sOut;
 }
