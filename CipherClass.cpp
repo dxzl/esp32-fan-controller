@@ -1,5 +1,5 @@
 // this file CipherClass.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 /*
  * Chiper.h

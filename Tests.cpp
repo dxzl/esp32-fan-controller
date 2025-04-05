@@ -1,5 +1,5 @@
 // this file Tests.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 // put any tests here then comment them out...
   
@@ -138,9 +138,13 @@ void Tests(){
       prtln("BAD Mdns COUNT!");
       return;
     }
-    g_oldPerVals.phase = 0xff; // cause a few parameters to appear changed
+    g_oldPerVals.phaseB = 0xff; // cause a few parameters to appear changed
+    g_oldPerVals.phaseC = 0xff;
+    g_oldPerVals.phaseD = 0xff;
     g_oldPerVals.dutyCycleA = 0x55;
     g_oldPerVals.dutyCycleB = 0xaa;
+    g_oldPerVals.dutyCycleC = 0x55;
+    g_oldPerVals.dutyCycleD = 0xaa;
     HMC.EncodeChangedParametersForAllIPs(); // add new changed parameters to existing MDC.arr[].sSend
     int idx4 = IML.FindMdnsIp(ip4);
     if (idx4 < 0){

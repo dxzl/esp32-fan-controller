@@ -1,5 +1,5 @@
-// this file FCWiFi.cpp
-#include "FanController.h"
+// this file GpcWiFi.cpp
+#include "Gpc.h"
 
 //#include <WiFi.h>
 //#include "esp_wifi.h"
@@ -140,7 +140,7 @@ void WiFiMonitorConnection(bool bDisconnect){
       g_bWiFiConnecting = false;
       prtln(GetStringInfo()); // set g_bWiFiConnected before calling GetStringInfo()!
       dnsAndServerStart();
-      FlashSequencerInit(g8_ledMode_SLOWFLASH); // start the sequence of flashing out the last octet of IP address...
+      FlashSequencerInit(g8_wifiLedMode_SLOWFLASH); // start the sequence of flashing out the last octet of IP address...
     }
     else if (g_bWiFiDisabled){
       if (WiFi.getMode() != WIFI_OFF)
@@ -151,7 +151,7 @@ void WiFiMonitorConnection(bool bDisconnect){
     }
     else if (g_sSSID.length() != 0 && g8_wifiModeFromSwitch == WIFI_SW_MODE_STA){ // connect to router
       TSK.QueueTask(TASK_WIFI_STA_CONNECT); // fetch pw from flash and connect
-      g8_ledMode = g8_ledMode_FASTFLASH;
+      g8_wifiLedMode = g8_wifiLedMode_FASTFLASH;
       g_bWiFiConnecting = true;
       prtln("queueing connection task: " + g_sSSID);
     }
@@ -176,10 +176,6 @@ void WiFiStop(bool bWiFiOff){
     FlashSequencerStop();
   
     dnsAndServerStop(); // stop applemidi, dns and webserver (disconnect must be before this...(? check))
-  
-    // do this to avoid pot thinking knob was turned as we start
-    // reading it again when g_bSoftAP or bWifIConnected goes false!
-    g16_oldpot1Value = g16_pot1Value;
   
     g_bSoftAP = false;
     g_bWiFiConnected = false;

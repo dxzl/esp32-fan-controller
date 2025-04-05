@@ -1,5 +1,5 @@
 // this file MdnsListClass.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 MdnsListClass IML;
 
@@ -142,7 +142,7 @@ int MdnsListClass::AddMdnsIp(IPAddress ipNew){
   // we store current minute and delete this mDNS IP entry if not refreshed within 10 min.
   arr[count].iMin = iMin;
   
-  arr[count].mac_last_two_octets = 0; // set this later via SetMdnsMacAndToken()
+  arr[count].mac_last_two_octets = 0; // set this later via IML.SetMdnsMAClastTwo()
   arr[count].devStatus = 0; // up to 32 bits device status per unit
   
   InitTokens(count);
@@ -161,12 +161,20 @@ int MdnsListClass::AddMdnsIp(IPAddress ipNew){
     prtln("temporarily revoking master-status - new remote detected...");
   }
 
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+  g_oldDevStatus = ~g_actualStatus;
+#else
   g_oldDevStatus = ~g_devStatus;
+#endif
   
   // to force additional parameters to be sent the first time...
   //g_oldPerVals.dutyCycleA = 0xff;
   //g_oldPerVals.dutyCycleB = 0xff;
-  //g_oldPerVals.phase = 0xff;
+  //g_oldPerVals.dutyCycleC = 0xff;
+  //g_oldPerVals.dutyCycleD = 0xff;
+  //g_oldPerVals.phaseB = 0xff;
+  //g_oldPerVals.phaseC = 0xff;
+  //g_oldPerVals.phaseD = 0xff;
   //g_oldPerVals.perVal = 0xff;
   //g_oldPerVals.perUnits = 0xff;
   //g_oldPerVals.perMax = 0xffff;

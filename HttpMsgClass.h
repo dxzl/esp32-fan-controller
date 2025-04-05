@@ -25,21 +25,25 @@
 #define CMper          2 // uint8_t percent period
 #define CMmaxPer       3 // uint16_t max period
 #define CMunits        4 // uint8_t units index
-#define CMphase        5 // uint8_t percent phase
-#define CMdcA          6 // uint8_t percent duty-cycle A
-#define CMdcB          7 // uint8_t percent duty-cycle B
-#define CMtxt          8 // send text string (for test purposes only at present!)
-#define CMtime         9 // send time
-#define CMto           10 // send group of base64 encoded commands to a specific unit via the master
-#define CMfrom         11 // repackaged version of CMto with prepended destination IP int-string replaced by the source IP
-#define CMchangeData   12 // sets the remote pending default token or mac to g_sChangeData
-#define CMchangeSet    13 // sets g16_changeSyncTimer - after down-count we move g_sChangeData to g_defToken (but not saved in flash-memory!)
-#define CMchangeReq    14 // sent from non-master to master to start a system-wide change for QueueChange(). Includes a uint32 with the command and flags and a String field separated by CM_SEP
-#define CMcmdReq       15 // send "cmd:data" to request CM_ command
-#define CMcmdRsp       16 // reply to CMreqCmd "data:key:optional namespace" CMreadEE response
-#define CMrestart      17 // reboot with key that matches key sent in CMrebootAck
-#define CMcs           18 // checksum uint16_t
-#define TOTAL_HTTP_COMMANDS 19
+#define CMphaseB       5 // uint8_t percent phase
+#define CMphaseC       6 // uint8_t percent phase
+#define CMphaseD       7 // uint8_t percent phase
+#define CMdcA          8 // uint8_t percent duty-cycle A
+#define CMdcB          9 // uint8_t percent duty-cycle B
+#define CMdcC          10 // uint8_t percent duty-cycle C
+#define CMdcD          11 // uint8_t percent duty-cycle D
+#define CMtxt          12 // send text string (for test purposes only at present!)
+#define CMtime         13 // send time
+#define CMto           14 // send group of base64 encoded commands to a specific unit via the master
+#define CMfrom         15 // repackaged version of CMto with prepended destination IP int-string replaced by the source IP
+#define CMchangeData   16 // sets the remote pending default token or mac to g_sChangeData
+#define CMchangeSet    17 // sets g16_changeSyncTimer - after down-count we move g_sChangeData to g_defToken (but not saved in flash-memory!)
+#define CMchangeReq    18 // sent from non-master to master to start a system-wide change for QueueChange(). Includes a uint32 with the command and flags and a String field separated by CM_SEP
+#define CMcmdReq       19 // send "cmd:data" to request CM_ command
+#define CMcmdRsp       20 // reply to CMreqCmd "data:key:optional namespace" CMreadEE response
+#define CMrestart      21 // reboot with key that matches key sent in CMrebootAck
+#define CMcs           22 // checksum uint16_t
+#define TOTAL_HTTP_COMMANDS 23
 
 // CMcmdReq request/response each with a base-64 encoded data-field:
 
@@ -141,14 +145,14 @@ class HttpMsgClass{
     String GetCommandString(int iCmd); // returns the command-string given a CMxx code
     
     // NOTE: '?' is reserved for "unknown command"
-    // currently 19 commands
+    // currently 23 commands
     // NOTE: can be any (CMSPECIALRANGESMAX+1)-255 char except: A-Z, a-z, 0-9, - or _ or ?
     //
     // WARNING: don't use indexOf() to search for commands!!!! for example, if we have two
     //   commands "@" and "@+" - indexOf will find BOTH!!!!
     //
     const char* _HttpCommandTable[TOTAL_HTTP_COMMANDS] =
-      {"@/","(&","#!","'.","$:","^*","\"%",">\\","@","(","#","'","$","^","\"",">","/","&","!"};
+      {"@/","(&","#!","'.","$:","^*","\"%",">\\","@","(","#","'","$","^","\"",">","/","&","!",".",":","*","%"};
 
   public:
   

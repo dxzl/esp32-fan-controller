@@ -19,13 +19,6 @@
 // used for "unshifting" - we want to steer clear of bit 31 (the int's sign-bit) so 32-(3+3+1+1)=24
 #define MAX_CANRX_TOKEN_SHIFT 12 // 1-24 (24 in theory but better stick with 12 or under for less processing and length...)
 
-//#define HTTP_SERVER_IP_HEADER_NAME  "evdo" // receiving unit's IP added to response via custom header 
-#define HTTP_CLIENT_MAC_HEADER_NAME "UskRe" // last two octets of MAC address added to client-send via custom header
-#define HTTP_SERVER_MAC_HEADER_NAME "yWsfM" // last two octets of MAC address added to response via custom header
-
-// HTTP commands sent in the HTTP_CANRX_PARAM_COMMAND field
-#define HTTP_COMMAND_CANRX          "LdExo"
-
 // 7/17/2024 - we'll invoke the "Can Rx?" HTTP query to set the Rx/Tx tokens when we try to send and find they are NO_TOKEN
 // The "CanRx" query token is initially set randomly and it will fail... but the fail-process then sets a CanRx
 // token using g_defToken to encode/decode that new token - and two successive failures causes g_origDefToken
@@ -96,15 +89,16 @@
 
 #define MAX_PROC_CODE_LENGTH 3 // (0-255) max decoded sProcCode string-length for all digits allowing for +/- sign (if any)
 // codes below will be left-shifted 4 and bits 0-3 made random
-#define PROCESSED_CODE_CHANGE_OK       2 // these codes should all be positive, greater than 0, up to 16
-#define PROCESSED_CODE_PARAM_OK     3
-#define PROCESSED_CODE_NOPARMS      4
-#define PROCESSED_CODE_PARAM_FAIL   5
-#define PROCESSED_CODE_DECODE_FAIL  6
-#define PROCESSED_CODE_NORXTOKEN    7
-#define PROCESSED_CODE_NOLINK       8
-#define PROCESSED_CODE_BADIP        9
-#define PROCESSED_CODE_DECPREV_FAIL 10
+#define PROCESSED_CODE_CHANGE_OK            2 // these codes should all be positive, greater than 0, up to 16
+#define PROCESSED_CODE_PARAM_OK             3
+#define PROCESSED_CODE_NOPARMS              4
+#define PROCESSED_CODE_PARAM_FAIL           5
+#define PROCESSED_CODE_DECODE_FAIL          6
+#define PROCESSED_CODE_COMMAND_DECODE_FAIL  7
+#define PROCESSED_CODE_NORXTOKEN            8
+#define PROCESSED_CODE_NOLINK               9
+#define PROCESSED_CODE_BADIP                10
+#define PROCESSED_CODE_DECPREV_FAIL         11
 
 // after resetting wifi-parameters flash-memory via "c reset wifi", this device will try
 // to connect to a router called MyRouter with password MyRouterPass. you can use the USB command-interface
@@ -119,13 +113,21 @@
 // ------------------ web-client handlers -------------------
 // These pertain to http get requests from our client-library (HttpClientHandlers.cpp)
 // the strings can be freely changed for security... but if you change them, ALL devices must be updated!
-const char HTTP_ASYNCREQ_CANRX[] = "/heyc";
-const char HTTP_ASYNCREQ_CANRX_PARAM_COMMAND[] = "meusi";
-const char HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS[] = "wigd";
 
-const char HTTP_ASYNCREQ[] = "/qlpb";
-const char HTTP_ASYNCREQ_PARAM_COMMAND[] = "eyidp";
-const char HTTP_ASYNCREQ_PARAM_PROCCODE[] = "wgdu";
+//#define HTTP_SERVER_IP_HEADER_NAME  "evdo" // receiving unit's IP added to response via custom header 
+#define HTTP_CLIENT_MAC_HEADER_NAME "WyoGkw" // last two octets of MAC address added to client-send via custom header
+#define HTTP_SERVER_MAC_HEADER_NAME "Ldris" // last two octets of MAC address added to response via custom header
+
+// Commands sent in the HTTP_ASYNCREQ_CANRX_PARAM_COMMAND field
+#define HTTP_COMMAND_CANRX          "legou"
+
+const char HTTP_ASYNCREQ_CANRX[] = "/lnrgj";
+const char HTTP_ASYNCREQ_CANRX_PARAM_COMMAND[] = "abon";
+const char HTTP_ASYNCREQ_CANRX_PARAM_TOK3BITS[] = "kjewy";
+
+const char HTTP_ASYNCREQ[] = "/wridt";
+const char HTTP_ASYNCREQ_PARAM_COMMAND[] = "LFvte";
+const char HTTP_ASYNCREQ_PARAM_PROCCODE[] = "odkle";
 
 void ClearLinkOk(String sIp, int code);
 void InitHttpClientHandlers();

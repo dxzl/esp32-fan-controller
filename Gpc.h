@@ -1,9 +1,6 @@
-//#ifndef FanControllerH
-//#define FanControllerH
+//#ifndef GpcH
+//#define GpcH
 #pragma once
-
-// needed by AsyncHTTPRequest_Generic.h library
-#define ESP32 true
 
 #include <Arduino.h>
 
@@ -16,20 +13,8 @@
 #include <MyPreferences.h> // custom change to disable error-logging in getBytesLength()
 #include <Update.h>
 
-// NOTE: if you set this true you will need to use the the bigger partition scheme and lose OTA programming
-// for the older ESP32 with 4MB flash. When true, you can control the outputs with a midi-keyboard.
-// If this is the 8MB flash (ESP32 S3), you can set this true!
-//
-// NOTE: 8/13/2024 - the memory limit for OTA is exceeded for the old ESP32 boards...
-// Now using: "No OTA 2MB App/ 2MB SPIFFS" - may as well set COMPILE_WITH_MIDI_LIBRARY true.
-#define COMPILE_WITH_MIDI_LIBRARY true
-
-// links for additional boards in Arduino IDE Preferences
-// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
-
 // NOTE: there is an additional true/false switch above "COMPILE_WITH_MIDI_LIBRARY"!
-#define DTS_VERSION "Version 3.45 (December 16, 2024)"
+#define GPC_VERSION "Version 1.04 (April 4, 2025)"
 
 // Note: to compile for ESP32S3, set Tools->Board->ESP32 Arduino->ESP32S3 Dev Module,
 // set Tools->Flash Size->8MB, set Tools->CPU Frequency->240MHz, Partition Scheme->8M with spiffs (3MB app/1.5MB spiffs)
@@ -37,7 +22,35 @@
 // Note: my S3 board "should" be 16MB - needs more sluthing!
 // (For the old ESP32 Dev Module, select it in Boards, use the 4MB RAM size - you need to use
 // Partition Scheme->No OTA (2MB app/2MB spiffs) or it won't fit!)
-#define ESP32_S3 false // set true if using ESP32 S3 board
+
+// Notes:
+// Board 1 only has a SPST switch for POT-mode and there are no sense inputs so DISABLE_POTENTIOMETER
+// may need to be set to avoid spurrious setting of parameters!
+//
+// For board 2B there are no sense inputs unless a hand-modification has been made! Without sense inputs, the POT
+// reading/functionality won't work and the status won't be the "actual" status - manually turning on an SSR can't be
+// sensed!
+//
+// For boards 2C, 3B and 3C you can choose not to install SSR 3 and 4 switches and parts - in that case, 
+// set ENABLE_SSR_C_AND_D false!
+
+// For ESP32 Board 1 set GPC_BOARD_2B/2C/3B/3C false and ENABLE_SSR_C_AND_D false (oldest board)
+// for board ESP32 Board 2B set GPC_BOARD_2B true and ENABLE_SSR_C_AND_D false
+// for board ESP32 Board 3B set GPC_BOARD_3B true and ENABLE_SSR_C_AND_D true
+// for board ESP32 Board 3C set GPC_BOARD_3C true and ENABLE_SSR_C_AND_D true
+#define GPC_BOARD_2B false // uses the old ESP32 DevKitC and 2 SSRs
+#define GPC_BOARD_3B false // uses the ESP32 S3 DevKitC-1 and 4 SSRs (POT ADC to GPIO10, ADC1_9)
+// newest boards for both old ESP32 DevKit and for new S3 DevKit-1 module
+#define GPC_BOARD_2C false // uses the old ESP32 DevKitC and 4 SSRs
+#define GPC_BOARD_3C false // uses the ESP32 S3 DevKitC-1 and 4 SSRs (POT ADCs GPIO06, GPIO08, GPIO09)
+
+#if GPC_BOARD_2C || GPC_BOARD_3B || GPC_BOARD_3C
+#define ENABLE_SSR_C_AND_D true
+#define DISABLE_POTENTIOMETER false
+#else
+#define ENABLE_SSR_C_AND_D false
+#define DISABLE_POTENTIOMETER true
+#endif
 
 #define PRINT_ON true // set true to enable status printing to console
 #define RESET_PREFS false // set true to force clear on boot, then set back to false and rebuild...
@@ -47,10 +60,46 @@
 #define FORCE_AP_ON false
 #define FORCE_STA_ON false
 #define HTTP_CLIENT_TEST_MODE false // send random HTTP strings to each mDNS-discovered remote unit
-#define DISABLE_POTENTIOMETER true // prevent a system with no potentiometer present from causing value-changes
+#define POT_REVERSED false
+
+// NOTE: if you set this true you will need to use the the bigger partition scheme and lose OTA programming
+// for the older ESP32 with 4MB flash. When true, you can control the outputs with a midi-keyboard.
+// If this is the 8MB flash (ESP32 S3), you can set this true!
+//
+// NOTE: 8/13/2024 - the memory limit for OTA is exceeded for the old ESP32 boards...
+// Now using: "No OTA 2MB App/ 2MB SPIFFS" - may as well set COMPILE_WITH_MIDI_LIBRARY true.
+#define COMPILE_WITH_MIDI_LIBRARY true
+
+#if COMPILE_WITH_MIDI_LIBRARY
+#include <AppleMIDI.h>
+USING_NAMESPACE_APPLEMIDI
+#endif
+
+// note: AsyncTCP_SSL is available, AsyncHTTPSRequest_Generic is available and esp32_https_server is at
+// https://github.com/fhessel/esp32_https_server 
+// ESPAsyncWebServer has no working SSL version at this time... October 3, 2022
+//#include <WiFiUdp.h>
+//#include <AsyncUDP.h>
+//#include <MIDI.h>
+//#include <AsyncTCP.h>
+//#include <WiFiClient.h>
+//#include <WebServer.h>
+//#include <OneWire.h>
+//#include <DallasTemperature.h>
+//#define ARDUINOJSON_DECODE_UNICODE 0 // don't decode unicode escape sequences
+//#include <ArduinoJson.h> // define before MsgPack.h
+//#include <AsyncJson.h>
+//#include "FS.h" // add file-system functions https://arduino-esp8266.readthedocs.io/en/latest/filesystem.html
+
+#include "SPIFFS.h"
+#include "ESPAsyncWebServer.h"
+
+// links for additional boards in Arduino IDE Preferences
+// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+// https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
 
 #define USE_UPDATE_LOGIN false // set true to require password entry after typing "c update" into index.html host-name field
-#define UPDATE_USERID "dts7" // only when USE_UPDATE_LOGIN is true!
+#define UPDATE_USERID "gpc7" // only when USE_UPDATE_LOGIN is true!
 #define UPDATE_USERPW "1234567890" // only when USE_UPDATE_LOGIN is true!
 
 #define WIFI_COUNTRY "US" // JP, CN
@@ -66,15 +115,15 @@
 #define MAX_AP_CHANNEL 11 // // 1-13 possible but max is 11 in USA!
 #define MAX_AP_CLIENTS 1 // 1-4 allowed but for security allow only one
 #define HIDE_AP_SSID 0 // set to 1 to hide
-// also see the top of FanController.cpp for constant default strings!!!!!!!
+// also see the top of Gpc.cpp for constant default strings!!!!!!!
 
-#define MDNS_SVC "dts"
-#define MDNS_SVCU "_dts"
+#define MDNS_SVC "gpc"
+#define MDNS_SVCU "_gpc"
 
 //----------------------------------------------------------------------------
 // defaults for EE_WIFI_NAMESPACE (see PrefsClass.h)
 
-#define DEF_HOSTNAME "dts7"
+#define DEF_HOSTNAME "gpc7"
 #define DEF_SSID "MyRouter"
 #define DEF_PWD "MyRouterPass"
 #define DEF_AP_SSID DEF_HOSTNAME
@@ -174,8 +223,24 @@
 #define MINPER_B_INIT   (10*4) // 10 sec
 #define MAXPER_B_INIT   (14*4)  // 14 sec
 
+// .25 sec units (4 ticks per second)
+#define PULSE_OFF_MODE_C_INIT 0 // 0=off, 1=on-to-off, 2=off-to-on, 3= both
+#define MINWID_C_INIT   (1*4) // when 0, we use only pulse-maxWidth with no variation
+#define MAXWID_C_INIT   (4*4) 
+#define MINPER_C_INIT   (10*4) // 10 sec
+#define MAXPER_C_INIT   (14*4)  // 14 sec
+
+// .25 sec units (4 ticks per second)
+#define PULSE_OFF_MODE_D_INIT 0 // 0=off, 1=on-to-off, 2=off-to-on, 3= both
+#define MINWID_D_INIT   (1*4) // when 0, we use only pulse-maxWidth with no variation
+#define MAXWID_D_INIT   (4*4) 
+#define MINPER_D_INIT   (10*4) // 10 sec
+#define MAXPER_D_INIT   (14*4)  // 14 sec
+
 #define LABEL_A_INIT            "Outlet A"
 #define LABEL_B_INIT            "Outlet B"
+#define LABEL_C_INIT            "Outlet C"
+#define LABEL_D_INIT            "Outlet D"
 #define LABEL_MAXLENGTH         32 // max length of index.html labelTxtA and labelTxtB contenteditable HTML5 fields
 
 #define PERUNITS_INIT           1 // 0= 1/2 sec, 1=sec, 2=min, 3=hrs
@@ -190,12 +255,16 @@
 #define PERIOD_MIN              0 // %
 #define PERIOD_MAX              100 // 0 = random mode
 
-#define PHASE_INIT              100 // percent offset of period (0-100) 100=random
+#define PHASE_B_INIT            100 // percent offset of period (0-100) 100=random
+#define PHASE_C_INIT            100
+#define PHASE_D_INIT            100
 #define PHASE_MIN               0 // %
 #define PHASE_MAX               100 // 0 = random mode
 
 #define DUTY_CYCLE_A_INIT       0 // percent on (0-100) 0=random
 #define DUTY_CYCLE_B_INIT       0 // percent on (0-100) 0=random
+#define DUTY_CYCLE_C_INIT       0 // percent on (0-100) 0=random
+#define DUTY_CYCLE_D_INIT       0 // percent on (0-100) 0=random
 #define DUTY_CYCLE_MIN          0 // %
 #define DUTY_CYCLE_MAX          100 // 0 = random mode
 #define MIN_RAND_PERCENT_DUTY_CYCLE 20 // smallest time-on is 20% of period when in random mode!
@@ -203,12 +272,16 @@
 #define MIDICHAN_INIT           MIDICHAN_OFF // off
 #define MIDINOTE_A_INIT         60 // middle C
 #define MIDINOTE_B_INIT         62 // middle D
+#define MIDINOTE_C_INIT         60 // middle C
+#define MIDINOTE_D_INIT         62 // middle D
 #define MIDINOTE_ALL            128 // all notes
 #define MIDICHAN_ALL            0 // all channels
 #define MIDICHAN_OFF            255 // no channels
 
 #define SSR1_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
 #define SSR2_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
+#define SSR3_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
+#define SSR4_MODE_INIT          SSR_MODE_AUTO // 0 = OFF, 1 = ON, 2 = AUTO
 //----------------------------------------------------------------------------
 
 // NOTE: if you want custom security for your particular implementation, you can change the order of letters in _HttpCommandTable[]
@@ -276,74 +349,227 @@
 #define RESTART_KEY_MIN_LENGTH 5
 #define RESTART_KEY_MAX_LENGTH 10
 
-#if ESP32_S3
-  // left side (USB at bottom)
-  // Pin 1 = 3.3V out
-  // Pin 21 = 5V in
-  // Pin 22 = Ground
-
-  // right side (USB at bottom)
-  // Pin 23, 24, 44 = Ground
-  // Pin 31 = boot (MUST BE TIED TO 3.3V)!!!!!
-  
-  // don't use GPIO 15, 16, 19, 20, 43, 44 (3 USB ports)
-  // GPIO 0, 3, 45, 46 (system bootstrap)
-
-  #define LED_GREEN 50 // 0-255 (for tri-color built-in LED)
-  #define CPU_FREQ 240 // 80MHz works ok for WiFi but may need 160MHz or 240MHz for WiFi Scans!
+// prevent a system with no potentiometer present from causing value-changes
+#if GPC_BOARD_2B
+  #define GPC_BOARD " (for ESP32 DevKitC, DTS Board 2B)"
+  #define CPU_FREQ 160 // (S3 is 240MHz) 80MHz works ok for WiFi but may need 160MHz or 240MHz for WiFi Scans!
+  #define GPOUT_ONBOARD_LED 2 // GPIO38 for ESP32 Board 3B, GPIO02 for ESP32 Board 1 and ESP32 Board 2B
+  #define GPOUT_WIFI_LED 15
+  #define GPOUT_COM_LED 27
 
   // Solid-state relay outputs
-  #define GPOUT_SSR1    1 // (pin 41 right) GPIO01 ADC1_0
-  #define GPOUT_SSR2    2 // (pin 40 right) GPIO02 ADC1_1
-  
-  // Analog Input
-  #define GPAIN_POT1    4 // (pin 4 left) GPIO04 ADC1_3
-
-  // Inputs with pulldowns (3-states 00,01,10)
-  #define GPIN_POT_MODE_SW1 5 // (pin 5/44 left) GPIO05 ADC1_4 Set pin to Vcc for POT1 Mode 1
-  #define GPIN_POT_MODE_SW2 6 // (pin 6/44 left) GPIO06 ADC1_5 Set pin to Vcc for POT1 Mode 2
-  
-  #define GPBD_ONE_WIRE_BUS_DATA  8  // (pin 12) GPIO08 ADC1_7
-  #define GPOUT_ONE_WIRE_BUS_CLK   9 // (pin 15) GPIO09 ADC1_8
-
-  // Inputs with pulldowns (3-states 00,01,10)
-  #define GPIN_WIFI_AP_SW      7 // (pin 7/44) GPIO07 ADC1_6 Set pin to Vcc for WiFi AP mode
-  #define GPIN_WIFI_STA_SW    10 // (pin 16/44) GPIO10 ADC1_9 Set pin to Vcc for WiFi STA mode
-
-  // Inputs with pulldowns (3-states 00,01,10)
-  #define GPIN_SSR1_MODE_SW_MAN   11 // (pin 17/44) Set pin to Vcc for SSR_1 Manual ON
-  #define GPIN_SSR1_MODE_SW_AUT   12 // (pin 18/44) Set pin to Vcc for SSR_1 Auto ON
+  #define GPOUT_SSR1 32
+  #define GPOUT_SSR2 23
   
   // Inputs with pulldowns (3-states 00,01,10)
-  #define GPIN_SSR2_MODE_SW_MAN   13 // (pin 19/44) Set pin to Vcc for SSR_2 Manual ON
-  #define GPIN_SSR2_MODE_SW_AUT   14 // (pin 20/44) Set pin to Vcc for SSR_2 Auto ON
+  #define GPIN_WIFI_AP_SW 21 // Set pin to Vcc for WiFi AP mode
+  #define GPIN_WIFI_STA_SW 19 // Set pin to Vcc for WiFi STA mode
 
-  #define GPOUT_SSR1_LED  35 // (pin 32 right) GPIO35
-  #define GPOUT_SSR2_LED  36 // (pin 33 right) GPIO36
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_POT_MODE_SW1 18 // Set pin to Vcc for POT1 Mode 1
+  #define GPIN_POT_MODE_SW2 17 // Set pin to Vcc for POT1 Mode 2
+
+  #define GPAIN_POT1 36 // ADC1_0
+
+#elif GPC_BOARD_2C
+  #define GPC_BOARD " (for ESP32 DevKitC, DTS Board 2C)"
+  #define CPU_FREQ 160
+  #define GPOUT_ONBOARD_LED 2
+  #define GPOUT_WIFI_LED 5
+  #define GPOUT_COM_LED 4
+
+  // Solid-state relay outputs
+  #define GPOUT_SSR1 33
+  #define GPOUT_SSR2 32
+  
+  #if ENABLE_SSR_C_AND_D
+    #define GPOUT_SSR3 25
+    #define GPOUT_SSR4 12
+  #endif
+  
+  // Solid-state relay sense-inputs (no pullup/pulldown)
+  #define GPIN_SSR1 34
+  #define GPIN_SSR2 35
+  
+  #if ENABLE_SSR_C_AND_D
+    #define GPIN_SSR3 14
+    #define GPIN_SSR4 13
+  #endif
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_WIFI_AP_SW 17
+  #define GPIN_WIFI_STA_SW 18
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_POT_MODE_SW1 15
+  #define GPIN_POT_MODE_SW2 16
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_SPARE_MODE_SW1 19
+  #define GPIN_SPARE_MODE_SW2 21
+
+  #define GPAIN_POT1 36 // ADC1_0
+  #define GPAIN_POT2 39 // ADC1_3
+
+#elif GPC_BOARD_3B
+
+// ESP32 S3 DevKitC-1 Notes (Boards 3B/3C):
+// left side top going down (USB connectors at bottom)
+// Pin 1, 2 = 3.3V out
+// Pin 3 = RST
+// Pin 21 = 5V in
+// Pin 22 = Ground
+// right side bottom going up (USB connectors at bottom)
+// Pins 23, 24, 44 = Ground
+
+// NOTE: Do Not Use ADC2, it's used by WiFi module!!!!!
+
+// GPIO 00, 03, 45, 46 (strapping pins - use caution!)
+// NOTE can use JTAG GPIO 3 because a special fuse has to be blown for JTAG mode enable
+// GPIO 3 has a weak pulldown during reset.
+// GPIO 45 SPI flash voltage (0=3.3v, 1=1.8v). has a weak pulldown during reset. [SPI voltage can bypass pin 45 by burning efuse]
+// GPIO 46 ROM messages print during booting (0=enable, 1=disable). has a weak pulldown during reset.
+// S3 has built-in JTAG USB on GPIO 19 and 20
+// Our "sense" inputs should never use these pins because they can be pulled-up hard to 3.3V at reset!
+// SSR Outputs can use these because on reset, if anything, they will pull down...
+
+// don't use GPIOs
+// 44, 43 (USB0)
+// 15, 16 (USB1)
+// 19, 20 (USB2)
+// 38 builtin LED (LED_BUILTIN)
+// 48 rgb LED (RGB_BUILTIN)
+
+//  #define LED_GREEN 50 // 0-255 (for tri-color built-in LED)
+
+// LEDs
+// NOTE: The esp32 S3 DevKitC-1 Module has an RGB LED (GPIO 48) and 3 plain LEDs - one plain LED is red power,
+// one blinks on flash-programming communications and the 3rd we presume is a blue LED_BUILTIN (GPIO 38)
+// (the RGB LED is very nice... shame you can't see it with the board in its enclosure...)
+
+// RGB_BUILTIN (rgb LED on the ESP32 S3 Dev Module) GPIO 48
+// LED_BUILTIN (blue LED on the ESP32 S3 Dev Module) GPIO 38
+//#ifdef RGB_BUILTIN
+//  digitalWrite(RGB_BUILTIN, HIGH);  // Turn the RGB LED white
+//  delay(1000);
+//  digitalWrite(RGB_BUILTIN, LOW);  // Turn the RGB LED off
+//  delay(1000);
+//
+//  rgbLedWrite(RGB_BUILTIN, RGB_BRIGHTNESS, 0, 0);  // Red
+//  delay(1000);
+//  rgbLedWrite(RGB_BUILTIN, 0, RGB_BRIGHTNESS, 0);  // Green
+//  delay(1000);
+//  rgbLedWrite(RGB_BUILTIN, 0, 0, RGB_BRIGHTNESS);  // Blue
+//  delay(1000);
+//  rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off / black
+//  delay(1000);
+//#endif
+
+  #define GPC_BOARD " (for ESP32 S3 DevKitC-1, DTS Board 3B)"
+  #define CPU_FREQ 240
+  #define GPOUT_ONBOARD_LED 38
+  #define GPOUT_WIFI_LED 42
+  #define GPOUT_COM_LED 21
+
+  // Solid-state relay outputs
+  #define GPOUT_SSR1 4
+  #define GPOUT_SSR2 6
+  
+  #if ENABLE_SSR_C_AND_D
+    #define GPOUT_SSR3 17
+    #define GPOUT_SSR4 8
+  #endif
+  
+  // Solid-state relay sense-inputs (no pullup/pulldown)
+  #define GPIN_SSR1 5
+  #define GPIN_SSR2 7
+
+  #if ENABLE_SSR_C_AND_D
+    #define GPIN_SSR3 18
+    #define GPIN_SSR4 9
+  #endif
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_WIFI_AP_SW 40
+  #define GPIN_WIFI_STA_SW 41
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_POT_MODE_SW1 47
+  #define GPIN_POT_MODE_SW2 39
+
+  #define GPAIN_POT1 10 // ADC1_9
+
+#elif GPC_BOARD_3C
+  #define GPC_BOARD " (for ESP32 S3 DevKitC-1, DTS Board 3C)"
+  #define CPU_FREQ 240
+  #define GPOUT_ONBOARD_LED 38
+  #define GPOUT_WIFI_LED 42
+  #define GPOUT_COM_LED 21
+
+  // Solid-state relay outputs
+  #define GPOUT_SSR1 4
+  #define GPOUT_SSR2 3 // (JTAG strapping pin but should be ok here...)
+  
+  #if ENABLE_SSR_C_AND_D
+    #define GPOUT_SSR3 17
+    #define GPOUT_SSR4 46 // strapping pin with weak pulldown (should work ok...)
+  #endif
+  
+  // Solid-state relay sense-inputs (no pullup/pulldown)
+  #define GPIN_SSR1 5
+  #define GPIN_SSR2 7
+  
+  #if ENABLE_SSR_C_AND_D
+    #define GPIN_SSR3 18
+    #define GPIN_SSR4 14
+  #endif
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_WIFI_AP_SW 40 // (pin 24/30) Set pin to Vcc for WiFi AP mode
+  #define GPIN_WIFI_STA_SW 41 // (pin 25/30) Set pin to Vcc for WiFi STA mode
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_POT_MODE_SW1 47
+  #define GPIN_POT_MODE_SW2 39
+
+  // Inputs with pulldowns (3-states 00,01,10)
+  #define GPIN_SPARE_MODE_SW1 2
+  #define GPIN_SPARE_MODE_SW2 1
+
+  // NOTE: these three pads, together with 3.3V and Ground can be used for
+  // a continuously rotating digital encoder control with push-in switch. Or - for 3 POTS...
+  #define GPAIN_POT1 8 // ADC1_7
+  #define GPAIN_POT2 9 // ADC1_8
+  #define GPAIN_POT3 6 // ADC1_5
+
 #else
-  #define CPU_FREQ 160 // 80MHz works ok for WiFi but may need 160MHz or 240MHz for WiFi Scans!
+  #define GPC_BOARD " (for ESP32 DevKit, DTS Board 1)"
+  #define CPU_FREQ 160
   #define GPOUT_ONBOARD_LED 2
 
-  // Solid-state relay outputs
-  #define GPOUT_SSR1    32
-  #define GPOUT_SSR2    23
-
-  // Input only pins (on left top as usb port faces down, second pin down on left is GPI36)
-  #define GPAIN_POT1    36 // ADC1_0 (2)
-  //#define GPAIN_POT_2    39 // ADC1_3 (3)
-  // the POT_3 center-pin on the custom PC-board is being used to solder a wire for a SPST POT-Mode switch...
-  //#define GPAIN_POT_3    34 // ADC1_6 (4)
+  #define GPOUT_SSR1 32
+  #define GPOUT_SSR2 23
+  
   #define GPIN_POT_MODE_SW 34 // ADC1_6 (4)
-  //#define GPAIN_POT_4    35 // ADC1_7 (5)
-
-// Data wire is plugged into GPIO 22 on the ESP32
-//  #define GPBD_ONE_WIRE_BUS_DATA  22
-//  #define GPOUT_ONE_WIRE_BUS_CLK   27
-
+  
   // Inputs with pulldowns (3-states 00,01,10)
-  #define GPIN_WIFI_AP_SW  18 // (pin 24/30) Set pin to Vcc for WiFi AP mode
+  #define GPIN_WIFI_AP_SW 18 // (pin 24/30) Set pin to Vcc for WiFi AP mode
   #define GPIN_WIFI_STA_SW 19 // (pin 25/30) Set pin to Vcc for WiFi STA mode
+
+  #define GPAIN_POT1 36 // ADC1_0
 #endif
+
+// g8_potModeFromSwitch values
+#define POT_MODE_NONE 255 // 8-bit value!
+#define POT_MODE_CENTER 0
+#define POT_MODE_LEFT 1
+#define POT_MODE_RIGHT 2
+
+#define POT_CHAN_NONE 255 // 8-bit value!
+#define POT_CHAN_1 0
+#define POT_CHAN_2 1
+#define POT_CHAN_3 2
+#define POT_CHAN_4 3
 
 #define WIFI_SW_MODE_OFF  0
 #define WIFI_SW_MODE_AP   1
@@ -383,31 +609,36 @@
 #define PULSE_MODE_ON_OR_OFF 3
 
 // relay status in g_devStatus (up to 32 relays)
-#define DEV_STATUS_1    0
-#define DEV_STATUS_2    1
+// bit-masks 1,2,4,8,16,32,64,Etc.
+#define DEV_STATUS_1    1
+#define DEV_STATUS_2    2
+#define DEV_STATUS_3    4
+#define DEV_STATUS_4    8
 
 // hardware timer
 #define HW_TIMER_FREQ 1000000 // use 1000000 for 1MHz
-#define HW_TIMER_PERIOD (HW_TIMER_FREQ/4) // .25 sec
+#define HW_TIMER_PERIOD (HW_TIMER_FREQ/8) // 125ms
 
-// g8_ledFlashTimer .25ms resolution
-#define LED_FASTFLASH_TIME 1
-#define LED_SLOWFLASH_TIME 4
+#define MS_125_TIME 4 // 125ms timer
 
-// g8_ledFlashCounter
+// g8_wifiLedFlashTimer 125ms resolution
+#define LED_FASTFLASH_TIME 2
+#define LED_SLOWFLASH_TIME 8
+
+// g8_wifiLedFlashCounter
 #define LED_PAUSE_COUNT    10 // pause time between digit flash-sequences
 
-// g8_ledSeqState
+// g8_wifiLedSeqState
 #define LEDSEQ_ENDED       0
 #define LEDSEQ_FLASHING    1
 #define LEDSEQ_PAUSED      2
 
-// g8_ledMode, g8_ledSaveMode
-#define g8_ledMode_OFF        0
-#define g8_ledMode_ON         1
-#define g8_ledMode_SLOWFLASH  2
-#define g8_ledMode_FASTFLASH  3
-#define g8_ledMode_PAUSED     4
+// g8_wifiLedMode, g8_wifiLedSaveMode
+#define g8_wifiLedMode_OFF        0
+#define g8_wifiLedMode_ON         1
+#define g8_wifiLedMode_SLOWFLASH  2
+#define g8_wifiLedMode_FASTFLASH  3
+#define g8_wifiLedMode_PAUSED     4
 
 #define LED_EEPROM_FLASH_TIME   3 // .5 sec units (indicated a value saved to eeprom)
 
@@ -419,37 +650,17 @@
 
 // NOTE: "spiffs" in the filename differentiates a SPIFFS data .bin file from a main-program .bin file
 // during "over-the-air" programming! The web-server HTML files and javascript are in the fc.spiffs.bin file
-// and the main program is in fc.bin (or it might be in DTS_SMART_FAN_CONTROLLER.ino.esp32.bin)
+// and the main program is in fc.bin (or it might be in Gpc.ino.esp32.bin)
 #define OTA_UPDATE_SPIFFS_VS_PGM_ID "spiffs"
 
-#if COMPILE_WITH_MIDI_LIBRARY
-#include <AppleMIDI.h>
-USING_NAMESPACE_APPLEMIDI
-#endif
-
-// note: AsyncTCP_SSL is available, AsyncHTTPSRequest_Generic is available and esp32_https_server is at
-// https://github.com/fhessel/esp32_https_server 
-// ESPAsyncWebServer has no working SSL version at this time... October 3, 2022
-//#include <WiFiUdp.h>
-//#include <AsyncUDP.h>
-//#include <MIDI.h>
-//#include <AsyncTCP.h>
-//#include <WiFiClient.h>
-//#include <WebServer.h>
-//#include <OneWire.h>
-//#include <DallasTemperature.h>
-//#define ARDUINOJSON_DECODE_UNICODE 0 // don't decode unicode escape sequences
-//#include <ArduinoJson.h> // define before MsgPack.h
-//#include <AsyncJson.h>
-//#include "FS.h" // add file-system functions https://arduino-esp8266.readthedocs.io/en/latest/filesystem.html
-
-#include "SPIFFS.h"
-#include "ESPAsyncWebServer.h"
+//#define CORE0_TASK_STACK_SIZE 10000
 
 // define our custom structs before including our header files!!!!
-#define PERVALS_COUNT 6 // number of items in struct
+#define PERVALS_COUNT 10 // number of items in struct (includes duty-cycle for SSR3 and SSR4)
 struct PerVals {
-  uint8_t dutyCycleA = 0xff, dutyCycleB = 0xff, phase = 0xff; // saved in Preferences (units are %)
+  uint8_t dutyCycleA = 0xff, dutyCycleB = 0xff; // saved in Preferences (units are %)
+  uint8_t dutyCycleC = 0xff, dutyCycleD = 0xff;
+  uint8_t phaseB = 0xff, phaseC = 0xff, phaseD = 0xff; // saved in Preferences (units are %)
   uint8_t perUnits = 0xff, perVal = 0xff; // perUnits is an index to index.html select options
   uint16_t perMax = 0xffff;
 };
@@ -458,8 +669,8 @@ struct PerVals {
 // and also time duration "on" within that interval in .5 sec units which can be converted to a percentage on (duty-cycle).
 struct Stats {
   uint32_t HalfSecondCounter, HalfSecondCount;
-  uint32_t AOnCounter, BOnCounter, DConA, DConB;
-  uint32_t AOnPrevCount, BOnPrevCount, PrevDConA, PrevDConB;
+  uint32_t AOnCounter, BOnCounter, COnCounter, DOnCounter, DConA, DConB, DConC, DConD;
+  uint32_t AOnPrevCount, BOnPrevCount, COnPrevCount, DOnPrevCount, PrevDConA, PrevDConB, PrevDConC, PrevDConD;
 };
 
 #include "CipherClass.h" // aes32-Encrypt library requires Seed_Arduino_mbedtls library
@@ -473,9 +684,9 @@ struct Stats {
 #include "TaskClass.h"
 #include "ChangeClass.h"
 
-#include "FCUtils.h"
-#include "FCTime.h"
-#include "FCWiFi.h"
+#include "GpcUtils.h"
+#include "GpcTime.h"
+#include "GpcWiFi.h"
 #include "WSHandlers.h"
 #include "HttpClientHandlers.h"
 #include "Cmd.h"
@@ -499,50 +710,76 @@ String getSctMinMaxAsJS();
 void InitStats();
 void ClearStatCounters();
 uint32_t ComputePeriod(uint8_t perVal, uint16_t perMax, uint8_t perUnits);
-uint32_t ComputePhase();
+uint32_t ComputePhaseB();
 uint32_t GetTimeInterval(uint16_t perMax, uint8_t perUnits);
 void stopMIDI();
 void startMIDI();
-void TaskMidiChan(); // has to be in FanController.ino!
+void TaskMidiChan(); // has to be in Gpc.ino!
 void SendWithHeaders(AsyncWebServerRequest *request, String s);
 //String wsTemplateProc(const String& var);
+//void Core0TaskLoop(void* pvParameters);
+
+#if ENABLE_SSR_C_AND_D
+void SSR3On(uint32_t iPeriod);
+void SSR4On(uint32_t iPeriod);
+uint32_t ComputePhaseC();
+uint32_t ComputePhaseD();
+
+extern uint8_t g8_midiNoteC, g8_midiNoteD;
+extern uint8_t g8_ssr3ModeFromWeb, g8_ssr4ModeFromWeb;
+extern uint8_t g8_pulseModeC, g8_pulseModeD;
+extern uint8_t g8_pulseWidthTimerC, g8_pulseWidthC, g8_pulseMinWidthC, g8_pulseMaxWidthC;
+extern uint8_t g8_pulseWidthTimerD, g8_pulseWidthD, g8_pulseMinWidthD, g8_pulseMaxWidthD;
+
+extern uint16_t g16_pulsePeriodTimerC, g16_pulsePeriodC, g16_pulseMinPeriodC, g16_pulseMaxPeriodC;
+extern uint16_t g16_pulsePeriodTimerD, g16_pulsePeriodD, g16_pulseMinPeriodD, g16_pulseMaxPeriodD;
+
+extern uint32_t g32_dutyCycleTimerC, g32_dutyCycleTimerD, g32_phaseTimerC, g32_phaseTimerD, g32_nextPhaseC, g32_nextPhaseD;
+
+extern String g_sLabelC, g_sLabelD;
+#endif
+
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+extern int g_actualStatus;
+#endif
+
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+extern bool g_bOldPotModeSw1On, g_bOldPotModeSw2On;
+#else
+extern bool g_bOldPotModeSwOn;
+#endif
 
 extern int g_slotCount, g_prevMdnsCount, g_taskIdx;
 extern int g_defToken, g_origDefToken;
 extern int g_sct, g_minSct, g_maxSct;
 extern int g_oldDevStatus, g_devStatus;
+extern int g_potPercent;
 
 extern uint8_t g8_maxPower, g8_midiNoteA, g8_midiNoteB, g8_midiChan;
-extern uint8_t g8_ledFlashCount, g8_ledFlashCounter, g8_ledDigitCounter, g8_ledSaveMode, g8_ledMode, g8_ledSeqState;
-extern uint8_t g8_quarterSecondTimer, g8_fiveSecondTimer, g8_thirtySecondTimer, g8_ledFlashTimer, g8_clockSetDebounceTimer, g8_lockCount;
-extern uint8_t g8_digitArray[];
 
-extern uint16_t g16_pot1Value, g16_oldpot1Value; // variable for storing the potentiometer value
+extern uint8_t g8_ms125Timer, g8_fiveSecondTimer, g8_thirtySecondTimer;
+extern uint8_t g8_potLedFlashTimer, g8_potLedFlashTime, g8_wifiLedFlashTimer, g8_clockSetDebounceTimer, g8_lockCount;
+
+extern uint8_t g8_wifiLedFlashCount, g8_wifiLedFlashCounter, g8_wifiLedDigitCounter, g8_wifiLedSaveMode, g8_wifiLedMode, g8_wifiLedSeqState;
+extern uint8_t g8_wifiLedDigitArray[];
+
+extern uint16_t g16_oldPotValue; // variable for storing the potentiometer value
 extern uint16_t g16_unlockCounter, g16_changeSyncTimer, g16_sendDefTokenTimer, g16_SNTPinterval;
 extern uint16_t g16_sendDefTokenTime, g16_sendHttpTimer, g16_asyncHttpIndex, g16_oddEvenCounter;
 
-extern uint32_t g32_periodTimer, g32_savePeriod, g32_dutyCycleTimerA, g32_dutyCycleTimerB, g32_phaseTimer, g32_nextPhase;
+extern uint32_t g32_periodTimer, g32_savePeriod, g32_dutyCycleTimerA, g32_dutyCycleTimerB, g32_phaseTimerB, g32_nextPhaseB;
 
 extern String g_sHostName, g_sSSID, g_sApSSID, g_sKey, g_sMac, g_sLabelA, g_sLabelB, g_sSerIn, g_text, g_sTimezone;
 
 extern bool g_bOldWiFiApSwOn, g_bOldWiFiStaSwOn;
 
-#if ESP32_S3
-extern bool g_bOldPotModeSw1On, g_bOldPotModeSw2On;
-extern bool g_bOldSsr1ModeManSwOn, g_bOldSsr1ModeAutSwOn;
-extern bool g_bOldSsr2ModeManSwOn, g_bOldSsr2ModeAutSwOn;
-extern uint8_t g8_ssr1ModeFromSwitch, g8_ssr2ModeFromSwitch;
-#else
-extern bool g_bOldPotModeSwOn;
-#endif
-
-extern uint8_t g8_potModeFromSwitch, g8_wifiModeFromSwitch;
-
 extern uint8_t g8_ssr1ModeFromWeb, g8_ssr2ModeFromWeb;
+
+extern uint8_t g8_potChannel, g8_potModeFromSwitch, g8_wifiModeFromSwitch;
 
 extern bool g_bWiFiConnected, g_bWiFiConnecting, g_bSoftAP, g_bMdnsOn, g_bWiFiDisabled, g_bResetOrPowerLoss, g_bTellP2WebPageToReload;
 extern bool g_bManualTimeWasSet, g_bWiFiTimeWasSet, g_bValidated, g_bRequestManualTimeSync, g_bRequestWiFiTimeSync, g_bMidiConnected;
-extern bool g_bTest, g_bLedOn;
+extern bool g_bTest, g_bWiFiLedOn;
 extern bool g_bSyncRx, g_bSyncTx, g_bSyncCycle, g_bSyncTime, g_bSyncEncrypt, g_bMaster;
 
 // cycle pulse-off

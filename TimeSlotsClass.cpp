@@ -1,5 +1,5 @@
 // this file TimeSlotsClass.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 TimeSlotsClass TSC;
 
@@ -280,14 +280,15 @@ String TimeSlotsClass::GetSlotNumAsString(int val){
 }
 
 // This is used with PARAM_EDITINDEX to send a slot's data (for p2.html/p2.js) that's to be edited
-// Exactly 22 parameters in this exact order are expected by p2.js in a comma separated string! 
+// Exactly 26 parameters in this exact order are expected by p2.js in a comma separated string! 
 String TimeSlotsClass::TimeSlotToCommaSepString(int idx, t_event &t){
   bool pmFlag; // by ref
   int hr12 = Make12Hour(t.timeDate.hour, pmFlag);
   String sOut = String(t.repeatMode) + "," + String(t.deviceMode) + "," + String(t.deviceAddr) + "," + String (t.repeatCount) + "," + String(t.everyCount) + "," +
     String(t.timeDate.dayOfWeek) + "," + String(hr12) + "," + String(t.timeDate.minute) + "," + String (t.timeDate.second) + "," +
       String(t.timeDate.day) + "," + String(t.timeDate.month) + "," + String(t.timeDate.year) + "," + String(pmFlag) + "," +
-        String(t.dutyCycleA) + "," + String(t.dutyCycleB) + "," + String(t.phase) + "," + String(t.perUnits) + "," +
+        String(t.dutyCycleA) + "," + String(t.dutyCycleB) + "," + String(t.dutyCycleC) + "," + String(t.dutyCycleD) + "," +
+        String(t.phaseB) + "," + String(t.phaseC) + "," + String(t.phaseD) + "," + String(t.perUnits) + "," +
           String(t.perMax) + "," + String(t.bIncludeCycleTiming) + "," + String(t.bCycleTimingInRepeats) + "," + String(t.bEnable) + "," + String(idx);
   return sOut;
 }
@@ -301,20 +302,22 @@ String TimeSlotsClass::TimeSlotToCommaSepString(int idx, t_event &t){
 String TimeSlotsClass::TimeSlotToSpaceSepString(t_event &t){
   String sDevAddr;
 
-  switch(t.deviceAddr){
-    case 0:
-      sDevAddr = "A";
-    break;
-    case 1:
-      sDevAddr = "B";
-    break;
-    case 2:
-      sDevAddr = "AB";
-    break;
-    default:
-      sDevAddr = "???";
-    break;
-  }
+  if (t.deviceAddr & 1)
+    sDevAddr += "A";
+  if (t.deviceAddr & 2)
+    sDevAddr += "B";
+  if (t.deviceAddr & 4)
+    sDevAddr += "C";
+  if (t.deviceAddr & 8)
+    sDevAddr += "D";
+  if (t.deviceAddr & 16)
+    sDevAddr += "E";
+  if (t.deviceAddr & 32)
+    sDevAddr += "F";
+  if (t.deviceAddr & 64)
+    sDevAddr += "G";
+  if (t.deviceAddr & 128)
+    sDevAddr += "H";
 
   String sDevMode;
 
@@ -430,19 +433,27 @@ String TimeSlotsClass::TimeSlotToSpaceSepString(t_event &t){
       sDevAddr + ':' + sDevMode + sRptCount + sEveryCount + sRptMode;
 
   // here are more...
-  // a:40,b:50,p:20,u:0-3,m:0-9,v:0-m, c:y, i:y
+  // dca:40,dcb:50,dcc:50,dcd:50,pb:20,pc:20,pd:20,u:0-3,m:0-9,v:0-m, c:y, i:y
   if (t.perVal != 0xff)
     sRet += " v:" + String(t.perVal);
   if (t.perMax != 0xffff)
     sRet += " m:" + String(t.perMax);
   if (t.perUnits != 0xff)
     sRet += " u:" + String(t.perUnits);
-  if (t.phase != 0xff)
-    sRet += " p:" + String(t.phase);
+  if (t.phaseB != 0xff)
+    sRet += " pb:" + String(t.phaseB);
+  if (t.phaseC != 0xff)
+    sRet += " pc:" + String(t.phaseC);
+  if (t.phaseD != 0xff)
+    sRet += " pd:" + String(t.phaseD);
   if (t.dutyCycleA != 0xff)
-    sRet += " a:" + String(t.dutyCycleA);
+    sRet += " dca:" + String(t.dutyCycleA);
   if (t.dutyCycleB != 0xff)
-    sRet += " b:" + String(t.dutyCycleB);
+    sRet += " dcb:" + String(t.dutyCycleB);
+  if (t.dutyCycleC != 0xff)
+    sRet += " dcc:" + String(t.dutyCycleC);
+  if (t.dutyCycleD != 0xff)
+    sRet += " dcd:" + String(t.dutyCycleD);
   if (t.bIncludeCycleTiming != false)
     sRet += " i:y";
   if (t.bCycleTimingInRepeats != false)
@@ -649,7 +660,7 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
   String sOut = "";
   int16_t iMonth, iDay, iYear, iHour, iMinute, iSecond, iDevAddr, iDevMode;
   //int16_t iDayOfWeek;
-  int16_t iDcA, iDcB, iPhase, iPerUnits, iPerVal;
+  int16_t iDcA, iDcB, iDcC, iDcD, iPhaseB, iPhaseC, iPhaseD, iPerUnits, iPerVal;
   int32_t iPerMax;
   
   // init these to 0 - they are "optional" in input string - but need to be 0 if not present!
@@ -661,7 +672,7 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
   int iCount = 0;
 
   // optional - user can add any or all they want, in any order
-  iDcA = iDcB = iPhase = iPerUnits = iPerVal = -1; // unused on init...
+  iDcA = iDcB = iDcC = iDcD = iPhaseB = iPhaseC = iPhaseD = iPerUnits = iPerVal = -1; // unused on init...
   iPerMax = -1;
   
   for (int ii = 0 ; ii <= len ; ii++){ // allow ii to go past eof on purpose!
@@ -679,6 +690,8 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
         sOut.trim();
         sOut.toLowerCase();
 
+        bool bRandom = (sOut == TSC_RAND || sOut == "random");
+        
         if (iCount == 0){
           if (!ParseDate(sOut, iMonth, iDay, iYear))
             return false;
@@ -690,6 +703,8 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
           iCount++;
         }
         else if (iCount == 2){
+          // iDevAddr will be returned with 0 if no device is selected, 0x0f if A, B, C and D are selected,
+          // 0x01 if device A is selected, 0x06 if devices B and C are selected, Etc.
           if (!ParseDevAddressAndMode(sOut, iDevAddr, iDevMode))
             return false;
           iCount++;
@@ -697,9 +712,9 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
         else if (iCount > 2){ // the following are optional and can occur in any order
           int idx = sOut.indexOf(':');
           if (idx > 0){
-            // dutyCycleA, dutyCycleB, phase, units index 0-3, max slider index 0-9, value of slider 0-max
-            // a:50,b:50,p:50,u:1,m:9,v:100
-            char cmd = sOut[0];
+            // dutyCycleA, dutyCycleB, phaseB, units index 0-3, max slider index 0-9, value of slider 0-max
+            // dca:50,dcb:50,dcc:50,dcd:50,pb:50,pc:50,pd:50,u:1,m:9,v:100
+            String cmd = sOut.substring(0, idx);
             sOut = sOut.substring(idx+1);
             int iVal = sOut.toInt();
             if (cmd == TSC_REPEAT_MODE)
@@ -725,28 +740,73 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
                 bCycleTimingInRepeats = true;
             }
             else if (cmd == TSC_DUTY_CYCLE_A){
-              if (iVal >= 0)
+              if (bRandom)
+                iDcA = 0;
+              else if (iVal >= 0)
                 iDcA = iVal;
             }
             else if (cmd == TSC_DUTY_CYCLE_B){
-              if (iVal >= 0)
+              if (bRandom)
+                iDcB = 0;
+              else if (iVal >= 0)
                 iDcB = iVal;
             }
-            else if (cmd == TSC_PHASE){
-              if (iVal >= 0){
-                iPhase = iVal;
+            else if (cmd == TSC_DUTY_CYCLE_C){
+              if (bRandom)
+                iDcC = 0;
+              else if (iVal >= 0)
+                iDcC = iVal;
+            }
+            else if (cmd == TSC_DUTY_CYCLE_D){
+              if (bRandom)
+                iDcD = 0;
+              else if (iVal >= 0)
+                iDcD = iVal;
+            }
+            else if (cmd == TSC_PHASE_B){
+              if (bRandom)
+                iPhaseB = 100;
+              else if (iVal >= 0){
+                iPhaseB = iVal;
+              }
+            }
+            else if (cmd == TSC_PHASE_C){
+              if (bRandom)
+                iPhaseC = 100;
+              else if (iVal >= 0){
+                iPhaseC = iVal;
+              }
+            }
+            else if (cmd == TSC_PHASE_D){
+              if (bRandom)
+                iPhaseD = 100;
+              else if (iVal >= 0){
+                iPhaseD = iVal;
               }
             }
             else if (cmd == TSC_UNITS){
-              if (iVal >= 0)
+              // 0=halfsec,1=sec,2=min,3=hrs
+              if (sOut == "halfsec")
+                iPerUnits = 0;
+              else if (sOut == "sec")
+                iPerUnits = 1;
+              else if (sOut == "min")
+                iPerUnits = 2;
+              else if (sOut == "hrs")
+                iPerUnits = 3;
+              else if (iVal >= 0)
                 iPerUnits = iVal;
             }
             else if (cmd == TSC_PERMAX){
+              // value of the period (in iPerUnits) when the iPerVal slider (index.html) is at 100%
+              // 1-65535
               if (iVal >= 0)
                 iPerMax = iVal;
             }
             else if (cmd == TSC_PERVAL){
-              if (iVal >= 0)
+              if (bRandom)
+                iPerVal = 0;
+              else if (iVal >= 0)
                 iPerVal = iVal;
             }
             else
@@ -787,7 +847,11 @@ bool TimeSlotsClass::StringToTimeSlot(String sIn, t_event &slotData){
   // casting from signed to unsigned, some are -1
   slotData.dutyCycleA = (uint8_t)iDcA;
   slotData.dutyCycleB = (uint8_t)iDcB;
-  slotData.phase = (uint8_t)iPhase;
+  slotData.dutyCycleC = (uint8_t)iDcC;
+  slotData.dutyCycleD = (uint8_t)iDcD;
+  slotData.phaseB = (uint8_t)iPhaseB;
+  slotData.phaseC = (uint8_t)iPhaseC;
+  slotData.phaseD = (uint8_t)iPhaseD;
   slotData.perUnits = (uint8_t)iPerUnits;
   slotData.perVal = (uint8_t)iPerVal;
   slotData.perMax = (uint16_t)iPerMax;
@@ -825,14 +889,20 @@ bool TimeSlotsClass::ParseDevAddressAndMode(String &s, int16_t &iDevAddr, int16_
 
   String sTmp = s.substring(0, idx);
   sTmp.trim();
-  if (sTmp == "a")
+  sTmp.toLowerCase();
+  if (sTmp == "all")
+    iDevAddr = 0x0f; // A=bit0, B=bit1, C=bit2, D=bit3
+  else{
     iDevAddr = 0;
-  else if (sTmp == "b")
-    iDevAddr = 1;
-  else if (sTmp == "ab")
-    iDevAddr = 2;
-  else
-    iDevAddr = -1;
+    if (sTmp.indexOf('a') >= 0)
+      iDevAddr |= 0x01;
+    if (sTmp.indexOf('b') >= 0)
+      iDevAddr |= 0x02;
+    if (sTmp.indexOf('c') >= 0)
+      iDevAddr |= 0x04;
+    if (sTmp.indexOf('d') >= 0)
+      iDevAddr |= 0x08;
+  }
 
   sTmp = s.substring(idx+1);
   sTmp.trim();
@@ -1201,11 +1271,31 @@ bool TimeSlotsClass::CheckEventSpecificTimeCycleParameters(t_event* slotData){
     g_perVals.dutyCycleB = slotData->dutyCycleB;
     bChanged = true;
   }
-  if (slotData->phase != 0xff && slotData->phase != g_perVals.phase){
-    g_perVals.phase = slotData->phase;
-    g32_nextPhase = ComputePhase();
+  if (slotData->dutyCycleC != 0xff && slotData->dutyCycleC != g_perVals.dutyCycleC){
+    g_perVals.dutyCycleC = slotData->dutyCycleC;
     bChanged = true;
   }
+  if (slotData->dutyCycleD != 0xff && slotData->dutyCycleD != g_perVals.dutyCycleD){
+    g_perVals.dutyCycleD = slotData->dutyCycleD;
+    bChanged = true;
+  }
+  if (slotData->phaseB != 0xff && slotData->phaseB != g_perVals.phaseB){
+    g_perVals.phaseB = slotData->phaseB;
+    g32_nextPhaseB = ComputePhaseB();
+    bChanged = true;
+  }
+#if ENABLE_SSR_C_AND_D
+  if (slotData->phaseC != 0xff && slotData->phaseC != g_perVals.phaseC){
+    g_perVals.phaseC = slotData->phaseC;
+    g32_nextPhaseC = ComputePhaseC();
+    bChanged = true;
+  }
+  if (slotData->phaseD != 0xff && slotData->phaseD != g_perVals.phaseD){
+    g_perVals.phaseD = slotData->phaseD;
+    g32_nextPhaseD = ComputePhaseD();
+    bChanged = true;
+  }
+#endif
   if (slotData->perUnits != 0xff && slotData->perUnits != g_perVals.perUnits){
     g_perVals.perUnits = slotData->perUnits;
     bChanged = true;
@@ -1262,22 +1352,37 @@ void TimeSlotsClass::ProcessEvent(int slotIndex, t_event slotData){
 }
 
 void TimeSlotsClass::DoEvent(uint8_t deviceAddr, uint8_t deviceMode){
-  // Addr 2 is "both"
-  if (deviceAddr == 0 || deviceAddr == 2){
+  // deviceAddr bit0=A, bit1=B, Etc.
+  if (deviceAddr & 1){
     if (g8_ssr1ModeFromWeb != deviceMode){
       g8_ssr1ModeFromWeb = deviceMode;
       SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
       ResetPeriod();
     }
   }
-  // Addr 2 is "both"
-  if (deviceAddr == 1 || deviceAddr == 2){
+  if (deviceAddr & 2){
     if (g8_ssr2ModeFromWeb != deviceMode){
       g8_ssr2ModeFromWeb = deviceMode;
       SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
       ResetPeriod();
     }
   }
+#if ENABLE_SSR_C_AND_D
+  if (deviceAddr & 4){
+    if (g8_ssr3ModeFromWeb != deviceMode){
+      g8_ssr3ModeFromWeb = deviceMode;
+      SetSSRMode(GPOUT_SSR3, g8_ssr3ModeFromWeb);
+      ResetPeriod();
+    }
+  }
+  if (deviceAddr & 8){
+    if (g8_ssr4ModeFromWeb != deviceMode){
+      g8_ssr4ModeFromWeb = deviceMode;
+      SetSSRMode(GPOUT_SSR4, g8_ssr4ModeFromWeb);
+      ResetPeriod();
+    }
+  }
+#endif
 }
 
 String TimeSlotsClass::PrintTimeSlots(){

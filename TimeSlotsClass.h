@@ -7,17 +7,22 @@
 #define TSC_YES                      "y"
 #define TSC_OFF                      "off"
 #define TSC_INF                      "inf"
-#define TSC_REPEAT_MODE              't'
-#define TSC_REPEAT_COUNT             'r'
-#define TSC_EVERY_COUNT              'e'
-#define TSC_INCLUDE_CYCLE_TIMING     'i'
-#define TSC_CYCLE_TIMING_IN_REPEATS  'c'
-#define TSC_DUTY_CYCLE_A             'a'
-#define TSC_DUTY_CYCLE_B             'b'
-#define TSC_PHASE                    'p'
-#define TSC_UNITS                    'u'
-#define TSC_PERMAX                   'm'
-#define TSC_PERVAL                   'v'
+#define TSC_RAND                     "rand"
+#define TSC_REPEAT_MODE              "t"
+#define TSC_REPEAT_COUNT             "r"
+#define TSC_EVERY_COUNT              "e"
+#define TSC_INCLUDE_CYCLE_TIMING     "i"
+#define TSC_CYCLE_TIMING_IN_REPEATS  "c"
+#define TSC_DUTY_CYCLE_A             "dca"
+#define TSC_DUTY_CYCLE_B             "dcb"
+#define TSC_DUTY_CYCLE_C             "dcc"
+#define TSC_DUTY_CYCLE_D             "dcd"
+#define TSC_PHASE_B                  "pb"
+#define TSC_PHASE_C                  "pc"
+#define TSC_PHASE_D                  "pd"
+#define TSC_UNITS                    "u"
+#define TSC_PERMAX                   "m"
+#define TSC_PERVAL                   "v"
 
 // repeat modes (set on p2.html web-page)
 #define RPT_OFF      0
@@ -46,11 +51,12 @@ typedef struct{
 } t_time_date;
 
 typedef struct{
-  // off=0,sec,min,hrs,day,wek,mon,yrs; OFF, ON, AUTO; A, B, AB
+  // off=0,sec,min,hrs,day,wek,mon,yrs; OFF, ON, AUTO;
+  // for deviceAddr, bit0=A, bit1=B, bit2=C, bit3=D (multiple bits can be ORed)
   uint8_t repeatMode, deviceMode, deviceAddr; // 0xff = unset
-  // dutyCycleA, dutyCycleB, phase are 0-100%
+  // dutyCycle and phase are 0-100%
   // 0xff = unset (perUnits and perMax are indicies to html select widget!)
-  uint8_t dutyCycleA, dutyCycleB, phase, perUnits, perVal;
+  uint8_t dutyCycleA, dutyCycleB, dutyCycleC, dutyCycleD, phaseB, phaseC, phaseD, perUnits, perVal;
   uint16_t repeatCount, everyCount, perMax; // 0xffff = unset
   t_time_date timeDate;
   bool bEnable, bIncludeCycleTiming, bCycleTimingInRepeats; // true if enabled

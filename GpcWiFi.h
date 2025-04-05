@@ -1,5 +1,5 @@
-#ifndef FCWiFiH
-#define FCWiFiH
+#ifndef GpcWiFiH
+#define GpcWiFiH
 
 #include <Arduino.h>
 #include <esp_wifi.h>

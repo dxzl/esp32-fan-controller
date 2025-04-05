@@ -1,5 +1,5 @@
 // this file PrefsClass.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 PrefsClass PC;
 
@@ -30,14 +30,36 @@ void PrefsClass::GetPreferences(){
     g_perVals.dutyCycleB = DUTY_CYCLE_MIN;
   else if (g_perVals.dutyCycleB > DUTY_CYCLE_MAX)
     g_perVals.dutyCycleB = DUTY_CYCLE_MAX;
-  if (g_perVals.phase < PHASE_MIN)
-    g_perVals.phase = PHASE_MIN;
-  else if (g_perVals.phase > PHASE_MAX)
-    g_perVals.phase = PHASE_MAX;
+  if (g_perVals.phaseB < PHASE_MIN)
+    g_perVals.phaseB = PHASE_MIN;
+  else if (g_perVals.phaseB > PHASE_MAX)
+    g_perVals.phaseB = PHASE_MAX;
   g32_savePeriod = ComputePeriod(g_perVals.perVal, g_perVals.perMax, g_perVals.perUnits);
-  g32_nextPhase = ComputePhase();
+  g32_nextPhaseB = ComputePhaseB();
   SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
   SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
+#if ENABLE_SSR_C_AND_D
+  if (g_perVals.dutyCycleC < DUTY_CYCLE_MIN)
+    g_perVals.dutyCycleC = DUTY_CYCLE_MIN;
+  else if (g_perVals.dutyCycleC > DUTY_CYCLE_MAX)
+    g_perVals.dutyCycleC = DUTY_CYCLE_MAX;
+  if (g_perVals.dutyCycleD < DUTY_CYCLE_MIN)
+    g_perVals.dutyCycleD = DUTY_CYCLE_MIN;
+  else if (g_perVals.dutyCycleD > DUTY_CYCLE_MAX)
+    g_perVals.dutyCycleD = DUTY_CYCLE_MAX;
+  if (g_perVals.phaseC < PHASE_MIN)
+    g_perVals.phaseC = PHASE_MIN;
+  else if (g_perVals.phaseC > PHASE_MAX)
+    g_perVals.phaseC = PHASE_MAX;
+  if (g_perVals.phaseD < PHASE_MIN)
+    g_perVals.phaseD = PHASE_MIN;
+  else if (g_perVals.phaseD > PHASE_MAX)
+    g_perVals.phaseD = PHASE_MAX;
+  g32_nextPhaseC = ComputePhaseC();
+  g32_nextPhaseD = ComputePhaseD();
+  SetSSRMode(GPOUT_SSR3, g8_ssr3ModeFromWeb);
+  SetSSRMode(GPOUT_SSR4, g8_ssr4ModeFromWeb);
+#endif
   CIP.setCiphKey(g_sKey);
 }
 
@@ -65,6 +87,18 @@ void PrefsClass::ReadEEprefs(){
   g8_pulseMaxWidthB = getPrefU8(EE_PULSE_MAXWID_B, MAXWID_B_INIT);
   g16_pulseMinPeriodB = getPrefU16(EE_PULSE_MINPER_B, MINPER_B_INIT); // minPer 0 we use maxPer as the period with no variation
   g16_pulseMaxPeriodB = getPrefU16(EE_PULSE_MAXPER_B, MAXPER_B_INIT); // maxPer 0 pulse feature is off
+#if ENABLE_SSR_C_AND_D
+  g8_pulseModeC =  getPrefU8(EE_PULSE_OFF_MODE_C, PULSE_OFF_MODE_C_INIT);
+  g8_pulseMinWidthC = getPrefU8(EE_PULSE_MINWID_C, MINWID_C_INIT);
+  g8_pulseMaxWidthC = getPrefU8(EE_PULSE_MAXWID_C, MAXWID_C_INIT);
+  g16_pulseMinPeriodC = getPrefU16(EE_PULSE_MINPER_C, MINPER_C_INIT); // minPer 0 we use maxPer as the period with no variation
+  g16_pulseMaxPeriodC = getPrefU16(EE_PULSE_MAXPER_C, MAXPER_C_INIT); // maxPer 0 pulse feature is off
+  g8_pulseModeD =  getPrefU8(EE_PULSE_OFF_MODE_D, PULSE_OFF_MODE_D_INIT);
+  g8_pulseMinWidthD = getPrefU8(EE_PULSE_MINWID_D, MINWID_D_INIT);
+  g8_pulseMaxWidthD = getPrefU8(EE_PULSE_MAXWID_D, MAXWID_D_INIT);
+  g16_pulseMinPeriodD = getPrefU16(EE_PULSE_MINPER_D, MINPER_D_INIT); // minPer 0 we use maxPer as the period with no variation
+  g16_pulseMaxPeriodD = getPrefU16(EE_PULSE_MAXPER_D, MAXPER_D_INIT); // maxPer 0 pulse feature is off
+#endif
 
   g_perVals.perVal = getPrefU8(EE_PERVAL, PERIOD_INIT);
   g_perVals.perUnits = getPrefU8(EE_PERUNITS, PERUNITS_INIT);
@@ -72,7 +106,16 @@ void PrefsClass::ReadEEprefs(){
 
   g_perVals.dutyCycleA = getPrefU8(EE_DC_A, DUTY_CYCLE_A_INIT);
   g_perVals.dutyCycleB = getPrefU8(EE_DC_B, DUTY_CYCLE_B_INIT);
-  g_perVals.phase = getPrefU8(EE_PHASE, PHASE_INIT);
+#if ENABLE_SSR_C_AND_D
+  g_perVals.dutyCycleC = getPrefU8(EE_DC_C, DUTY_CYCLE_C_INIT);
+  g_perVals.dutyCycleD = getPrefU8(EE_DC_D, DUTY_CYCLE_D_INIT);
+#endif
+
+  g_perVals.phaseB = getPrefU8(EE_PHASE_B, PHASE_B_INIT);
+#if ENABLE_SSR_C_AND_D
+  g_perVals.phaseC = getPrefU8(EE_PHASE_C, PHASE_C_INIT);
+  g_perVals.phaseD = getPrefU8(EE_PHASE_D, PHASE_D_INIT);
+#endif
 
   byte temp = getPrefU8(EE_SYNC, SYNC_INIT);
   g_bSyncRx = temp & EE_SYNC_MASK_RX;  
@@ -83,11 +126,18 @@ void PrefsClass::ReadEEprefs(){
 
   g8_ssr1ModeFromWeb = getPrefU8(EE_RELAY_A, SSR1_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
   g8_ssr2ModeFromWeb = getPrefU8(EE_RELAY_B, SSR2_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
-
+#if ENABLE_SSR_C_AND_D
+  g8_ssr3ModeFromWeb = getPrefU8(EE_RELAY_C, SSR3_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
+  g8_ssr4ModeFromWeb = getPrefU8(EE_RELAY_D, SSR4_MODE_INIT); // 0 = OFF, 1 = ON, 2 = AUTO
+#endif
   g8_midiChan = getPrefU8(EE_MIDICHAN, MIDICHAN_INIT);
 
   g8_midiNoteA = getPrefU8(EE_MIDINOTE_A, MIDINOTE_A_INIT);
   g8_midiNoteB = getPrefU8(EE_MIDINOTE_B, MIDINOTE_B_INIT);
+#if ENABLE_SSR_C_AND_D
+  g8_midiNoteC = getPrefU8(EE_MIDINOTE_C, MIDINOTE_C_INIT);
+  g8_midiNoteD = getPrefU8(EE_MIDINOTE_D, MIDINOTE_D_INIT);
+#endif
 
   g8_maxPower = getPrefU8(EE_MAX_POWER, WIFI_MAX_POWER_INIT);
 
@@ -95,6 +145,10 @@ void PrefsClass::ReadEEprefs(){
 
   g_sLabelA = getPrefString(EE_LABEL_A, LABEL_A_INIT);
   g_sLabelB = getPrefString(EE_LABEL_B, LABEL_B_INIT);
+#if ENABLE_SSR_C_AND_D
+  g_sLabelC = getPrefString(EE_LABEL_C, LABEL_C_INIT);
+  g_sLabelD = getPrefString(EE_LABEL_D, LABEL_D_INIT);
+#endif
 
   g_sTimezone = getPrefString(EE_SNTP_TZ, SNTP_TZ_INIT);
   g16_SNTPinterval = getPrefU16(EE_SNTP_INT, SNTP_INT_INIT);
@@ -169,6 +223,51 @@ void PrefsClass::WritePulseFeaturePreferences(){
     putPrefU16(EE_PULSE_MAXPER_B, g16_pulseMaxPeriodB);
     prtln("pulse-off max period B: " + String(g16_pulseMaxPeriodB));
   }
+
+#if ENABLE_SSR_C_AND_D
+  if (g8_pulseModeC != getPrefU8(EE_PULSE_OFF_MODE_C, PULSE_OFF_MODE_C_INIT)){
+    putPrefU8(EE_PULSE_OFF_MODE_C, g8_pulseModeC);
+    prtln("pulse-off mode C: " + String(g8_pulseModeC));
+  }      
+  if (g8_pulseMinWidthC != getPrefU8(EE_PULSE_MINWID_C, MINWID_C_INIT)){
+    putPrefU8(EE_PULSE_MINWID_C, g8_pulseMinWidthC);
+    prtln("pulse-off min width C: " + String(g8_pulseMinWidthC));
+  }
+  if (g8_pulseMaxWidthC != getPrefU8(EE_PULSE_MAXWID_C, MAXWID_C_INIT)){
+    putPrefU8(EE_PULSE_MAXWID_C, g8_pulseMaxWidthC);
+    prtln("pulse-off max width C: " + String(g8_pulseMaxWidthC));
+  }
+  if (g16_pulseMinPeriodC != getPrefU16(EE_PULSE_MINPER_C, MINPER_C_INIT)){
+    putPrefU16(EE_PULSE_MINPER_C, g16_pulseMinPeriodC);
+    prtln("pulse-off min period C: " + String(g16_pulseMinPeriodC));
+  }
+  if (g16_pulseMaxPeriodC != getPrefU16(EE_PULSE_MAXPER_C, MAXPER_C_INIT)){
+    putPrefU16(EE_PULSE_MAXPER_C, g16_pulseMaxPeriodC);
+    prtln("pulse-off max period C: " + String(g16_pulseMaxPeriodC));
+  }
+  
+  if (g8_pulseModeD != getPrefU8(EE_PULSE_OFF_MODE_D, PULSE_OFF_MODE_D_INIT)){
+    putPrefU8(EE_PULSE_OFF_MODE_D, g8_pulseModeD);
+    prtln("pulse-off mode D: " + String(g8_pulseModeD));
+  }      
+  if (g8_pulseMinWidthD != getPrefU8(EE_PULSE_MINWID_D, MINWID_D_INIT)){
+    putPrefU8(EE_PULSE_MINWID_D, g8_pulseMinWidthD);
+    prtln("pulse-off min width D: " + String(g8_pulseMinWidthD));
+  }
+  if (g8_pulseMaxWidthD != getPrefU8(EE_PULSE_MAXWID_D, MAXWID_D_INIT)){
+    putPrefU8(EE_PULSE_MAXWID_D, g8_pulseMaxWidthD);
+    prtln("pulse-off max width D: " + String(g8_pulseMaxWidthD));
+  }
+  if (g16_pulseMinPeriodD != getPrefU16(EE_PULSE_MINPER_D, MINPER_D_INIT)){
+    putPrefU16(EE_PULSE_MINPER_D, g16_pulseMinPeriodD);
+    prtln("pulse-off min period D: " + String(g16_pulseMinPeriodD));
+  }
+  if (g16_pulseMaxPeriodD != getPrefU16(EE_PULSE_MAXPER_D, MAXPER_D_INIT)){
+    putPrefU16(EE_PULSE_MAXPER_D, g16_pulseMaxPeriodD);
+    prtln("pulse-off max period D: " + String(g16_pulseMaxPeriodD));
+  }
+#endif
+  
   PF.end();
 }
 

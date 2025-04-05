@@ -9,20 +9,22 @@
 // string then do a global-replace. Don't forget to re-obfuscate the .js files at https://obfuscator.io/
 
 // These you can't change unless you search for the strings in the respective javascript
-// files in \Documents\Arduino\projects\ESP32\FanController\origdata and change them there, then upload the .js file to
-// https://obfuscator.io/ and put the obfuscated file into the \Documents\Arduino\projects\ESP32\FanController\data folder, then rebuild
+// files in \Documents\Arduino\projects\ESP32\Gpc\origdata and change them there, then upload the .js file to
+// https://obfuscator.io/ and put the obfuscated file into the \Documents\Arduino\projects\ESP32\Gpc\data folder, then rebuild
 // fc.spiffs.bin by double-clicking fcspiffs.bat. Then upload the bin file using
 // Arduino IDE 1.x Tools->ESP32 Sketch Data Upload. NOTE: the menu item won't appear until you
 // unzip ESP32FS.zip into \Documents\Arduino\tools\. It has the python data-file uploader tool.
 #define ERASE_DATA_CONFIRM "K7w5V" // p2.js
 #define PARAM_STATE1_VALUE "F2jB" // p0.js stateTxtA
 #define PARAM_STATE2_VALUE "iV2m" // p0.js stateTxtB
+#define PARAM_STATE3_VALUE "HwOI" // p0.js stateTxtC
+#define PARAM_STATE4_VALUE "mPsE" // p0.js stateTxtD
 #define PARAM_TEXT_VALUE   "u7Za" // p0.js
 
 #define TEXT_PREAMBLE "TXT:" // sent to a web-browser to differentiate a "heartbeat" normal data-response from that of a CMtxt message
 
 // The WiFi credentials entry boxes and reset button only appear when you connect
-// in AP mode (one of the choices in the 3-position WiFi switch on the fan-controller)
+// in AP mode (one of the choices in the 3-position WiFi switch on the Gpc)
 // and go to P1.html on any web-browser.
 // You can change PARAM_BUTRST_VALUE without re-building and uploading
 // the SPIFFS web-site data. This one is injected into P1.html via %PH_P1APMODE%
@@ -73,10 +75,12 @@ const char PH_MAXSCT[] = "MAXSCT";
 const char PH_PERVARS[] = "PERVARS";
 const char PH_LABEL_A[] = "LABELA";
 const char PH_LABEL_B[] = "LABELB";
+const char PH_LABEL_C[] = "LABELC";
+const char PH_LABEL_D[] = "LABELD";
 
 // p1.html
 const char PH_P1APMODE[] = "P1APMODE";
-const char PH_P1VARS[] = "P1VARS"; // combination script tag with vars for g8_midiChan, g8_midiNoteA, g8_midiNoteB
+const char PH_P1VARS[] = "P1VARS"; // combination script tag with vars for g8_midiChan, g8_midiNoteA, g8_midiNoteB, g8_midiNoteC, g8_midiNoteD
 
 // p2.html
 const char PH_P2DELSTYLE[] = "P2DELSTYLE";
@@ -99,8 +103,12 @@ const char PARAM_PERUNITS[]    = "djeuc"; // perUnits
 const char PARAM_PERVAL[]      = "rrksv"; // perVal
 const char PARAM_STATE1[]      = "mwial"; // stateTxtA
 const char PARAM_STATE2[]      = "uvohh"; // stateTxtB
+const char PARAM_STATE3[]      = "bseor"; // stateTxtC
+const char PARAM_STATE4[]      = "lewap"; // stateTxtD
 const char PARAM_LABEL_A[]     = "wjdte"; // labelTxtA
 const char PARAM_LABEL_B[]     = "meufw"; // labelTxtB
+const char PARAM_LABEL_C[]     = "keinj"; // labelTxtC
+const char PARAM_LABEL_D[]     = "jyolx"; // labelTxtD
 const char PARAM_TEXT[]        = "ifhrv"; // text-message
 
 // loginIndex.html
@@ -115,12 +123,18 @@ const char PARAM_WIFINAME[]   = "fgdje"; // set by hidden field on p1.html - var
 const char PARAM_WIFIPASS[]   = "rsgyb"; // data submitted is handled in in ReplaceHtmlPercentSign().
 
 // changing these requires serching for the strings in p1.html/p1.js and changeing there too!
-const char PARAM_PHASE[]      = "jeita";
-const char PARAM_DC_A[]       = "neufb";
-const char PARAM_DC_B[]       = "xbmey";
+const char PARAM_PHASE_B[]    = "jeita"; // phase B slider p1.js
+const char PARAM_PHASE_C[]    = "aimrs"; // phase C slider p1.js
+const char PARAM_PHASE_D[]    = "kepuw"; // phase D slider p1.js
+const char PARAM_DC_A[]       = "neufb"; // duty-cycle A slider p1.js
+const char PARAM_DC_B[]       = "xbmey"; // duty-cycle B slider p1.js
+const char PARAM_DC_C[]       = "wovrj"; // duty-cycle C slider p1.js
+const char PARAM_DC_D[]       = "lrone"; // duty-cycle D slider p1.js
 const char PARAM_MIDICHAN[]   = "ahejn";
 const char PARAM_MIDINOTE_A[] = "ehwdo";
 const char PARAM_MIDINOTE_B[] = "fjezm";
+const char PARAM_MIDINOTE_C[] = "yrpma";
+const char PARAM_MIDINOTE_D[] = "keiwh";
 
 // p2.html
 // received from p2.html when Add button pressed
@@ -165,13 +179,13 @@ String ReplaceHtmlPercentSign(const String& var);
 #endif
 
 //extern const char PARAM_HEARTBEAT[], PARAM_HOSTNAME[], PARAM_PERMAX[], PARAM_PERUNITS[];
-//extern const char PARAM_PERVAL[], PARAM_STATE1[], PARAM_STATE2[], PARAM_LABEL_A[], PARAM_LABEL_B[], PARAM_TEXT[];
-//extern const char PARAM_UDID[], PARAM_UDPW[], PARAM_BUTRST[], PARAM_WIFINAME[], PARAM_WIFIPASS[], PARAM_PHASE[];
-//extern const char PARAM_DC_A[], PARAM_DC_B[], PARAM_MIDICHAN[], PARAM_MIDINOTE_A[], PARAM_MIDINOTE_B[];
+//extern const char PARAM_PERVAL[], PARAM_STATE1[], PARAM_STATE2[], PARAM_STATE3[], PARAM_STATE4[], PARAM_LABEL_A[], PARAM_LABEL_B[], PARAM_LABEL_C[], PARAM_LABEL_D[], PARAM_TEXT[];
+//extern const char PARAM_UDID[], PARAM_UDPW[], PARAM_BUTRST[], PARAM_WIFINAME[], PARAM_WIFIPASS[], PARAM_PHASE_B[], PARAM_PHASE_C[], PARAM_PHASE_D[];
+//extern const char PARAM_DC_A[], PARAM_DC_B[], PARAM_DC_C[], PARAM_DC_D[], PARAM_MIDICHAN[], PARAM_MIDINOTE_A[], PARAM_MIDINOTE_B[], PARAM_MIDINOTE_C[], PARAM_MIDINOTE_D[];
 //extern const char PARAM_MINUTE[], PARAM_HOUR[], PARAM_SECOND[], PARAM_AMPM[], PARAM_DEVICE_MODE[];
 //extern const char PARAM_DEVICE_ADDR[], PARAM_REPEAT_MODE[], PARAM_REPEAT_COUNT[], PARAM_EVERY_COUNT[];
 //extern const char PARAM_DATE[], PARAM_EDITINDEX[], PARAM_DELINDEX[], PARAM_REPLACEINDEX[], PARAM_INCLUDETIMINGCYCLE[];
 //extern const char PARAM_TIMINGCYCLEINREPEATS[], PARAM_USEOLDTIMEVALS[], PARAM_DATETIME[], PARAM_FILEDATA[], PARAM_ERASEDATA[];
 //
-//extern const char PH_HOSTNAME[], PH_MAXSCT[], PH_PERVARS[], PH_LABEL_A[], PH_LABEL_B[];
+//extern const char PH_HOSTNAME[], PH_MAXSCT[], PH_PERVARS[], PH_LABEL_A[], PH_LABEL_B[], PH_LABEL_C[], PH_LABEL_D[];
 //extern const char PH_P1APMODE[], PH_P1VARS[], PH_P2DELSTYLE[], PH_P2DELITEMS[];

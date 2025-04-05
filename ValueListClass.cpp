@@ -1,5 +1,5 @@
 // this file ValueListClass.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 ValueListClass IVL;
 

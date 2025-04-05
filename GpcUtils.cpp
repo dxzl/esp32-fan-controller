@@ -1,22 +1,34 @@
-// this file FCUtils.cpp
-#include "FanController.h"
+// this file GpcUtils.cpp
+#include "Gpc.h"
 
 void RefreshGlobalMasterFlagAndIp(){
-  bool bIsMaster = WeAreMaster();
-  // have to check this every time because a 0 MAC address may now be populated...
-  if (!bIsMaster && g_bMaster){
-//    prtln("This IP is NOT a master...");
+  int iHighestMacIndex = -1; // get by-reference...
+  uint16_t uMacHighest = GetHighestMac(iHighestMacIndex);
+  if (iHighestMacIndex < 0){
     g_bMaster = false;
-    int iHighestMacIndex = -1; // get by-reference...
-    GetHighestMac(iHighestMacIndex);
-    g_IpMaster = (iHighestMacIndex >= 0) ? IML.GetIP(iHighestMacIndex) : IPAddress("0.0.0.0");
+    g_IpMaster = (int)0;
+    return;
+  }
+
+  bool bIsMaster = WeAreMaster();
+  
+  if ((int)g_IpMaster == 0){
+    prtln("RefreshGlobalMasterFlagAndIp(): Initializing...");
+    g_bMaster = !bIsMaster;
+  }
+  
+  if (!bIsMaster && g_bMaster){
+    prtln("RefreshGlobalMasterFlagAndIp(): This IP is NOT a master...");
+    g_bMaster = false;
+    g_IpMaster = IML.GetIP(iHighestMacIndex);
     g16_sendDefTokenTimer = 0;
   }
   else if (bIsMaster && !g_bMaster){
-//    prtln("This IP is a master...");
+    prtln("RefreshGlobalMasterFlagAndIp(): This IP is a master...");
     g_bMaster = true;
     g_IpMaster = GetLocalIp(); // this will be 0.0.0.0 unless connected!
   }
+  prtln("RefreshGlobalMasterFlagAndIp(): g_IpMaster is: " + g_IpMaster.toString());
 }
 
 //void InitGlobalIpAndMasterFlag(){
@@ -26,7 +38,7 @@ void RefreshGlobalMasterFlagAndIp(){
 //  else{
 //    int iHighestMacIndex = -1; // get by-reference...
 //    GetHighestMac(iHighestMacIndex);
-//    g_IpMaster = (iHighestMacIndex >= 0) ? IML.GetIP(iHighestMacIndex) : IPAddress("0.0.0.0");
+//    g_IpMaster = (iHighestMacIndex >= 0) ? IML.GetIP(iHighestMacIndex) : (int)0;
 //  }
 //}
 
@@ -38,8 +50,8 @@ bool WeAreMaster(){
   if (IsAnyMacZero())
     return false;
   int iIdx = -1;
-  uint16_t iMacHighest = GetHighestMac(iIdx);
-  return GetOurDeviceMacLastTwoOctets() > iMacHighest;
+  uint16_t uMacHighest = GetHighestMac(iIdx);
+  return GetOurDeviceMacLastTwoOctets() > uMacHighest;
 }
 
 //  uint8_t local_buf[6] = {0}; // order 5:4:3:2:1:0
@@ -97,36 +109,269 @@ bool IsAnyMacZero(){
   return false;  
 }
 
-void ReadPot1(){
-  g16_pot1Value = analogRead(GPAIN_POT1);
-  int deltaPotValue = g16_pot1Value - g16_oldpot1Value;
+void ReadPot1(bool bForceRead){
+  if (!bForceRead && (g8_potChannel == POT_CHAN_NONE || g8_potModeFromSwitch == POT_MODE_NONE))
+    return;
+    
+  uint16_t potValue = analogRead(GPAIN_POT1);
+  int deltaPotValue = potValue - g16_oldPotValue;
   if (deltaPotValue < 0)
     deltaPotValue = -deltaPotValue;
 
-  if (deltaPotValue > POT_DEBOUNCE){
+  if (deltaPotValue > POT_DEBOUNCE || bForceRead){
     //double voltage = (3.3/4095.0) * g16_pot1Value;
     //prt("g16_pot1Value:");
     //prt(g16_pot1Value);
     //prt(" Voltage:");
     //prt(voltage);
     //prtln("V");
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+    g_potPercent = (int)((float)potValue*100.0/4095.0);
+  #if POT_REVERSED
+    g_potPercent = 100-g_potPercent; // POT direction reversed!
+  #endif
 
-    float percent = (float)g16_pot1Value*100.0/4095.0;
+    g8_potLedFlashTime = (110-g_potPercent)/10;
 
-    if (g8_potModeFromSwitch == 0){
-      // period range: 0 - 100% (of perMax)
-      TSK.QueueTask(TASK_PARMS, SUBTASK_PERVAL, (int)percent);
-//prtln("DEBUG: ReadPot1(): perval changed!: " + String((int)percent));
-    }
-    else if (g8_potModeFromSwitch == 1){
-      // phase range: 0 - 100%
-      TSK.QueueTask(TASK_PARMS, SUBTASK_PHASE, (int)percent);
-//prtln("DEBUG: ReadPot1(): phase changed!: " + String((int)percent));
-    }
-
-    g16_oldpot1Value = g16_pot1Value;
+    // if pot is "near" the min/max, set it to the min/max...
+    if (g_potPercent <= 3)
+      g_potPercent = 0;
+    else if (g_potPercent >= 97)
+      g_potPercent = 100;
+    
+#endif
+    g16_oldPotValue = potValue;
   }
 }
+
+void PotChangeTask(int iModeAndChan, int iPercent){
+  int iMode = (iModeAndChan >> 8);
+  int iChan = (iModeAndChan & 0xff);
+  prtln("DEBUG: PotChangeTask(): iMode=" + String(iMode) + ", iChan=" + String(iChan) + ", iPercent=" + String(iPercent));
+  if (iMode == POT_MODE_LEFT){
+    if (iChan == POT_CHAN_1)
+      TSK.QueueTask(TASK_PARMS, SUBTASK_PERVAL, iPercent);
+    else if (iChan == POT_CHAN_2)
+      TSK.QueueTask(TASK_PARMS, SUBTASK_PHASEB, iPercent);
+      
+    #if ENABLE_SSR_C_AND_D
+    else if (iChan == POT_CHAN_3)
+      TSK.QueueTask(TASK_PARMS, SUBTASK_PHASEC, iPercent);
+    else if (iChan == POT_CHAN_4)
+      TSK.QueueTask(TASK_PARMS, SUBTASK_PHASED, iPercent);
+    #endif
+    
+  }
+  else if (iMode == POT_MODE_RIGHT){
+    if (iChan == POT_CHAN_1)
+      TSK.QueueTask(TASK_PARMS, SUBTASK_DCA, iPercent);
+    else if (iChan == POT_CHAN_2)
+      TSK.QueueTask(TASK_PARMS, SUBTASK_DCB, iPercent);
+      
+    #if ENABLE_SSR_C_AND_D
+    else if (iChan == POT_CHAN_3)
+      TSK.QueueTask(TASK_PARMS, SUBTASK_DCC, iPercent);
+    else if (iChan == POT_CHAN_4)
+      TSK.QueueTask(TASK_PARMS, SUBTASK_DCD, iPercent);
+    #endif
+    
+  }
+  else if (iMode == POT_MODE_CENTER){
+    if (iChan == POT_CHAN_1){
+      // NOTE: perMax is NOT a percentage but the POT value is... so we need to map the pot to
+      // perMax...
+      int iActual;
+      if (iPercent == 0)
+        iActual = PERMAX_MIN;     
+      else
+        iActual = iPercent * PERMAX_MAX / 100;
+      TSK.QueueTask(TASK_PARMS, SUBTASK_PERMAX, iActual);
+    }
+    else if (iChan == POT_CHAN_2){
+      // NOTE: perUnits is NOT a percentage but the POT value is... so we need to map the pot to
+      // perUnits...
+      int iActual;
+      if (iPercent == 0)
+        iActual = PERUNITS_MIN;     
+      else
+        iActual = iPercent * PERUNITS_MAX / 100;
+      TSK.QueueTask(TASK_PARMS, SUBTASK_PERUNITS, iActual);
+    }
+    
+    #if ENABLE_SSR_C_AND_D
+//    else if (iChan == POT_CHAN_3)
+//      TSK.QueueTask(TASK_PARMS, SUBTASK_???, iPercent); // unused presently...
+//    else if (iChan == POT_CHAN_4)
+//      TSK.QueueTask(TASK_PARMS, SUBTASK_???, iPercent); // unused presently...
+    #endif
+  
+  }
+}
+
+void ReadPotModeSwitch(){
+    
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+  bool sw1On = digitalRead(GPIN_POT_MODE_SW1);
+  bool sw2On = digitalRead(GPIN_POT_MODE_SW2);
+  if (sw1On != g_bOldPotModeSw1On || sw2On != g_bOldPotModeSw2On){
+    ReadPot1(true); // force a read
+    
+    if (sw1On){
+      g8_potModeFromSwitch = POT_MODE_LEFT;
+      prtln("Pot Mode Switch: Left");
+    }
+    else if (sw2On){
+      g8_potModeFromSwitch = POT_MODE_RIGHT;
+      prtln("Pot Mode Switch: Right");
+    }
+    else{
+      g8_potModeFromSwitch = POT_MODE_CENTER;
+      prtln("Pot Mode Switch: Center");
+    }
+
+    g_bOldPotModeSw1On = sw1On;
+    g_bOldPotModeSw2On = sw2On;
+
+    SetPotChannelFromSenseStatus();
+  }
+#else  
+  bool bPotModeSwOn = (digitalRead(GPIN_POT_MODE_SW) == HIGH) ? true : false;
+  if (bPotModeSwOn != g_bOldPotModeSwOn){
+    ReadPot1(true); // force a read
+
+    if (bPotModeSwOn){
+      g8_potModeFromSwitch = POT_MODE_LEFT;
+      prtln("Potentiometer Mode Switch: Left");
+    } else {
+      g8_potModeFromSwitch = POT_MODE_RIGHT;
+      prtln("Potentiometer Mode Switch: Right");
+    }
+    g_bOldPotModeSwOn = bPotModeSwOn;
+
+    SetPotChannelFromSenseStatus();
+  }
+#endif  
+}
+
+void SetPotChannelFromSenseStatus(){
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+#endif
+
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+  // NOTE: we activate POT-changes by changing the pot-mode switch... we can't use
+  // the SSR-state from the sense inputs to activate because then auto-mode will activate POT-changes
+  // erroneously!
+  
+  // enable POT by assigning it a channel. NOTE: user must set only ONE SSR's toggle-switch to manual ON
+  // to enable the POT control to set only that channel's phase/duty-cycle/Etc.
+  if (g_actualStatus == DEV_STATUS_1)
+    g8_potChannel = POT_CHAN_1;
+  else if (g_actualStatus == DEV_STATUS_2)
+    g8_potChannel = POT_CHAN_2;
+  #if ENABLE_SSR_C_AND_D
+  else if (g_actualStatus == DEV_STATUS_3)
+    g8_potChannel = POT_CHAN_3;
+  else if (g_actualStatus == DEV_STATUS_4)
+    g8_potChannel = POT_CHAN_4;
+  #endif
+
+// don't do this here - because we need a valid channel to save the changed pot-value!!!!
+//  else
+//    g8_potChannel = POT_CHAN_NONE;
+#else
+  // original board 1 has no way to sense the SSR's state (could mod it to do that... TODO)
+  // Also - the POT mode switch is SPST, only LEFT/RIGHT, no CENTER...
+  // so we'll just set the channel to SSR1 all the time for now...
+  g8_potChannel = POT_CHAN_1;
+#endif    
+}
+
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+bool ShouldComLedIndicateInfinite(){
+  bool bSetLedOn = false;
+  if (g8_potModeFromSwitch == POT_MODE_LEFT){
+    if (g8_potChannel == POT_CHAN_1){
+      // on channel 1, if pot is full-left and switch is full left we are setting random period
+      if (g_potPercent == 0)
+        bSetLedOn = true;
+    }
+    // on channels 2, 3 and 4, if pot is full-right and switch is full left we are setting random phase
+    else if (g_potPercent == 100)
+      bSetLedOn = true;
+  }
+  // if pot is full-left and switch is full right we are setting random duty-cycle for the selected channel
+  else if (g8_potModeFromSwitch == POT_MODE_RIGHT){
+    if (g_potPercent == 0)
+      bSetLedOn = true;
+  }
+  return bSetLedOn;
+}
+
+void ReadActualSSRState(){
+  int iOldActualStatus = g_actualStatus;
+
+  //------------------------------------------------------------------
+  bool bIsOn = digitalRead(GPIN_SSR1);
+  bool bStatus = (g_actualStatus & DEV_STATUS_1) ? true : false;
+  if (bIsOn && !bStatus)
+    g_actualStatus |= DEV_STATUS_1;
+  else if (!bIsOn && bStatus)
+    g_actualStatus &= ~DEV_STATUS_1;
+    
+  bIsOn = digitalRead(GPIN_SSR2);
+  bStatus = (g_actualStatus & DEV_STATUS_2) ? true : false;
+  if (bIsOn && !bStatus)
+    g_actualStatus |= DEV_STATUS_2;
+  else if (!bIsOn && bStatus)
+    g_actualStatus &= ~DEV_STATUS_2;
+
+  #if ENABLE_SSR_C_AND_D
+  bIsOn = digitalRead(GPIN_SSR3);
+  bStatus = (g_actualStatus & DEV_STATUS_3) ? true : false;
+  if (bIsOn && !bStatus)
+    g_actualStatus |= DEV_STATUS_3;
+  else if (!bIsOn && bStatus)
+    g_actualStatus &= ~DEV_STATUS_3;
+
+  bIsOn = digitalRead(GPIN_SSR4);
+  bStatus = (g_actualStatus & DEV_STATUS_4) ? true : false;
+  if (bIsOn && !bStatus)
+    g_actualStatus |= DEV_STATUS_4;
+  else if (!bIsOn && bStatus)
+    g_actualStatus &= ~DEV_STATUS_4;
+  #endif
+
+  //------------------------------------------------------------------
+  if (iOldActualStatus){
+    if (g_actualStatus > iOldActualStatus)
+      // cancel pot-programming if user (or auto) has turned on a second SSR!!!!
+      CancelPotProgramming();
+    else if (!g_actualStatus){
+      // if we were changing the pot and the SSR SPDT switch is changed to center-off (or auto mode turns all off)
+      // we initiate storage of the new parameter's value in the EEPROM (flash)
+//      prtln("DEBUG: ReadActualSSRState(): actual status now off!!!!");
+      if (IsPotProgrammingOn()){
+//        prtln("DEBUG: ReadActualSSRState(): Queuing TASK_POTCHANGE. Chan=" + String(g8_potChannel) + ", Mode=" + String(g8_potModeFromSwitch));
+        int iModeAndChan = ((int)g8_potModeFromSwitch)<<8;
+        iModeAndChan |= g8_potChannel;
+        TSK.QueueTask(TASK_POTCHANGE, iModeAndChan, g_potPercent);
+      }
+      CancelPotProgramming();
+    }
+  }
+}
+
+void CancelPotProgramming(){
+  digitalWrite(GPOUT_COM_LED, false);
+  g8_potModeFromSwitch = POT_MODE_NONE;
+  g8_potChannel = POT_CHAN_NONE;
+  g8_potLedFlashTime = 255;
+}
+
+bool IsPotProgrammingOn(){
+  return g8_potLedFlashTime != 255 && g8_potModeFromSwitch != POT_MODE_NONE && g8_potChannel != POT_CHAN_NONE;
+}
+#endif
 
 void ReadWiFiSwitch(){
 #if FORCE_AP_ON
@@ -156,89 +401,6 @@ void ReadWiFiSwitch(){
 #endif
 }
 
-#if ESP32_S3
-void ReadSsrSwitches(){
-  bool swManOn = digitalRead(GPIN_SSR1_MODE_SW_MAN);
-  bool swAutOn = digitalRead(GPIN_SSR1_MODE_SW_AUT);
-  if (swManOn != g_bOldSsr1ModeManSwOn || swAutOn != g_bOldSsr1ModeAutSwOn){
-    if (swManOn){
-      g8_ssr1ModeFromSwitch = SSR_MODE_ON;
-      prtln("SSR1 Mode Switch: ON");
-    }
-    else if (swAutOn){
-      g8_ssr1ModeFromSwitch = SSR_MODE_AUTO;
-      prtln("SSR1 Mode Switch: AUTO");
-    }
-    else{
-      g8_ssr1ModeFromSwitch = SSR_MODE_OFF;
-      prtln("SSR1 Mode Switch: OFF");
-    }
-
-    g_bOldSsr1ModeManSwOn = swManOn;
-    g_bOldSsr1ModeAutSwOn = swAutOn;
-    SetSSRMode(GPOUT_SSR1, g8_ssr1ModeFromWeb);
-  }
-
-  swManOn = digitalRead(GPIN_SSR2_MODE_SW_MAN);
-  swAutOn = digitalRead(GPIN_SSR2_MODE_SW_AUT);
-  if (swManOn != g_bOldSsr2ModeManSwOn || swAutOn != g_bOldSsr2ModeAutSwOn){
-    if (swManOn){
-      g8_ssr2ModeFromSwitch = SSR_MODE_ON;
-      prtln("SSR2 Mode Switch: ON");
-    }
-    else if (swAutOn){
-      g8_ssr2ModeFromSwitch = SSR_MODE_AUTO;
-      prtln("SSR2 Mode Switch: AUTO");
-    }
-    else{
-      g8_ssr2ModeFromSwitch = SSR_MODE_OFF;
-      prtln("SSR2 Mode Switch: OFF");
-    }
-
-    g_bOldSsr2ModeManSwOn = swManOn;
-    g_bOldSsr2ModeAutSwOn = swAutOn;
-    SetSSRMode(GPOUT_SSR2, g8_ssr2ModeFromWeb);
-  }
-}
-#endif  
-
-void ReadPotModeSwitch(){
-#if ESP32_S3
-  bool sw1On = digitalRead(GPIN_POT_MODE_SW1);
-  bool sw2On = digitalRead(GPIN_POT_MODE_SW2);
-  if (sw1On != g_bOldPotModeSw1On || sw2On != g_bOldPotModeSw2On){
-    if (sw1On){
-      g8_potModeFromSwitch = 1;
-      prtln("Pot Mode Switch: 1");
-    }
-    else if (sw2On){
-      g8_potModeFromSwitch = 2;
-      prtln("Pot Mode Switch: 2");
-    }
-    else{
-      g8_potModeFromSwitch = 0;
-      prtln("Pot Mode Switch: OFF");
-    }
-
-    g_bOldPotModeSw1On = sw1On;
-    g_bOldPotModeSw2On = sw2On;
-  }
-#else  
-  bool bPotModeSwOn = (digitalRead(GPIN_POT_MODE_SW) == HIGH) ? true : false;
-
-  if (bPotModeSwOn != g_bOldPotModeSwOn){
-    if (bPotModeSwOn){
-      g8_potModeFromSwitch = 1;
-      prtln("Potentiometer Mode Switch: ON");
-    } else {
-      g8_potModeFromSwitch = 0;
-      prtln("Potentiometer Mode Switch: OFF");
-    }
-    g_bOldPotModeSwOn = bPotModeSwOn;
-  }
-#endif  
-}
-
 // Usage: SetSSRMode(GPOUT_SSR2, SSR_MODE_ON) sets DEV_STATUS_2 bit
 //        SetSSRMode(GPOUT_SSR2, SSR_MODE_AUTO) clears DEV_STATUS_2 bit
 //        SetSSRMode(GPOUT_SSR2, SSR_MODE_OFF) clears DEV_STATUS_2 bit
@@ -249,25 +411,10 @@ void SetSSRMode(uint8_t gpout, uint8_t ssrMode){
     SetSSR(gpout, false);
 }
 
-// sets global g_devStatus (DEV_STATUS_1/DEV_STATUS2) bits to reflect the GPOUT_SSR1/GPOUT/SSR2 states
+// sets global g_devStatus (DEV_STATUS_1/DEV_STATUS2/DEV_STATUS3/DEV_STATUS4)
+// bits to reflect the GPOUT_SSR1/GPOUT_SSR2/GPOUT_SSR3/GPOUT_SSR4 states
 void SetSSR(uint8_t gpout, bool bSetSsrOn){
   bool bIsOn = (digitalRead(gpout) == HIGH) ? true : false;
-
-#if ESP32_S3
-  // for S3 board, manual SPDT switch mode overrides all else...
-  if (gpout == GPOUT_SSR1){
-    if (bIsOn && g8_ssr1ModeFromSwitch == SSR_MODE_OFF)
-      bSetSsrOn = false;
-    else if (!bIsOn && g8_ssr1ModeFromSwitch == SSR_MODE_ON)
-      bSetSsrOn = true;
-  }
-  else if (gpout == GPOUT_SSR2){
-    if (bIsOn && g8_ssr2ModeFromSwitch == SSR_MODE_OFF)
-      bSetSsrOn = false;
-    else if (!bIsOn && g8_ssr2ModeFromSwitch == SSR_MODE_ON)
-      bSetSsrOn = true;
-  }
-#endif  
 
   if (bSetSsrOn){
     if (!bIsOn)
@@ -275,32 +422,38 @@ void SetSSR(uint8_t gpout, bool bSetSsrOn){
     if (gpout == GPOUT_SSR1){
       g_devStatus |= DEV_STATUS_1;
       g_stats.AOnCounter++;
-#if ESP32_S3
-      digitalWrite(GPOUT_SSR1_LED, HIGH);
-#endif
     }
     else if (gpout == GPOUT_SSR2){
       g_devStatus |= DEV_STATUS_2;
       g_stats.BOnCounter++;
-#if ESP32_S3
-      digitalWrite(GPOUT_SSR2_LED, HIGH);
-#endif
     }
+#if ENABLE_SSR_C_AND_D
+    else if (gpout == GPOUT_SSR3){
+      g_devStatus |= DEV_STATUS_3;
+      g_stats.COnCounter++;
+    }
+    else if (gpout == GPOUT_SSR4){
+      g_devStatus |= DEV_STATUS_4;
+      g_stats.DOnCounter++;
+    }
+#endif
   }
   else if (bIsOn){ // Set to OFF or AUTO
     digitalWrite(gpout, LOW);
     if (gpout == GPOUT_SSR1){
       g_devStatus &= ~DEV_STATUS_1;
-#if ESP32_S3
-      digitalWrite(GPOUT_SSR1_LED, LOW);
-#endif
     }
     else if (gpout == GPOUT_SSR2){
       g_devStatus &= ~DEV_STATUS_2;
-#if ESP32_S3
-      digitalWrite(GPOUT_SSR2_LED, LOW);
-#endif
     }
+#if ENABLE_SSR_C_AND_D
+    else if (gpout == GPOUT_SSR3){
+      g_devStatus &= ~DEV_STATUS_3;
+    }
+    else if (gpout == GPOUT_SSR4){
+      g_devStatus &= ~DEV_STATUS_4;
+    }
+#endif
   }
 }
 
@@ -324,20 +477,32 @@ void ResetPeriod()
 {
   g32_dutyCycleTimerA = 0;
   g32_dutyCycleTimerB = 0;
-  g32_phaseTimer = 0;
+  g32_phaseTimerB = 0;
+#if ENABLE_SSR_C_AND_D
+  g32_phaseTimerC = 0;
+  g32_phaseTimerD = 0;
+  g32_dutyCycleTimerC = 0;
+  g32_dutyCycleTimerD = 0;
+#endif
   g32_periodTimer = 1; // restart cycle...
   g32_savePeriod = 1;
 }
 
 void LimitPeriod(){
-  // g32_dutyCycleTimerA and g32_phaseTimer will reset with new period but
-  // g32_dutyCycleTimerB runs at end of g32_phaseTimer expiring...
+  // g32_dutyCycleTimerA and the phase-timers will reset with new period but
+  // g32_dutyCycleTimerB,C,D keep running...
   if (g32_periodTimer > MIN_PERIOD_TIMER){
     g32_periodTimer = MIN_PERIOD_TIMER;
     g32_savePeriod = MIN_PERIOD_TIMER;
   }
   if (g32_dutyCycleTimerB > MIN_PERIOD_TIMER)
     g32_dutyCycleTimerB = MIN_PERIOD_TIMER;
+#if ENABLE_SSR_C_AND_D
+  if (g32_dutyCycleTimerC > MIN_PERIOD_TIMER)
+    g32_dutyCycleTimerC = MIN_PERIOD_TIMER;
+  if (g32_dutyCycleTimerD > MIN_PERIOD_TIMER)
+    g32_dutyCycleTimerD = MIN_PERIOD_TIMER;
+#endif
 }
 
 // This provides an HTML select list of available wifi networks.
@@ -501,17 +666,39 @@ int ComputeTimeToOnOrOffA(){
 }
 
 // Channel 2 (B) switches off when g32_dutyCycleTimerB decrements to 0.
-// It switches on when g32_phaseTimer decrements to 0 if g32_phaseTimer is running, or
+// It switches on when g32_phaseTimerB decrements to 0 if g32_phaseTimerB is running, or
 // at g32_nextPhase + g32_periodTimer if it's not...
 int ComputeTimeToOnOrOffB(){
   if (g8_ssr2ModeFromWeb != SSR_MODE_AUTO)
     return -1;
   if (g_devStatus & DEV_STATUS_2)
     return g32_dutyCycleTimerB;
-  if (g32_phaseTimer)
-    return g32_phaseTimer;
-  return g32_periodTimer+g32_nextPhase;
+  if (g32_phaseTimerB)
+    return g32_phaseTimerB;
+  return g32_periodTimer+g32_nextPhaseB;
 }
+
+#if ENABLE_SSR_C_AND_D
+int ComputeTimeToOnOrOffC(){
+  if (g8_ssr3ModeFromWeb != SSR_MODE_AUTO)
+    return -1;
+  if (g_devStatus & DEV_STATUS_3)
+    return g32_dutyCycleTimerC;
+  if (g32_phaseTimerC)
+    return g32_phaseTimerC;
+  return g32_periodTimer+g32_nextPhaseC;
+}
+
+int ComputeTimeToOnOrOffD(){
+  if (g8_ssr4ModeFromWeb != SSR_MODE_AUTO)
+    return -1;
+  if (g_devStatus & DEV_STATUS_4)
+    return g32_dutyCycleTimerD;
+  if (g32_phaseTimerD)
+    return g32_phaseTimerD;
+  return g32_periodTimer+g32_nextPhaseD;
+}
+#endif
 
 // set sReloadUrl to P2_FILENAME Etc.
 bool IsLockedAlertGetPlain(AsyncWebServerRequest *request, bool bAllowInAP){
@@ -574,106 +761,101 @@ String SyncFlagStatus(){
 }
 
 void FlashSequencerStop(){
-  FlashSequencerInit(g8_ledMode_OFF);
-  g8_ledSeqState == LEDSEQ_ENDED;
+  FlashSequencerInit(g8_wifiLedMode_OFF);
+  g8_wifiLedSeqState == LEDSEQ_ENDED;
 }
 
-// NOTE: g8_digitArray must have a 0 terminator to mark the end of sequence!
+// NOTE: g8_wifiLedDigitArray must have a 0 terminator to mark the end of sequence!
 // bStart defaults false
 void FlashSequencerInit(uint8_t postFlashMode){
-  g8_ledFlashCounter = 0;
-  g8_ledDigitCounter = 0;
-  g8_ledSaveMode = postFlashMode; // save post-flash mode...
-  g8_ledMode = g8_ledMode_PAUSED;
-  g8_ledSeqState = LEDSEQ_PAUSED;
-#if ESP32_S3
-  rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off
-#else
-  digitalWrite(GPOUT_ONBOARD_LED, LOW);
+  g8_wifiLedFlashCounter = 0;
+  g8_wifiLedDigitCounter = 0;
+  g8_wifiLedSaveMode = postFlashMode; // save post-flash mode...
+  g8_wifiLedMode = g8_wifiLedMode_PAUSED;
+  g8_wifiLedSeqState = LEDSEQ_PAUSED;
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+  digitalWrite(GPOUT_WIFI_LED, LOW);
 #endif
-  g_bLedOn = false;
+  digitalWrite(GPOUT_ONBOARD_LED, LOW);
+  g_bWiFiLedOn = false;
 }
 
 void FlashSequencer(){
-  if (g8_ledSeqState == LEDSEQ_PAUSED){
-    if (g8_ledFlashCounter >= LED_PAUSE_COUNT){
-      g8_ledFlashCounter = 0;
-      uint8_t digitCount = g8_digitArray[g8_ledDigitCounter++];
+  if (g8_wifiLedSeqState == LEDSEQ_PAUSED){
+    if (g8_wifiLedFlashCounter >= LED_PAUSE_COUNT){
+      g8_wifiLedFlashCounter = 0;
+      uint8_t digitCount = g8_wifiLedDigitArray[g8_wifiLedDigitCounter++];
       if (digitCount == 0){ // end of digits in sequence...
-        g8_ledMode = g8_ledSaveMode; // return to "connected" flashing
-        g8_ledSeqState = LEDSEQ_ENDED;
+        g8_wifiLedMode = g8_wifiLedSaveMode; // return to "connected" flashing
+        g8_wifiLedSeqState = LEDSEQ_ENDED;
       }
       else{
-        g8_ledFlashCount = digitCount;
-        g8_ledSeqState = LEDSEQ_FLASHING;
-        g8_ledMode = g8_ledMode_FASTFLASH;
+        g8_wifiLedFlashCount = digitCount;
+        g8_wifiLedSeqState = LEDSEQ_FLASHING;
+        g8_wifiLedMode = g8_wifiLedMode_FASTFLASH;
       }
     }
   }
-  else if (g8_ledSeqState == LEDSEQ_FLASHING){
-    if (g8_ledFlashCounter >= g8_ledFlashCount){
-      g8_ledFlashCounter = 0;
-      g8_ledMode = g8_ledMode_PAUSED;
-      g8_ledSeqState = LEDSEQ_PAUSED;
+  else if (g8_wifiLedSeqState == LEDSEQ_FLASHING){
+    if (g8_wifiLedFlashCounter >= g8_wifiLedFlashCount){
+      g8_wifiLedFlashCounter = 0;
+      g8_wifiLedMode = g8_wifiLedMode_PAUSED;
+      g8_wifiLedSeqState = LEDSEQ_PAUSED;
     }
   }
 }
 
 void FlashLED(){
-  if (g8_ledMode == g8_ledMode_PAUSED)
-    g8_ledFlashCounter++; // count 1/4 sec pause interval
-  else if (g8_ledMode == g8_ledMode_OFF){
-    if (!g_bLedOn){
-#if ESP32_S3
-        rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off
-#else
-        digitalWrite(GPOUT_ONBOARD_LED, LOW);
+  if (g8_wifiLedMode == g8_wifiLedMode_PAUSED)
+    g8_wifiLedFlashCounter++; // count 1/4 sec pause interval
+  else if (g8_wifiLedMode == g8_wifiLedMode_OFF){
+    if (!g_bWiFiLedOn){
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+      digitalWrite(GPOUT_WIFI_LED, LOW);
 #endif
-      g_bLedOn = true;
+      digitalWrite(GPOUT_ONBOARD_LED, LOW);
+      g_bWiFiLedOn = true;
     }
-    if (g8_ledFlashTimer)
-      g8_ledFlashTimer = 0;
+    if (g8_wifiLedFlashTimer)
+      g8_wifiLedFlashTimer = 0;
   }
-  else if (g8_ledMode == g8_ledMode_ON){
-    if (!g_bLedOn){
-#if ESP32_S3
-      rgbLedWrite(RGB_BUILTIN, 0, LED_GREEN, 0);  // On
-#else
+  else if (g8_wifiLedMode == g8_wifiLedMode_ON){
+    if (!g_bWiFiLedOn){
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+      digitalWrite(GPOUT_WIFI_LED, HIGH);
+#endif
       digitalWrite(GPOUT_ONBOARD_LED, HIGH);
-#endif
-      g_bLedOn = true;
+      g_bWiFiLedOn = true;
     }
-    if (g8_ledFlashTimer)
-      g8_ledFlashTimer = 0;
+    if (g8_wifiLedFlashTimer)
+      g8_wifiLedFlashTimer = 0;
   }
-  else if (g8_ledFlashTimer){
-    if (--g8_ledFlashTimer == 0){
-      if (!g_bLedOn){
-#if ESP32_S3
-        rgbLedWrite(RGB_BUILTIN, 0, LED_GREEN, 0);  // On
-#else
-        digitalWrite(GPOUT_ONBOARD_LED, HIGH);
+  else if (g8_wifiLedFlashTimer){
+    if (--g8_wifiLedFlashTimer == 0){
+      if (!g_bWiFiLedOn){
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+        digitalWrite(GPOUT_WIFI_LED, HIGH);
 #endif
-        g_bLedOn = true;
+        digitalWrite(GPOUT_ONBOARD_LED, HIGH);
+        g_bWiFiLedOn = true;
       }
       else{
-#if ESP32_S3
-        rgbLedWrite(RGB_BUILTIN, 0, 0, 0);  // Off
-#else
-        digitalWrite(GPOUT_ONBOARD_LED, LOW);
+#if GPC_BOARD_2B || GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+        digitalWrite(GPOUT_WIFI_LED, LOW);
 #endif
-        g_bLedOn = false;
-        g8_ledFlashCounter++;
+        digitalWrite(GPOUT_ONBOARD_LED, LOW);
+        g_bWiFiLedOn = false;
+        g8_wifiLedFlashCounter++;
       }
       
-      if (g8_ledMode == g8_ledMode_SLOWFLASH)
-        g8_ledFlashTimer = LED_SLOWFLASH_TIME;
-      else if (g8_ledMode == g8_ledMode_FASTFLASH)
-        g8_ledFlashTimer = LED_FASTFLASH_TIME;
+      if (g8_wifiLedMode == g8_wifiLedMode_SLOWFLASH)
+        g8_wifiLedFlashTimer = LED_SLOWFLASH_TIME;
+      else if (g8_wifiLedMode == g8_wifiLedMode_FASTFLASH)
+        g8_wifiLedFlashTimer = LED_FASTFLASH_TIME;
     }
   }
   else // start off either slow or fast flash
-    g8_ledFlashTimer = 1;
+    g8_wifiLedFlashTimer = 1;
 }
 
 // generate variable length random message
@@ -731,7 +913,7 @@ int MyDecodeNum(int& iOut, String s, int table, int token, int context){
     s = SubtractTwoDigitBase16Checksum(s);
 //prtln("MyDecodeNum(): 3: \"" + s + "\"");
     if (s.isEmpty()){
-      prtln("FCUtils.cpp MyDecodeNum() SubtractTwoDigitBase16Checksum(): bad checksum!");
+      prtln("GpcUtils.cpp MyDecodeNum() SubtractTwoDigitBase16Checksum(): bad checksum!");
       return -4;
     }
     iOut = B64C.hnDecNumOnly(s, table, token);
@@ -781,7 +963,7 @@ int MyDecodeStr(String& sInOut, int table, int token, int context){
       return -3;
     sInOut = SubtractTwoDigitBase16Checksum(sInOut);
     if (sInOut.isEmpty()){
-      prtln("FCUtils.cpp MyDecodeStr() SubtractTwoDigitBase16Checksum(): bad checksum!");
+      prtln("GpcUtils.cpp MyDecodeStr() SubtractTwoDigitBase16Checksum(): bad checksum!");
       return -4;
     }
   }
@@ -838,7 +1020,7 @@ String SubtractTwoDigitBase16Checksum(String sIn){
   return sIn;
 }
 
-// Pertains to the FanController.h conditional-compile boolean switches:
+// Pertains to the Gpc.h conditional-compile boolean switches:
 // READ_WRITE_CUSTOM_BLK3_MAC, FORCE_NEW_EFUSE_BITS_ON, WRITE_PROTECT_BLK3
 void InitMAC(){
   // It appears that we can write to BLK3 using esp_efuse_write_field_blob() and it will
@@ -939,11 +1121,27 @@ void TaskStatisticsMonitor(){
   if (++g_stats.HalfSecondCounter > g_stats.HalfSecondCount){
     g_stats.AOnPrevCount = g_stats.AOnCounter;
     g_stats.BOnPrevCount = g_stats.BOnCounter;
+    g_stats.COnPrevCount = g_stats.COnCounter;
+    g_stats.DOnPrevCount = g_stats.DOnCounter;
     g_stats.PrevDConA = g_stats.DConA;
     g_stats.PrevDConB = g_stats.DConB;
+    g_stats.PrevDConC = g_stats.DConC;
+    g_stats.PrevDConD = g_stats.DConD;
     ClearStatCounters();
   }
 
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+  if (g_actualStatus & DEV_STATUS_1)
+    g_stats.DConA++;
+  if (g_actualStatus & DEV_STATUS_2)
+    g_stats.DConB++;
+  #if ENABLE_SSR_C_AND_D
+    if (g_actualStatus & DEV_STATUS_3)
+      g_stats.DConC++;
+    if (g_actualStatus & DEV_STATUS_4)
+      g_stats.DConD++;
+  #endif
+#else
   // we simply count time in .5 sec units when a channel is on
   // these get copied to g_stats.PrevDConA/B when monitor interval
   // rolls over
@@ -951,9 +1149,11 @@ void TaskStatisticsMonitor(){
     g_stats.DConA++;
   if (g_devStatus & DEV_STATUS_2)
     g_stats.DConB++;
+#endif
 }
 
 void TaskProcessPulseOffFeatureTiming(){
+  // SSR1
   if (g8_ssr1ModeFromWeb == SSR_MODE_AUTO && g8_pulseModeA != PULSE_MODE_OFF){
     if (g16_pulsePeriodTimerA == 0){
       if (g8_pulseModeA == PULSE_MODE_OFF_IF_ON){
@@ -996,6 +1196,7 @@ void TaskProcessPulseOffFeatureTiming(){
       g8_pulseWidthTimerA--;
   }
   
+  // SSR2
   if (g8_ssr2ModeFromWeb == SSR_MODE_AUTO && g8_pulseModeB != PULSE_MODE_OFF){
     if (g16_pulsePeriodTimerB == 0){
       if (g8_pulseModeB == PULSE_MODE_OFF_IF_ON){
@@ -1037,9 +1238,98 @@ void TaskProcessPulseOffFeatureTiming(){
     else
       g8_pulseWidthTimerB--;
   }
+
+#if ENABLE_SSR_C_AND_D
+  // SSR3
+  if (g8_ssr3ModeFromWeb == SSR_MODE_AUTO && g8_pulseModeC != PULSE_MODE_OFF){
+    if (g16_pulsePeriodTimerC == 0){
+      if (g8_pulseModeC == PULSE_MODE_OFF_IF_ON){
+        if (g32_dutyCycleTimerC)
+          SetSSR(GPOUT_SSR3, false); // turn off C
+      }
+      else if (g8_pulseModeC == PULSE_MODE_ON_IF_OFF){
+        if (!g32_dutyCycleTimerC)
+          SetSSR(GPOUT_SSR3, true); // turn on C
+      }
+      else if (g8_pulseModeC == PULSE_MODE_ON_OR_OFF){
+        if (g32_dutyCycleTimerC)
+          SetSSR(GPOUT_SSR3, false); // turn off C
+        else
+          SetSSR(GPOUT_SSR3, true); // turn on C
+      }
+      g16_pulsePeriodTimerC = g16_pulsePeriodC;
+      g8_pulseWidthTimerC = g8_pulseWidthC;
+    }
+    else
+      g16_pulsePeriodTimerC--;
+
+    if (g8_pulseWidthTimerC == 0){
+      if (g8_pulseModeC == PULSE_MODE_OFF_IF_ON){
+        if (g32_dutyCycleTimerC)
+          SetSSR(GPOUT_SSR3, true); // turn on C
+      }
+      else if (g8_pulseModeC == PULSE_MODE_ON_IF_OFF){
+        if (!g32_dutyCycleTimerC)
+          SetSSR(GPOUT_SSR3, false); // turn off C
+      }
+      else if (g8_pulseModeC == PULSE_MODE_ON_OR_OFF){
+        if (g32_dutyCycleTimerC)
+          SetSSR(GPOUT_SSR3, true); // turn on C
+        else
+          SetSSR(GPOUT_SSR3, false); // turn off C
+      }
+    }
+    else
+      g8_pulseWidthTimerC--;
+  }
+
+  // SSR4
+  if (g8_ssr4ModeFromWeb == SSR_MODE_AUTO && g8_pulseModeD != PULSE_MODE_OFF){
+    if (g16_pulsePeriodTimerD == 0){
+      if (g8_pulseModeD == PULSE_MODE_OFF_IF_ON){
+        if (g32_dutyCycleTimerD)
+          SetSSR(GPOUT_SSR4, false); // turn off D
+      }
+      else if (g8_pulseModeD == PULSE_MODE_ON_IF_OFF){
+        if (!g32_dutyCycleTimerD)
+          SetSSR(GPOUT_SSR4, true); // turn on D
+      }
+      else if (g8_pulseModeD == PULSE_MODE_ON_OR_OFF){
+        if (g32_dutyCycleTimerD)
+          SetSSR(GPOUT_SSR3, false); // turn off D
+        else
+          SetSSR(GPOUT_SSR3, true); // turn on D
+      }
+      g16_pulsePeriodTimerD = g16_pulsePeriodD;
+      g8_pulseWidthTimerD = g8_pulseWidthD;
+    }
+    else
+      g16_pulsePeriodTimerD--;
+
+    if (g8_pulseWidthTimerD == 0){
+      if (g8_pulseModeD == PULSE_MODE_OFF_IF_ON){
+        if (g32_dutyCycleTimerD)
+          SetSSR(GPOUT_SSR4, true); // turn on D
+      }
+      else if (g8_pulseModeD == PULSE_MODE_ON_IF_OFF){
+        if (!g32_dutyCycleTimerD)
+          SetSSR(GPOUT_SSR4, false); // turn off D
+      }
+      else if (g8_pulseModeD == PULSE_MODE_ON_OR_OFF){
+        if (g32_dutyCycleTimerD)
+          SetSSR(GPOUT_SSR4, true); // turn on D
+        else
+          SetSSR(GPOUT_SSR4, false); // turn off D
+      }
+    }
+    else
+      g8_pulseWidthTimerD--;
+  }
+#endif
 }
 
 void TaskSetPulseOffFeatureVars(){
+  // SSR1
   if (g8_pulseModeA != PULSE_MODE_OFF){
     if (g8_pulseMinWidthA > 0 && g8_pulseMaxWidthA > 0){
       g8_pulseWidthA = random(g8_pulseMinWidthA, g8_pulseMaxWidthA+1);
@@ -1064,7 +1354,8 @@ void TaskSetPulseOffFeatureVars(){
     if (g16_pulsePeriodTimerA != 0)
       g16_pulsePeriodTimerA = 0;
   }
-  
+
+  // SSR2
   if (g8_pulseModeB != PULSE_MODE_OFF){
     if (g8_pulseMinWidthB > 0 && g8_pulseMaxWidthB > 0){
       g8_pulseWidthB = random(g8_pulseMinWidthB, g8_pulseMaxWidthB+1);
@@ -1089,6 +1380,60 @@ void TaskSetPulseOffFeatureVars(){
     if (g16_pulsePeriodTimerB != 0)
       g16_pulsePeriodTimerB = 0;
   }
+
+#if ENABLE_SSR_C_AND_D
+  // SSR3
+  if (g8_pulseModeC != PULSE_MODE_OFF){
+    if (g8_pulseMinWidthC > 0 && g8_pulseMaxWidthC > 0){
+      g8_pulseWidthC = random(g8_pulseMinWidthC, g8_pulseMaxWidthC+1);
+    }
+    else if (g8_pulseMaxWidthC > 0 && g8_pulseWidthC != g8_pulseMaxWidthC && g8_pulseMinWidthC == 0){
+      g8_pulseWidthC = g8_pulseMaxWidthC;
+    }
+    else if (g8_pulseWidthC != 0)
+      g8_pulseWidthC = 0;
+      
+    if (g16_pulseMinPeriodC > 0 && g16_pulseMaxPeriodC > 0){
+      g16_pulsePeriodC = random(g16_pulseMinPeriodC, g16_pulseMaxPeriodC+1);
+    }
+    else if (g16_pulseMaxPeriodC > 0 && g16_pulsePeriodC != g16_pulseMaxPeriodC && g16_pulseMinPeriodC == 0){
+      g16_pulsePeriodC = g16_pulseMaxPeriodC;
+    }
+    else if (g16_pulsePeriodC != 0)
+      g16_pulsePeriodC = 0;
+  }else{
+    if (g8_pulseWidthTimerC != 0)
+      g8_pulseWidthTimerC = 0;
+    if (g16_pulsePeriodTimerC != 0)
+      g16_pulsePeriodTimerC = 0;
+  }
+
+  // SSR4
+  if (g8_pulseModeD != PULSE_MODE_OFF){
+    if (g8_pulseMinWidthD > 0 && g8_pulseMaxWidthD > 0){
+      g8_pulseWidthD = random(g8_pulseMinWidthD, g8_pulseMaxWidthD+1);
+    }
+    else if (g8_pulseMaxWidthD > 0 && g8_pulseWidthD != g8_pulseMaxWidthD && g8_pulseMinWidthD == 0){
+      g8_pulseWidthD = g8_pulseMaxWidthD;
+    }
+    else if (g8_pulseWidthD != 0)
+      g8_pulseWidthD = 0;
+      
+    if (g16_pulseMinPeriodD > 0 && g16_pulseMaxPeriodD > 0){
+      g16_pulsePeriodD = random(g16_pulseMinPeriodD, g16_pulseMaxPeriodD+1);
+    }
+    else if (g16_pulseMaxPeriodD > 0 && g16_pulsePeriodD != g16_pulseMaxPeriodD && g16_pulseMinPeriodD == 0){
+      g16_pulsePeriodD = g16_pulseMaxPeriodD;
+    }
+    else if (g16_pulsePeriodD != 0)
+      g16_pulsePeriodD = 0;
+  }else{
+    if (g8_pulseWidthTimerD != 0)
+      g8_pulseWidthTimerD = 0;
+    if (g16_pulsePeriodTimerD != 0)
+      g16_pulsePeriodTimerD = 0;
+  }
+#endif
 }
 
 // returns mDNS count or negative if error
@@ -1154,11 +1499,15 @@ String CommandStrToPrintable(String sIn){
 // CNG.QueueChange(CD_CMD_CYCLE_PARMS, 0, PerValsToString(perVals));
 String PerValsToString(PerVals perVals){
   return String(perVals.perMax) + ':' + 
-         String(perVals.phase) + ':' +
+         String(perVals.phaseB) + ':' +
+         String(perVals.phaseC) + ':' +
+         String(perVals.phaseD) + ':' +
          String(perVals.perVal) + ':' +
          String(perVals.perUnits) + ':' +  
          String(perVals.dutyCycleA) + ':' +
-         String(perVals.dutyCycleB) + ':'; // add terminating ':'
+         String(perVals.dutyCycleB) + ':' +
+         String(perVals.dutyCycleC) + ':' +
+         String(perVals.dutyCycleD) + ':'; // add terminating ':'
 }
 
 // perMax is 16 bit, all else are 8 bits
@@ -1181,11 +1530,15 @@ int StringToPerVals(String sPerVals, PerVals& perVals){
   if (ii < PERVALS_COUNT)
     return -4;
   perVals.perMax = (uint16_t)vals[0];
-  perVals.phase = (uint8_t)vals[1];
-  perVals.perVal = (uint8_t)vals[2];
-  perVals.perUnits = (uint8_t)vals[3];
-  perVals.dutyCycleA = (uint8_t)vals[4];
-  perVals.dutyCycleB = (uint8_t)vals[5];
+  perVals.phaseB = (uint8_t)vals[1];
+  perVals.phaseC = (uint8_t)vals[2];
+  perVals.phaseD = (uint8_t)vals[3];
+  perVals.perVal = (uint8_t)vals[4];
+  perVals.perUnits = (uint8_t)vals[5];
+  perVals.dutyCycleA = (uint8_t)vals[6];
+  perVals.dutyCycleB = (uint8_t)vals[7];
+  perVals.dutyCycleC = (uint8_t)vals[8];
+  perVals.dutyCycleD = (uint8_t)vals[9];
   return 0;
 }
 
@@ -1407,7 +1760,7 @@ int GetWiFiChan(){
 //   .192 => [0] = 2, [1] = 9, [2] = 1, [3] = 0
 void IpToArray(uint16_t ipLastOctet){
   if (ipLastOctet == 0){
-    g8_digitArray[0] = 0;
+    g8_wifiLedDigitArray[0] = 0;
     return;
   }
 
@@ -1415,10 +1768,10 @@ void IpToArray(uint16_t ipLastOctet){
   ipLastOctet -= hundreds*100;
   uint16_t tens = ipLastOctet/10;
   ipLastOctet -= tens*10;
-  g8_digitArray[0] = ipLastOctet; // 1s
-  g8_digitArray[1] = tens;
-  g8_digitArray[2] = hundreds;
-  g8_digitArray[3] = 0; // end marker
+  g8_wifiLedDigitArray[0] = ipLastOctet; // 1s
+  g8_wifiLedDigitArray[1] = tens;
+  g8_wifiLedDigitArray[2] = hundreds;
+  g8_wifiLedDigitArray[3] = 0; // end marker
 }
 
 String PrintCharsWithEscapes(String sIn){
@@ -1495,9 +1848,19 @@ void PrintPreferences(){
   PrintMidiNote(g8_midiNoteA);
   prt("B: ");
   PrintMidiNote(g8_midiNoteB);
+#if ENABLE_SSR_C_AND_D
+  prt("C: ");
+  PrintMidiNote(g8_midiNoteC);
+  prt("D: ");
+  PrintMidiNote(g8_midiNoteD);
+#endif
   prtln("wifi disable flag: " + String(g_bWiFiDisabled));
   prtln("labelA: \"" + g_sLabelA + "\"");
   prtln("labelB: \"" + g_sLabelB + "\"");
+#if ENABLE_SSR_C_AND_D
+  prtln("labelC: \"" + g_sLabelC + "\"");
+  prtln("labelD: \"" + g_sLabelD + "\"");
+#endif
   prtln("cipher key: \"" + String(g_sKey) + "\"");
   prtln("token: " + String(g_defToken));
   prtln("max power (.25dBm per step): " + String(g8_maxPower));
@@ -1515,8 +1878,20 @@ void PrintCycleTiming(){
   prtln("A duty-cycle: " + sTemp);
   sTemp = (g_perVals.dutyCycleB == 0) ? "random" : String(g_perVals.dutyCycleB) + "%";
   prtln("B duty-cycle: " + sTemp);
-  sTemp = (g_perVals.phase == 100) ? "random" : String(g_perVals.phase) + "%";
-  prtln("phase: " + sTemp);
+#if ENABLE_SSR_C_AND_D
+  sTemp = (g_perVals.dutyCycleC == 0) ? "random" : String(g_perVals.dutyCycleC) + "%";
+  prtln("C duty-cycle: " + sTemp);
+  sTemp = (g_perVals.dutyCycleD == 0) ? "random" : String(g_perVals.dutyCycleD) + "%";
+  prtln("D duty-cycle: " + sTemp);
+#endif
+  sTemp = (g_perVals.phaseB == 100) ? "random" : String(g_perVals.phaseB) + "%";
+  prtln("phaseB: " + sTemp);
+#if ENABLE_SSR_C_AND_D
+  sTemp = (g_perVals.phaseC == 100) ? "random" : String(g_perVals.phaseC) + "%";
+  prtln("phaseC: " + sTemp);
+  sTemp = (g_perVals.phaseD == 100) ? "random" : String(g_perVals.phaseD) + "%";
+  prtln("phaseD: " + sTemp);
+#endif
 }
 
 void PrintPulseFeaturePreferences(){
@@ -1525,11 +1900,26 @@ void PrintPulseFeaturePreferences(){
   prtln("pulse-off max width A: " + String(g8_pulseMaxWidthA));
   prtln("pulse-off min period A: " + String(g16_pulseMinPeriodA));
   prtln("pulse-off max period A: " + String(g16_pulseMaxPeriodA));
+  
   prtln("pulse-off mode B: " + String(g8_pulseModeB));
   prtln("pulse-off min width B: " + String(g8_pulseMinWidthB));
   prtln("pulse-off max width B: " + String(g8_pulseMaxWidthB));
   prtln("pulse-off min period B: " + String(g16_pulseMinPeriodB));
   prtln("pulse-off max period B: " + String(g16_pulseMaxPeriodB));
+  
+#if ENABLE_SSR_C_AND_D
+  prtln("pulse-off mode C: " + String(g8_pulseModeC));
+  prtln("pulse-off min width C: " + String(g8_pulseMinWidthC));
+  prtln("pulse-off max width C: " + String(g8_pulseMaxWidthC));
+  prtln("pulse-off min period C: " + String(g16_pulseMinPeriodC));
+  prtln("pulse-off max period C: " + String(g16_pulseMaxPeriodC));
+  
+  prtln("pulse-off mode D: " + String(g8_pulseModeD));
+  prtln("pulse-off min width D: " + String(g8_pulseMinWidthD));
+  prtln("pulse-off max width D: " + String(g8_pulseMaxWidthD));
+  prtln("pulse-off min period D: " + String(g16_pulseMinPeriodD));
+  prtln("pulse-off max period D: " + String(g16_pulseMaxPeriodD));
+#endif
 }
 
 void PrintSsrMode(uint8_t ssrMode){
@@ -1697,7 +2087,7 @@ void prt(String s){
 //    uCs += (uint8_t)sIn[i];
 //  uCs += (uint8_t)iCs;
 //  if (uCs){
-//    prtln("FCUtils.cpp SubtractThreeDigitChecksum(): bad checksum!");
+//    prtln("GpcUtils.cpp SubtractThreeDigitChecksum(): bad checksum!");
 //    return "";
 //  }
 //

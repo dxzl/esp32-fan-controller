@@ -1,5 +1,5 @@
-#ifndef FCUtilsH
-#define FCUtilsH
+#ifndef GpcUtilsH
+#define GpcUtilsH
 
 #include <Arduino.h>
 #include <esp_wifi.h>
@@ -116,13 +116,18 @@ uint16_t GetOurDeviceMacLastTwoOctets();
 uint16_t GetHighestMac(int& iIdx);
 void RefreshGlobalMasterFlagAndIp();
 
-#if ESP32_S3
-void ReadSsrSwitches();
-#endif
-
-void ReadPot1();
+void ReadPot1(bool bForceRead);
 void ReadPotModeSwitch();
+void SetPotChannelFromSenseStatus();
+void PotChangeTask(int iModeAndChan, int iPercent);
 void ReadWiFiSwitch();
+
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+void ReadActualSSRState();
+bool ShouldComLedIndicateInfinite();
+void CancelPotProgramming();
+bool IsPotProgrammingOn();
+#endif
 
 void SetSSR(uint8_t gpout, bool bSetSsrOn);
 void SetSSRMode(uint8_t gpout, uint8_t ssrMode);
@@ -146,6 +151,8 @@ int GetRandToken();
 
 int ComputeTimeToOnOrOffA();
 int ComputeTimeToOnOrOffB();
+int ComputeTimeToOnOrOffC();
+int ComputeTimeToOnOrOffD();
 
 bool IsLockedAlertGetPlain(AsyncWebServerRequest *request, bool bAllowInAP=false);
 bool IsLockedAlertGet(AsyncWebServerRequest *request, String sReloadUrl, bool bAllowInAP=false);

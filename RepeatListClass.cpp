@@ -1,5 +1,5 @@
 // this file RepeatListClass.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 RepeatListClass IRL;
 

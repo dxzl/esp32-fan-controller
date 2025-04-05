@@ -1,5 +1,5 @@
-#ifndef FCTimeH
-#define FCTimeH
+#ifndef GpcTimeH
+#define GpcTimeH
 
 #include <Arduino.h>
 #include <esp_sntp.h>

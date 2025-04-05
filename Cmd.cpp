@@ -1,5 +1,5 @@
 // this file Cmd.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 // ------------------ USB command-line processing -------------------
 
@@ -124,7 +124,7 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
     }
   }
   else if (cmd == COMMAND_VERSION){
-    sOut = String(VERSION_STR) + ", Unlocked " + String(g16_unlockCounter) + " times since power applied!";
+    sOut = String(VERSION_STR) + String(BOARD_STR) + ", Unlocked " + String(g16_unlockCounter) + " times since power applied!";
   }
   else if (IsLocked()){
     // if locked...
@@ -140,10 +140,10 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
     }
     else
       // this far and no farther! (interface is locked)
-      sOut = "Interface is locked! (" + String(VERSION_STR) + ")";
+      sOut = "Interface is locked! (" + String(VERSION_STR) + String(BOARD_STR) + ")";
   }
   // c update (select binary file for "over the air" update, fc.bin or fc.spiffs.bin)
-  // (NOTE: Only useful when you set "ESP32_S3 true" in FanController.h - this program
+  // (NOTE: Only useful when you set "GPC_BOARD_3B/3C true" in Gpc.h - this program
   // no longer fits in the old 4MB ESP32 without eliminating OTA (Over-the-air) updates!)
   else if (cmd == COMMAND_UPDATE || cmd == COMMAND_UPLOAD){
     if (request){
@@ -284,21 +284,85 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
       }
     }
   }
-  // c phase [0-100] percent phase, 100=random, channel B goes on at this point in cycle
-  else if (cmd == COMMAND_PHASE){
-    sOut = "Range: " + String(PHASE_MIN) + "-" + String(PHASE_MAX) + ". Current value: " + String(g_perVals.phase);
+#if ENABLE_SSR_C_AND_D
+  // c dcc [0-100] percent duty-cycle channel C, 0=random
+  else if (cmd == COMMAND_DCC){
+    sOut = "Range: " + String(DUTY_CYCLE_MIN) + "-" + String(DUTY_CYCLE_MAX) + ". Current value: " + String(g_perVals.dutyCycleC);
     if (alldigits(remCommand)){
       int iVal = remCommand.toInt();
-      if (iVal >= PHASE_MIN && iVal <= PHASE_MAX){
-        if (iVal != g_perVals.phase){
-          TSK.QueueTask(TASK_PARMS, SUBTASK_PHASE, iVal);
-          sOut = "Setting phase " + GetPhaseString(iVal);
+      if (iVal >= DUTY_CYCLE_MIN && iVal <= DUTY_CYCLE_MAX){
+        if (iVal != g_perVals.dutyCycleC){
+          TSK.QueueTask(TASK_PARMS, SUBTASK_DCC, iVal);
+          sOut = "Setting duty-cycle C to " + GetPerDCString(iVal);
         }
         else
           sOut = String(iVal) + " was already set!";
       }
     }
   }
+  // c dcd [0-100] percent duty-cycle channel D, 0=random
+  else if (cmd == COMMAND_DCD){
+    sOut = "Range: " + String(DUTY_CYCLE_MIN) + "-" + String(DUTY_CYCLE_MAX) + ". Current value: " + String(g_perVals.dutyCycleD);
+    if (alldigits(remCommand)){
+      int iVal = remCommand.toInt();
+      if (iVal >= DUTY_CYCLE_MIN && iVal <= DUTY_CYCLE_MAX){
+        if (iVal != g_perVals.dutyCycleD){
+          TSK.QueueTask(TASK_PARMS, SUBTASK_DCD, iVal);
+          sOut = "Setting duty-cycle D to " + GetPerDCString(iVal);
+        }
+        else
+          sOut = String(iVal) + " was already set!";
+      }
+    }
+  }
+#endif
+  // c phaseB [0-100] percent phase, 100=random, channel B goes on at this point in cycle
+  else if (cmd == COMMAND_PHASEB){
+    sOut = "Range: " + String(PHASE_MIN) + "-" + String(PHASE_MAX) + ". Current value: " + String(g_perVals.phaseB);
+    if (alldigits(remCommand)){
+      int iVal = remCommand.toInt();
+      if (iVal >= PHASE_MIN && iVal <= PHASE_MAX){
+        if (iVal != g_perVals.phaseB){
+          TSK.QueueTask(TASK_PARMS, SUBTASK_PHASEB, iVal);
+          sOut = "Setting phase B " + GetPhaseString(iVal);
+        }
+        else
+          sOut = String(iVal) + " was already set!";
+      }
+    }
+  }
+#if ENABLE_SSR_C_AND_D
+  // c phaseC [0-100] percent phase, 100=random, channel C goes on at this point in cycle
+  else if (cmd == COMMAND_PHASEC){
+    sOut = "Range: " + String(PHASE_MIN) + "-" + String(PHASE_MAX) + ". Current value: " + String(g_perVals.phaseC);
+    if (alldigits(remCommand)){
+      int iVal = remCommand.toInt();
+      if (iVal >= PHASE_MIN && iVal <= PHASE_MAX){
+        if (iVal != g_perVals.phaseC){
+          TSK.QueueTask(TASK_PARMS, SUBTASK_PHASEC, iVal);
+          sOut = "Setting phase C " + GetPhaseString(iVal);
+        }
+        else
+          sOut = String(iVal) + " was already set!";
+      }
+    }
+  }
+  // c phaseD [0-100] percent phase, 100=random, channel D goes on at this point in cycle
+  else if (cmd == COMMAND_PHASED){
+    sOut = "Range: " + String(PHASE_MIN) + "-" + String(PHASE_MAX) + ". Current value: " + String(g_perVals.phaseD);
+    if (alldigits(remCommand)){
+      int iVal = remCommand.toInt();
+      if (iVal >= PHASE_MIN && iVal <= PHASE_MAX){
+        if (iVal != g_perVals.phaseD){
+          TSK.QueueTask(TASK_PARMS, SUBTASK_PHASED, iVal);
+          sOut = "Setting phase D " + GetPhaseString(iVal);
+        }
+        else
+          sOut = String(iVal) + " was already set!";
+      }
+    }
+  }
+#endif
   else if (cmd == COMMAND_SYNCHRONIZE){
     if (remCommand.isEmpty()){
       if (g_bSyncCycle){
@@ -411,6 +475,27 @@ String ProcessCommand(AsyncWebServerRequest *request, String &cmd){
         // print the current label
         sOut = "Label 2: \"" + g_sLabelB + "\"";
     }
+#if ENABLE_SSR_C_AND_D
+    else if (subCommand == SC_LABEL_3){
+      if (!remCommand.isEmpty())
+        TSK.QueueTask(TASK_LABEL_C, remCommand);
+      else
+        // print the current label
+        sOut = "Label 3: \"" + g_sLabelC + "\"";
+    }
+    else if (subCommand == SC_LABEL_4){
+      if (!remCommand.isEmpty())
+        TSK.QueueTask(TASK_LABEL_D, remCommand);
+      else
+        // print the current label
+        sOut = "Label 4: \"" + g_sLabelD + "\"";
+    }
+    else
+      sOut = "Usage: c label 1|2|3|4 <text>";
+#else
+    else
+      sOut = "Usage: c label 1|2 <text>";
+#endif
   }
   else if (cmd == COMMAND_PULSE){
     sOut = SetPulseStateFromCommandString(remCommand);
@@ -443,7 +528,7 @@ String SetMacFromCommandString(String& remCommand){
     if (g_sMac == SC_MAC_RANDOM)
       sOut = "MAC mode is random, current MAC: " + WiFi.macAddress();
     else
-      sOut = "MAC: " + WiFi.macAddress();
+      sOut = "MAC: " + g_sMac;
   }
   else if (remCommand == SC_MAC_RANDOM){
     g_sMac = remCommand;
@@ -1381,7 +1466,7 @@ String ProcessWiFiHostName(String sName){
       TSK.QueueTask(TASK_HOSTNAME);
     }
     else // send "not modified"
-      sRet = "Error in host-name: ";
+      sRet = "Host-name not changed, old name: ";
   }
   else
     sRet = "Name already set: ";

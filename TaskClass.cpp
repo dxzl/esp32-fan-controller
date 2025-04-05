@@ -1,5 +1,5 @@
 // this file Tasks.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 TasksClass TSK;
 
@@ -91,10 +91,20 @@ bool TasksClass::RunTasks(){
         PC.PutPrefU8(EE_RELAY_A, g8_ssr1ModeFromWeb);
       else if (i1 == SUBTASK_RELAY_B)
         PC.PutPrefU8(EE_RELAY_B, g8_ssr2ModeFromWeb);
+#if ENABLE_SSR_C_AND_D
+      else if (i1 == SUBTASK_RELAY_C)
+        PC.PutPrefU8(EE_RELAY_C, g8_ssr3ModeFromWeb);
+      else if (i1 == SUBTASK_RELAY_D)
+        PC.PutPrefU8(EE_RELAY_D, g8_ssr4ModeFromWeb);
+#endif
       else{
         SubtaskProcessParams(i1, i2);
         LimitPeriod(); // force end of cycle if it's over 10 sec!
       }
+    break;
+
+    case TASK_POTCHANGE:
+      PotChangeTask(i1, i2); // in GpcUtils.cpp
     break;
 
     case TASK_HOSTNAME:
@@ -214,6 +224,20 @@ bool TasksClass::RunTasks(){
       PrintMidiNote(g8_midiNoteB);
     break;
 
+#if ENABLE_SSR_C_AND_D
+    case TASK_MIDINOTE_C:
+      PC.PutPrefU8(EE_MIDINOTE_C, g8_midiNoteC);
+      prt("C: ");
+      PrintMidiNote(g8_midiNoteC);
+    break;
+
+    case TASK_MIDINOTE_D:
+      PC.PutPrefU8(EE_MIDINOTE_D, g8_midiNoteD);
+      prt("D: ");
+      PrintMidiNote(g8_midiNoteD);
+    break;
+#endif
+
     case TASK_SYNC:
     {
       byte temp = 0;
@@ -238,6 +262,26 @@ bool TasksClass::RunTasks(){
       prtln("\nLabel A: \"" + g_sLabelA + "\"");
     break;
 
+    case TASK_LABEL_B:
+      g_sLabelB = s1;
+      PC.PutPrefString(EE_LABEL_B, g_sLabelB);
+      prtln("\nLabel B: \"" + g_sLabelB + "\"");
+    break;
+
+#if ENABLE_SSR_C_AND_D
+    case TASK_LABEL_C:
+      g_sLabelC = s1;
+      PC.PutPrefString(EE_LABEL_C, g_sLabelC);
+      prtln("\nLabel C: \"" + g_sLabelC + "\"");
+    break;
+
+    case TASK_LABEL_D:
+      g_sLabelD = s1;
+      PC.PutPrefString(EE_LABEL_D, g_sLabelD);
+      prtln("\nLabel D: \"" + g_sLabelD + "\"");
+    break;
+#endif
+
     case TASK_SETCIPKEY:
     {
       int len = s1.length();
@@ -250,12 +294,6 @@ bool TasksClass::RunTasks(){
       else
         prtln("\nCipher Key invalid length <1- " + String(CIPKEY_MAX) + ": " + String(len));
     }
-    break;
-    
-    case TASK_LABEL_B:
-      g_sLabelB = s1;
-      PC.PutPrefString(EE_LABEL_B, g_sLabelB);
-      prtln("\nLabel B: \"" + g_sLabelB + "\"");
     break;
     
     case TASK_MAX_POWER:
@@ -344,7 +382,7 @@ bool TasksClass::RunTasks(){
     break;
 
     case TASK_QUERY_MDNS_SERVICE:
-      IML.QueryMdnsServiceAsync(MDNS_SVCU); // start async mDNS search for ESP32 units advertizing _dts
+      IML.QueryMdnsServiceAsync(MDNS_SVCU); // start async mDNS search for ESP32 units advertizing _gpc
     break;
     
     case TASK_CHECK_MDNS_SEARCH_RESULT:
@@ -397,7 +435,6 @@ bool TasksClass::RunTasks(){
 // addressed specifically to the master from a slave
 void TaskProcessMsgCommands(String& sInOut, String& sIp){
   int ipIdx = IML.FindMdnsIp(sIp);
-//  int iProcCode = 0;
   if (ipIdx >= 0){
     if (g_bMaster)
       prtln("master processing CMto commands from: " + sIp);
@@ -440,12 +477,17 @@ void TaskMainTimingCycle(){
   if (g32_dutyCycleTimerA && --g32_dutyCycleTimerA == 0)
     if (g8_ssr1ModeFromWeb == SSR_MODE_AUTO && g_perVals.dutyCycleA != 100)
       SetSSR(GPOUT_SSR1, false);
-
-  // check duty-cycle before period and set any pending "off" event
-  // if duty-cycle is 100 we stay on all the time
   if (g32_dutyCycleTimerB && --g32_dutyCycleTimerB == 0)
     if (g8_ssr2ModeFromWeb == SSR_MODE_AUTO && g_perVals.dutyCycleB != 100)
       SetSSR(GPOUT_SSR2, false);
+#if ENABLE_SSR_C_AND_D
+  if (g32_dutyCycleTimerC && --g32_dutyCycleTimerC == 0)
+    if (g8_ssr3ModeFromWeb == SSR_MODE_AUTO && g_perVals.dutyCycleC != 100)
+      SetSSR(GPOUT_SSR3, false);
+  if (g32_dutyCycleTimerD && --g32_dutyCycleTimerD == 0)
+    if (g8_ssr4ModeFromWeb == SSR_MODE_AUTO && g_perVals.dutyCycleD != 100)
+      SetSSR(GPOUT_SSR4, false);
+#endif
 
   if (g32_periodTimer && --g32_periodTimer == 0){
     // do this before setting duty-cycle and phase timers!
@@ -453,20 +495,38 @@ void TaskMainTimingCycle(){
     g32_periodTimer = ComputePeriod(g_perVals.perVal, g_perVals.perMax, g_perVals.perUnits);
 
     // random mode is 100
-    g32_phaseTimer = g32_nextPhase; // need to compute next cycle's potentially random phase in advance for ComputeTimeToOnOrOffB()
-    g32_nextPhase = ComputePhase();
+    g32_phaseTimerB = g32_nextPhaseB; // need to compute next cycle's potentially random phase in advance for ComputeTimeToOnOrOffB()
+    g32_nextPhaseB = ComputePhaseB();
+#if ENABLE_SSR_C_AND_D
+    g32_phaseTimerC = g32_nextPhaseC;
+    g32_nextPhaseC = ComputePhaseC();
+    g32_phaseTimerD = g32_nextPhaseD;
+    g32_nextPhaseD = ComputePhaseD();
+#endif
 
-    // g32_phaseTimer can compute to 0 - turn on both at same time
-    if (g32_phaseTimer == 0)
+    // g32_phaseTimerB can compute to 0 - turn on both at same time
+    if (g32_phaseTimerB == 0)
       SSR2On(g32_periodTimer);
+#if ENABLE_SSR_C_AND_D
+    if (g32_phaseTimerC == 0)
+      SSR3On(g32_periodTimer);
+    if (g32_phaseTimerD == 0)
+      SSR4On(g32_periodTimer);
+#endif
 
     SSR1On(g32_periodTimer);
 
     g32_savePeriod = g32_periodTimer; // save for use computing duty-cycles
   }
 
-  if (g32_phaseTimer && --g32_phaseTimer == 0)
+  if (g32_phaseTimerB && --g32_phaseTimerB == 0)
     SSR2On(g32_savePeriod);
+#if ENABLE_SSR_C_AND_D
+  if (g32_phaseTimerC && --g32_phaseTimerC == 0)
+    SSR3On(g32_savePeriod);
+  if (g32_phaseTimerD && --g32_phaseTimerD == 0)
+    SSR4On(g32_savePeriod);
+#endif
 }
 
 // here we need to decode the sCmd and/or sProcCode strings and initiate a client-send
@@ -589,7 +649,8 @@ void TaskProcessReceiveString(int& iIp, int& rxToken, String& sParam1, String& s
     
     int iErr = HMC.DecodeCommands(sCmd, ipIdx);
     if (iErr){
-      prtln("TaskProcessReceiveString() error decodeing command-string: " + String(iErr) + " using rxToken=" + String(rxToken));
+      prtln("TaskProcessReceiveString() error decoding command-string: " + String(iErr) + " using rxToken=" + String(rxToken));
+      iProcCode = PROCESSED_CODE_COMMAND_DECODE_FAIL;
       goto finally;
     }
     
@@ -645,20 +706,19 @@ void TaskProcessReceiveString(int& iIp, int& rxToken, String& sParam1, String& s
   }
 
 finally:
-  iProcCode <<= 4;
-  iProcCode |= random(0, 16);
   IML.SetStr(ipIdx, MDNS_STRING_RXPROCCODE, String(iProcCode)); // this will be used in SendHttpReq()
 }
 
-//PROCESSED_CODE_BADIP        1
-//PROCESSED_CODE_NOLINK       2
-//PROCESSED_CODE_NOPARMS      3
-//PROCESSED_CODE_NORXTOKEN    4
-//PROCESSED_CODE_CHANGE_OK       10
-//PROCESSED_CODE_PARAM_OK     11
-//PROCESSED_CODE_DECPREV_FAIL 12
-//PROCESSED_CODE_DECODE_FAIL  13
-//PROCESSED_CODE_PARAM_FAIL   14
+// PROCESSED_CODE_CHANGE_OK            2 // these codes should all be positive, greater than 0, up to 16
+// PROCESSED_CODE_PARAM_OK             3
+// PROCESSED_CODE_NOPARMS              4
+// PROCESSED_CODE_PARAM_FAIL           5
+// PROCESSED_CODE_DECODE_FAIL          6
+// PROCESSED_CODE_COMMAND_DECODE_FAIL  7
+// PROCESSED_CODE_NORXTOKEN            8
+// PROCESSED_CODE_NOLINK               9
+// PROCESSED_CODE_BADIP                10
+// PROCESSED_CODE_DECPREV_FAIL         11
 // NOTE: we call SendHttpReq() as a task and include sPrevProcCode (which can be empty). sPrevProcCode is the
 // result code of TASK_PROCESS_RECEIVE_STRING that's set in HandleHttpAsyncReq() in WSHandlers.cpp
 // Here's the idea:
@@ -692,6 +752,8 @@ void TaskResultsFromPreviousSend(int& iResultCode, String& sIp){
     prtln("Results: PROCESSED_CODE_NOPARMS!");
   else if (iResultCode == PROCESSED_CODE_NORXTOKEN)
     prtln("Results: PROCESSED_CODE_NORXTOKEN!");
+  else if (iResultCode == PROCESSED_CODE_COMMAND_DECODE_FAIL)
+    prtln("Results: PROCESSED_CODE_COMMAND_DECODE_FAIL!");
   else if (iResultCode == PROCESSED_CODE_PARAM_OK || iResultCode == PROCESSED_CODE_CHANGE_OK){
     // PROCESSED_CODE_CHANGE_OK and PROCESSED_CODE_PARAM_OK are the same - remote unit successfully received our last 
     // transmit - except PROCESSED_CODE_CHANGE_OK means that the previous transmit contained a CMchangeData command
@@ -813,6 +875,7 @@ void TaskHttpCB_DecodeMac(String& sMac, String& sTxIp){
     uint16_t remoteMacLT = (uint16_t)iMac;
     if (IML.GetMdnsMAClastTwo(ipIdx) != remoteMacLT){
       IML.SetMdnsMAClastTwo(ipIdx, remoteMacLT);
+      prtln("TaskHttpCB_DecodeMac(): MAC last-two added: " + String(remoteMacLT));
       RefreshGlobalMasterFlagAndIp();
 //      // purge possible pending command requesting MAC!
 //      String sRef = IML.GetStr(ipIdx, MDNS_STRING_SEND_ALL);
@@ -998,7 +1061,7 @@ void TaskWiFiApConnect(){
   prtln("Access-point password: " + String(DEF_AP_PWD));
 
   dnsAndServerStart();
-  FlashSequencerInit(g8_ledMode_ON); // start the sequence of flashing out the last octet of IP address...
+  FlashSequencerInit(g8_wifiLedMode_ON); // start the sequence of flashing out the last octet of IP address...
   g8_fiveSecondTimer = FIVE_SECOND_TIME-2;
 }
 
@@ -1059,13 +1122,45 @@ void SubtaskProcessParams(int& subTask, int& iData){
       }
     break;
 
-    case SUBTASK_PHASE:
-      if (u8 != g_perVals.phase && u8 >= PHASE_MIN && u8 <= PHASE_MAX){
-        g_perVals.phase = u8;
-        g32_nextPhase = ComputePhase();
-        PC.PutPrefU8(EE_PHASE, u8);
+    case SUBTASK_PHASEB:
+      if (u8 != g_perVals.phaseB && u8 >= PHASE_MIN && u8 <= PHASE_MAX){
+        g_perVals.phaseB = u8;
+        g32_nextPhaseB = ComputePhaseB();
+        PC.PutPrefU8(EE_PHASE_B, u8);
       }
     break;
+
+#if ENABLE_SSR_C_AND_D
+    case SUBTASK_DCC:
+      if (u8 != g_perVals.dutyCycleC && u8 >= DUTY_CYCLE_MIN && u8 <= DUTY_CYCLE_MAX){
+        g_perVals.dutyCycleC = u8;
+        PC.PutPrefU8(EE_DC_C, u8);
+      }
+    break;
+
+    case SUBTASK_DCD:
+      if (u8 != g_perVals.dutyCycleD && u8 >= DUTY_CYCLE_MIN && u8 <= DUTY_CYCLE_MAX){
+        g_perVals.dutyCycleD = u8;
+        PC.PutPrefU8(EE_DC_D, u8);
+      }
+    break;
+
+    case SUBTASK_PHASEC:
+      if (u8 != g_perVals.phaseC && u8 >= PHASE_MIN && u8 <= PHASE_MAX){
+        g_perVals.phaseC = u8;
+        g32_nextPhaseC = ComputePhaseC();
+        PC.PutPrefU8(EE_PHASE_C, u8);
+      }
+    break;
+
+    case SUBTASK_PHASED:
+      if (u8 != g_perVals.phaseD && u8 >= PHASE_MIN && u8 <= PHASE_MAX){
+        g_perVals.phaseD = u8;
+        g32_nextPhaseD = ComputePhaseD();
+        PC.PutPrefU8(EE_PHASE_D, u8);
+      }
+    break;
+#endif
 
     default:
     break;

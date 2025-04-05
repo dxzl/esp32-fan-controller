@@ -1,9 +1,5 @@
 // this file B64Class.cpp
-#include "FanController.h"
-
-// 7/11/2024 - Have updated B64Dec() and B64Enc() in B64Class.hpp and also in sct.js (JavaScript) to fix a bug that
-// disallowed negative numbers. You can now encode/decode the full int32_t data type. Bug fix, FYI, was to change
-// _base to (_base-1) and in sct.js to change "64" to "63".
+#include "Gpc.h"
 
 B64Class B64C;
 

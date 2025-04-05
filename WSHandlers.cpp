@@ -1,5 +1,5 @@
 // this file WSHandlers.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
 
@@ -53,7 +53,11 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
 //            HMC.StripRangeCommand(CMreqMacMin, CMreqMacMax, sRef);
 //            IML.SetStr(rxIdx, MDNS_STRING_SEND_ALL, sRef);
         }
+//        else
+//          prtln("DEBUG: HandleHttpAsyncCanRxReq(): remoteMacLT " + String(remoteMacLT) + " already in table for " + sIp);
       }
+      else
+        prtln("HandleHttpAsyncCanRxReq(): error, localMacLT is 0!");
     }
     else
       prtln("HandleHttpAsyncCanRxReq(): can't decode MAC header!");
@@ -78,7 +82,7 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
 
   if (iTokDecode != NO_TOKEN){
     for (int ii = 0; ii < CANRX_PARAMETER_COUNT; ii++){
-      AsyncWebParameter* p = request->getParam(ii);
+      const AsyncWebParameter* p = request->getParam(ii);
       if (!p) continue;
       String sName = String(p->name());
       iErr = MyDecodeStr(sName, HTTP_TABLE2, iTokDecode, CIPH_CONTEXT_BACKGROUND);
@@ -126,7 +130,7 @@ void HandleHttpAsyncCanRxReq(AsyncWebServerRequest *request){
     }
     
     String sKey;
-    AsyncWebParameter* p = request->getParam(CANRX_PARAMETER_COUNT-1);
+    const AsyncWebParameter* p = request->getParam(CANRX_PARAMETER_COUNT-1);
     if (p)
       sKey = String(p->value());
 
@@ -242,7 +246,7 @@ void HandleHttpAsyncReq(AsyncWebServerRequest *request){
   }
   
   for (int ii = 0; ii < iParamCount; ii++){
-    AsyncWebParameter* p = request->getParam(ii);
+    const AsyncWebParameter* p = request->getParam(ii);
     if (p != NULL)
       sParam[ii] = String(p->name()) + '=' + String(p->value());
   }
@@ -302,6 +306,10 @@ void HandleButtonsReq(AsyncWebServerRequest *request){
       sSel = "A";
     else if (request->hasParam("B"))
       sSel = "B";
+    else if (request->hasParam("C"))
+      sSel = "C";
+    else if (request->hasParam("D"))
+      sSel = "D";
     if (sSel.isEmpty())
       return;
     String sVal = request->getParam(sSel)->value();
@@ -361,6 +369,54 @@ void HandleButtonsReq(AsyncWebServerRequest *request){
         }
       }
     }
+#if ENABLE_SSR_C_AND_D
+    else if (sSel == "C"){
+      if (buttonMode == "0"){
+        if (g8_ssr3ModeFromWeb != SSR_MODE_ON){
+          g8_ssr3ModeFromWeb = SSR_MODE_ON;
+          SetSSRMode(GPOUT_SSR3, g8_ssr3ModeFromWeb);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_C);
+        }
+      }
+      else if (buttonMode == "1"){
+        if (g8_ssr3ModeFromWeb != SSR_MODE_OFF){
+          g8_ssr3ModeFromWeb = SSR_MODE_OFF;
+          SetSSRMode(GPOUT_SSR3, g8_ssr3ModeFromWeb);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_C);
+        }
+      }
+      else if (buttonMode == "2"){
+        if (g8_ssr3ModeFromWeb != SSR_MODE_AUTO){
+          g8_ssr3ModeFromWeb = SSR_MODE_AUTO;
+          SetSSRMode(GPOUT_SSR3, g8_ssr3ModeFromWeb);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_C);
+        }
+      }
+    }
+    else if (sSel == "D"){
+      if (buttonMode == "0"){
+        if (g8_ssr4ModeFromWeb != SSR_MODE_ON){
+          g8_ssr4ModeFromWeb = SSR_MODE_ON;
+          SetSSRMode(GPOUT_SSR4, g8_ssr4ModeFromWeb);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_D);
+        }
+      }
+      else if (buttonMode == "1"){
+        if (g8_ssr4ModeFromWeb != SSR_MODE_OFF){
+          g8_ssr4ModeFromWeb = SSR_MODE_OFF;
+          SetSSRMode(GPOUT_SSR4, g8_ssr4ModeFromWeb);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_D);
+        }
+      }
+      else if (buttonMode == "2"){
+        if (g8_ssr4ModeFromWeb != SSR_MODE_AUTO){
+          g8_ssr4ModeFromWeb = SSR_MODE_AUTO;
+          SetSSRMode(GPOUT_SSR4, g8_ssr4ModeFromWeb);
+          TSK.QueueTask(TASK_PARMS, SUBTASK_RELAY_D);
+        }
+      }
+    }
+#endif
 
     request->send(204, "text/html", "");
 //    request->send(SPIFFS, "/index.html", String(), false, ReplaceHtmlPercentSign);
@@ -386,7 +442,7 @@ void HandleHeartbeatReq(AsyncWebServerRequest *request){
 
     // if no text, send the status variable comma-separated values...
     if (s.isEmpty()){
-      s = String(g8_lockCount) + "," + String(g16_pot1Value) + "," + String(g8_wifiModeFromSwitch) + "," + String(g8_potModeFromSwitch);
+      s = String(g8_lockCount) + "," + String(g_potPercent) + "," + String(g8_wifiModeFromSwitch) + "," + String(g8_potModeFromSwitch);
     }
     request->send(HTTPCODE_OK, "text/html", B64C.hnShiftEncode(s));
   }
@@ -399,7 +455,7 @@ void HandleIndexReq(AsyncWebServerRequest *request){
   if (count == 0)
     return;
 
-  AsyncWebParameter* p = request->getParam(0);
+  const AsyncWebParameter* p = request->getParam((int)0);
   if (p == NULL)
     return;
 
@@ -428,7 +484,11 @@ void HandleIndexReq(AsyncWebServerRequest *request){
     // This sends current state, outlet mode, # times on and duty-cycle in percent to
     // javascript in our HTML web-page as 4 comma-seperated sub-strings
     if (sVal == PARAM_STATE1_VALUE){
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+      s = (g_actualStatus & DEV_STATUS_1) ? "ON" : "OFF";
+#else
       s = (g_devStatus & DEV_STATUS_1) ? "ON" : "OFF";
+#endif
       s += "," + SsrModeToString(g8_ssr1ModeFromWeb);
       s += "," + String(ComputeTimeToOnOrOffA()); // String(g_stats.AOnPrevCount+g_stats.AOnCounter)
       s += "," + PercentOnToString(g_stats.PrevDConA+g_stats.DConA, g_stats.HalfSecondCount+g_stats.HalfSecondCounter);
@@ -436,12 +496,34 @@ void HandleIndexReq(AsyncWebServerRequest *request){
   }
   else if (sName == PARAM_STATE2){
     if (sVal == PARAM_STATE2_VALUE){
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+      s = (g_actualStatus & DEV_STATUS_2) ? "ON" : "OFF";
+#else
       s = (g_devStatus & DEV_STATUS_2) ? "ON" : "OFF";
+#endif
       s += "," + SsrModeToString(g8_ssr2ModeFromWeb);
-      s += "," + String(ComputeTimeToOnOrOffB()); // String(g_stats.AOnPrevCount+g_stats.AOnCounter)
+      s += "," + String(ComputeTimeToOnOrOffB()); // String(g_stats.BOnPrevCount+g_stats.BOnCounter)
       s += "," + PercentOnToString(g_stats.PrevDConB+g_stats.DConB, g_stats.HalfSecondCount+g_stats.HalfSecondCounter);
     }
   }
+#if ENABLE_SSR_C_AND_D
+  else if (sName == PARAM_STATE3){
+    if (sVal == PARAM_STATE3_VALUE){
+      s = (g_actualStatus & DEV_STATUS_3) ? "ON" : "OFF";
+      s += "," + SsrModeToString(g8_ssr3ModeFromWeb);
+      s += "," + String(ComputeTimeToOnOrOffC()); // String(g_stats.COnPrevCount+g_stats.COnCounter)
+      s += "," + PercentOnToString(g_stats.PrevDConC+g_stats.DConC, g_stats.HalfSecondCount+g_stats.HalfSecondCounter);
+    }
+  }
+  else if (sName == PARAM_STATE4){
+    if (sVal == PARAM_STATE4_VALUE){
+      s = (g_actualStatus & DEV_STATUS_4) ? "ON" : "OFF";
+      s += "," + SsrModeToString(g8_ssr4ModeFromWeb);
+      s += "," + String(ComputeTimeToOnOrOffD()); // String(g_stats.DOnPrevCount+g_stats.DOnCounter)
+      s += "," + PercentOnToString(g_stats.PrevDConD+g_stats.DConD, g_stats.HalfSecondCount+g_stats.HalfSecondCounter);
+    }
+  }
+#endif
   else if (sName == PARAM_HOSTNAME){
     sVal.trim();
     twiddle(sVal);
@@ -465,15 +547,24 @@ void HandleIndexReq(AsyncWebServerRequest *request){
 
     // locked commands...
 
-    if (sName == PARAM_LABEL_A || sName == PARAM_LABEL_B){
+    if (sName == PARAM_LABEL_A || sName == PARAM_LABEL_B || sName == PARAM_LABEL_C || sName == PARAM_LABEL_D){
       sVal.trim();
       if (sVal.isEmpty())
         s = "Transmission error or blank label...";
       else if (sVal.length() > LABEL_MAXLENGTH)
         s = "Max label length is: " + String(LABEL_MAXLENGTH) + "!";
       else{
-        int iTask = (sName == PARAM_LABEL_A) ? TASK_LABEL_A : TASK_LABEL_B;
-        TSK.QueueTask(iTask, sVal);
+        int iTask = -1;
+        if (sName == PARAM_LABEL_A)
+          iTask = TASK_LABEL_A;
+        else if (sName == PARAM_LABEL_B)
+          iTask = TASK_LABEL_B;
+        else if (sName == PARAM_LABEL_C)
+          iTask = TASK_LABEL_C;
+        else if (sName == PARAM_LABEL_D)
+          iTask = TASK_LABEL_D;
+        if (iTask >= 0)
+          TSK.QueueTask(iTask, sVal);
       }
       
       if (s != "")
@@ -517,7 +608,7 @@ void HandleGetP2Req(AsyncWebServerRequest *request){
   if (count == 0)
     return;
 
-  AsyncWebParameter* p = request->getParam(0);
+  const AsyncWebParameter* p = request->getParam((int)0);
   if (p == NULL)
     return;
 
@@ -604,7 +695,7 @@ void HandleAltP1Req(AsyncWebServerRequest *request){
   if (count == 0)
     return;
 
-  AsyncWebParameter* p = request->getParam(0);
+  const AsyncWebParameter* p = request->getParam((int)0);
   if (p == NULL)
     return;
 
@@ -617,8 +708,8 @@ void HandleAltP1Req(AsyncWebServerRequest *request){
     return;
   }
     
-  if (sName == PARAM_PHASE)
-    TSK.QueueTask(TASK_PARMS, SUBTASK_PHASE, iVal);
+  if (sName == PARAM_PHASE_B)
+    TSK.QueueTask(TASK_PARMS, SUBTASK_PHASEB, iVal);
   else if (sName == PARAM_DC_A)
     TSK.QueueTask(TASK_PARMS, SUBTASK_DCA, iVal);
   else if (sName == PARAM_DC_B)
@@ -641,6 +732,28 @@ void HandleAltP1Req(AsyncWebServerRequest *request){
       TSK.QueueTask(TASK_MIDINOTE_B);
     }
   }
+#if ENABLE_SSR_C_AND_D
+  else if (sName == PARAM_PHASE_C)
+    TSK.QueueTask(TASK_PARMS, SUBTASK_PHASEC, iVal);
+  else if (sName == PARAM_PHASE_D)
+    TSK.QueueTask(TASK_PARMS, SUBTASK_PHASED, iVal);
+  else if (sName == PARAM_DC_C)
+    TSK.QueueTask(TASK_PARMS, SUBTASK_DCC, iVal);
+  else if (sName == PARAM_DC_D)
+    TSK.QueueTask(TASK_PARMS, SUBTASK_DCD, iVal);
+  else if (sName == PARAM_MIDINOTE_C){
+    if (iVal != g8_midiNoteC){
+      g8_midiNoteC = iVal;
+      TSK.QueueTask(TASK_MIDINOTE_C);
+    }
+  }
+  else if (sName == PARAM_MIDINOTE_D){
+    if (iVal != g8_midiNoteD){
+      g8_midiNoteD = iVal;
+      TSK.QueueTask(TASK_MIDINOTE_D);
+    }
+  }
+#endif
 
   // 204 = OK but No Content
   request->send(204, "text/html", "");
@@ -732,7 +845,7 @@ void HandleP2FormReq(AsyncWebServerRequest *request){
     g_bTellP2WebPageToReload = false;
 
   for (int ii = 0; ii < count; ii++){
-    AsyncWebParameter* p = request->getParam(ii);
+    const AsyncWebParameter* p = request->getParam(ii);
 
     if (p == NULL)
       continue;
@@ -822,27 +935,45 @@ void HandleP2FormReq(AsyncWebServerRequest *request){
       // move old slot's cycle-timing vals to new slot
       t.dutyCycleA = t2.dutyCycleA;
       t.dutyCycleB = t2.dutyCycleB;
-      t.phase = t2.phase;
+      t.phaseB = t2.phaseB;
       t.perUnits = t2.perUnits;
       t.perMax = t2.perMax;
       t.perVal = t2.perVal;
+#if ENABLE_SSR_C_AND_D
+      t.dutyCycleC = t2.dutyCycleC;
+      t.dutyCycleD = t2.dutyCycleD;
+      t.phaseC = t2.phaseC;
+      t.phaseD = t2.phaseD;
+#endif
     }
     else{
       t.dutyCycleA = g_perVals.dutyCycleA;
       t.dutyCycleB = g_perVals.dutyCycleB;
-      t.phase = g_perVals.phase;
+      t.phaseB = g_perVals.phaseB;
       t.perUnits = g_perVals.perUnits;
       t.perMax = g_perVals.perMax;
       t.perVal = g_perVals.perVal;
+#if ENABLE_SSR_C_AND_D
+      t.dutyCycleC = g_perVals.dutyCycleC;
+      t.dutyCycleD = g_perVals.dutyCycleD;
+      t.phaseC = g_perVals.phaseC;
+      t.phaseD = g_perVals.phaseD;
+#endif
     }
   }
   else{
     t.dutyCycleA = 0xff;
     t.dutyCycleB = 0xff;
-    t.phase = 0xff;
+    t.phaseB = 0xff;
     t.perUnits = 0xff;
     t.perVal = 0xff;
     t.perMax = 0xffff;
+#if ENABLE_SSR_C_AND_D
+    t.dutyCycleC = 0xff;
+    t.dutyCycleD = 0xff;
+    t.phaseC = 0xff;
+    t.phaseD = 0xff;
+#endif
   }
 
   t.bEnable = true;
@@ -1035,6 +1166,12 @@ String ReplaceHtmlPercentSign(const String& var){
     return g_sLabelA;
   if (var == PH_LABEL_B)
     return g_sLabelB;
+#if ENABLE_SSR_C_AND_D
+  if (var == PH_LABEL_C)
+    return g_sLabelC;
+  if (var == PH_LABEL_D)
+    return g_sLabelD;
+#endif
   if (var == PH_PERVARS)
     return "<script>var varPerMax=" + String(g_perVals.perMax) +
            ";var varPerUnits=" + String(g_perVals.perUnits) +
@@ -1045,10 +1182,27 @@ String ReplaceHtmlPercentSign(const String& var){
     return "<script>var chan=" + String(g8_midiChan) +
            ";var na=" + String(g8_midiNoteA) +
            ";var nb=" + String(g8_midiNoteB) +
-           ";var varPhaseVal=" + String(g_perVals.phase) +
+#if ENABLE_SSR_C_AND_D
+           ";var nc=" + String(g8_midiNoteC) +
+           ";var nd=" + String(g8_midiNoteD) +
+#else
+           ";var nc=0" +
+           ";var nd=0" +
+#endif
+           ";var varPhaseBVal=" + String(g_perVals.phaseB) +
            ";var varDcAVal=" + String(g_perVals.dutyCycleA) +
-           ";var varDcBVal=" + String(g_perVals.dutyCycleB) + ";</script>";
-
+           ";var varDcBVal=" + String(g_perVals.dutyCycleB) +
+#if ENABLE_SSR_C_AND_D
+           ";var varPhaseCVal=" + String(g_perVals.phaseC) +
+           ";var varPhaseDVal=" + String(g_perVals.phaseD) +
+           ";var varDcCVal=" + String(g_perVals.dutyCycleC) +
+           ";var varDcDVal=" + String(g_perVals.dutyCycleD) + ";</script>";
+#else
+           ";var varPhaseCVal=0" +
+           ";var varPhaseDVal=0" +
+           ";var varDcCVal=0" +
+           ";var varDcDVal=0" + ";</script>";
+#endif
   prtln("Unknown:" + var);
   return String();
 }

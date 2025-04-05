@@ -1,7 +1,10 @@
 // this file HttpClientHandlers.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 // HTTP Client: https://github.com/khoih-prog/AsyncHTTPRequest_Generic
+// needed by AsyncHTTPRequest_Generic.h library (having to do with mutex locks
+// NOTE: we don't want any mutex locks in that library (they will hang the system!)
+#define ESP32 true
 #include "AsyncHTTPRequest_Generic.h"
 
 // have to put prototype here instead of in HttpClientHandlers.h because includes above won't work if put in the .h file!
@@ -163,9 +166,9 @@ bool SendHttpReq(String sIp){
 
   // check for special case of "we are not a master" and the master in the mDNS array is NOT ipIdx
   //
-  // if g_Master is false and we HAVE a master in the mDNS array and that index is NOT ipIdx... that's a
+  // if g_bMaster is false and we HAVE a master in the mDNS array and that index is NOT ipIdx... that's a
   // special case - we should send to ipIdx its sSendSpecific ONLY. But that would not be normal operation.
-  if (g_IpMaster != IML.GetIP(ipIdx)){
+  if (!g_bMaster && g_IpMaster != IML.GetIP(ipIdx)){
     prtln("SendHttpReq() Sending slave-to-slave not allowed (you must route commands through the master)!");
     return false;
   }
@@ -197,31 +200,43 @@ bool SendHttpReq(String sIp){
       HMC.AddCommand(CMto, B64C.hnEncNumOnly(0) + CM_SEP + sSendAll, sCmd); // add commands intended for all units...
   }
   
-//prtln("DEBUG: sCmd before encode: \"" + sCmd + "\"");
-
-  // generate and add txNextToken plus checksum to sCmd
-  int iErr = HMC.EncodeTxTokenAndChecksum(ipIdx, sCmd, false);
-  if (iErr){
-    prtln("SendHttpReq() EncodeTxTokenAndChecksum(), iErr=" + String(iErr));
-    return false;
-  }
-
 //prtln("DEBUG: sCmd after encode: \"" + sCmd + "\"");
   
-  iErr = 0;
-  
+  int iErr = 0;  
   String sPrevProcCode = IML.GetStr(ipIdx, MDNS_STRING_RXPROCCODE); // saved in TaskProcessReceiveString()
   prtln("SendHttpReq() previous send's result-code, sPrevProcCode: \"" + sPrevProcCode + "\"");
   if (!sPrevProcCode.isEmpty()){
-    iErr = MyEncodeStr(sPrevProcCode, HTTP_TABLE2, txToken, CIPH_CONTEXT_FOREGROUND);
-    if (iErr){
-      prtln("SendHttpReq() bad sPrevProcCode encode, iErr=" + String(iErr));
-      return false;
+    if (!alldigits(sPrevProcCode)){
+      prtln("SendHttpReq() bad sPrevProcCode (should be all digits!): \"" + sPrevProcCode + "");
+      sPrevProcCode = "";
+    }
+    else{
+      int iProcCode = sPrevProcCode.toInt();
+      sPrevProcCode = ""; // now sPrevProcCode will be encoded to send to remote...
+      if (iProcCode != 0){
+        iProcCode <<= 4;
+        iProcCode |= random(0, 16);
+        sPrevProcCode = String(iProcCode);
+        iErr = MyEncodeStr(sPrevProcCode, HTTP_TABLE2, txToken, CIPH_CONTEXT_FOREGROUND);
+        if (iErr){
+          prtln("SendHttpReq() bad sPrevProcCode encode, iErr=" + String(iErr));
+          return false;
+        }
+      }
     }
     IML.SetStr(ipIdx, MDNS_STRING_RXPROCCODE, "");
   }
     
   if (!sCmd.isEmpty()){
+//    prtln("DEBUG: sCmd before encode: \"" + sCmd + "\"");
+
+    // generate and add txNextToken plus checksum to sCmd
+    iErr = HMC.EncodeTxTokenAndChecksum(ipIdx, sCmd, false);
+    if (iErr){
+      prtln("SendHttpReq() EncodeTxTokenAndChecksum(), iErr=" + String(iErr));
+      return false;
+    }
+
     iErr = MyEncodeStr(sCmd, HTTP_TABLE2, txToken, CIPH_CONTEXT_FOREGROUND);
     if (iErr){
       prtln("SendHttpReq() bad sCmd encode, iErr=" + String(iErr));
@@ -255,7 +270,7 @@ bool SendHttpReq(String sIp){
       return false;
     }
     sReq += sEnc + '=' + sPrevProcCode + '&';
-    prtln("SendHttpReq() sending data-processed code of " + sPrevProcCode);
+    prtln("SendHttpReq() sending random encoded sPrevProcCode of: \"" + sPrevProcCode + "");
   }
   
   if (asyncHttpreq.open("GET", sReq.c_str())){

@@ -23,32 +23,57 @@ const char EE_SLOT_PREFIX[]      = "EE_SLOT_"; // will become EE_SLOT_000
 #define EE_PERVAL           2
 #define EE_DC_A             3
 #define EE_DC_B             4
-#define EE_PHASE            5
-#define EE_RELAY_A          6
-#define EE_RELAY_B          7
-#define EE_MIDICHAN         8
-#define EE_MIDINOTE_A       9
-#define EE_MIDINOTE_B       10
+#define EE_DC_C             5
+#define EE_DC_D             6
+#define EE_PHASE_B          7
+#define EE_PHASE_C          8
+#define EE_PHASE_D          9
+#define EE_MIDICHAN         10
 #define EE_SYNC             11
 #define EE_WIFI_DIS         12
-#define EE_LABEL_A          13
-#define EE_LABEL_B          14
-#define EE_TOKEN            15
-#define EE_CIPKEY           16
-#define EE_PULSE_OFF_MODE_A 17
-#define EE_PULSE_MINWID_A   18
-#define EE_PULSE_MAXWID_A   19
-#define EE_PULSE_MINPER_A   20
-#define EE_PULSE_MAXPER_A   21
-#define EE_PULSE_MINWID_B   22
-#define EE_PULSE_OFF_MODE_B 23
-#define EE_PULSE_MAXWID_B   24
-#define EE_PULSE_MINPER_B   25
-#define EE_PULSE_MAXPER_B   26
-#define EE_MAX_POWER        27
-#define EE_SNTP_TZ          28
-#define EE_SNTP_INT         29
-#define TOTAL_PREFS         30
+#define EE_TOKEN            13
+#define EE_CIPKEY           14
+#define EE_MAX_POWER        15
+#define EE_SNTP_TZ          16
+#define EE_SNTP_INT         17
+#define EE_RELAY_A          18
+#define EE_RELAY_B          19
+#define EE_RELAY_C          20
+#define EE_RELAY_D          21
+#define EE_MIDINOTE_A       22
+#define EE_MIDINOTE_B       23
+#define EE_MIDINOTE_C       24
+#define EE_MIDINOTE_D       25
+#define EE_LABEL_A          26
+#define EE_LABEL_B          27
+#define EE_LABEL_C          28
+#define EE_LABEL_D          29
+
+#define EE_PULSE_OFF_MODE_A 30
+#define EE_PULSE_MINWID_A   31
+#define EE_PULSE_MAXWID_A   32
+#define EE_PULSE_MINPER_A   33
+#define EE_PULSE_MAXPER_A   34
+
+#define EE_PULSE_OFF_MODE_B 35
+#define EE_PULSE_MINWID_B   36
+#define EE_PULSE_MAXWID_B   37
+#define EE_PULSE_MINPER_B   38
+#define EE_PULSE_MAXPER_B   39
+
+#define EE_PULSE_OFF_MODE_C 40
+#define EE_PULSE_MINWID_C   41
+#define EE_PULSE_MAXWID_C   42
+#define EE_PULSE_MINPER_C   43
+#define EE_PULSE_MAXPER_C   44
+
+#define EE_PULSE_OFF_MODE_D 45
+#define EE_PULSE_MINWID_D   46
+#define EE_PULSE_MAXWID_D   47
+#define EE_PULSE_MINPER_D   48
+#define EE_PULSE_MAXPER_D   49
+
+#define TOTAL_PREFS         50
 
 // for EE_WIFI_NAMESPACE
 // these are 15 chars max! (do NOT use the CM_SEP character in a key!)

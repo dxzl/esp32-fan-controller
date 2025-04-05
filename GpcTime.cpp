@@ -1,5 +1,5 @@
-// this file FCTime.cpp
-#include "FanController.h"
+// this file GpcTime.cpp
+#include "Gpc.h"
 
 // The ESP32 has 8kB SRAM on the Real-TIme-Clock module called "RTC fast memory". The data saved here is not erased
 // during deep sleep. However, it is erased when you press the reset button (the button labeled EN on the ESP32 board).

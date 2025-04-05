@@ -9,7 +9,8 @@
 // an "extern" definition for them (see below). The compiler only sees the definition once because
 // of the #ifndef" above.
 
-const char VERSION_STR[] = DTS_VERSION;
+const char VERSION_STR[] = GPC_VERSION;
+const char BOARD_STR[] = GPC_BOARD;
 
 // spaces not allowed in a command/subcommand (to keep parsing simple for command interpreter!)
 // spaces ARE allowed in the data-string that follows the command/subcommand. COMMAND_LOCK[] is
@@ -31,6 +32,8 @@ const char SC_MAC_RESET[]    = "reset";
 const char COMMAND_RELAY[]   = "relay";
 const char SC_RELAY_1[]      = "1";
 const char SC_RELAY_2[]      = "2";
+const char SC_RELAY_3[]      = "3";
+const char SC_RELAY_4[]      = "4";
 const char SSC_RELAY_ON[]    = "on";
 const char SSC_RELAY_OFF[]   = "off";
 const char SSC_RELAY_AUTO[]  = "auto";
@@ -44,6 +47,8 @@ const char SC_TEST_OFF[]     = "off";
 const char COMMAND_LABEL[]   = "label";
 const char SC_LABEL_1[]      = "1";
 const char SC_LABEL_2[]      = "2";
+const char SC_LABEL_3[]      = "3";
+const char SC_LABEL_4[]      = "4";
 
 // you can type these commands into the HOSTNAME web-edit field and submit the command!
 
@@ -75,6 +80,8 @@ const char SSC_SYNC_OFF[]    = "off";
 const char COMMAND_PULSE[]   = "pulse";
 const char SC_PULSE_A[]      = "a";
 const char SC_PULSE_B[]      = "b";
+const char SC_PULSE_C[]      = "c";
+const char SC_PULSE_D[]      = "d";
 const char SSC_PULSE_PER[]   = "per";
 const char SSC_PULSE_PW[]    = "pw";
 const char SSC_PULSE_MODE[]  = "mode";
@@ -102,13 +109,17 @@ const char SC_WIFI_HOST[]    = "host";
 
 const char COMMAND_DCA[]      = "dca";
 const char COMMAND_DCB[]      = "dcb";
+const char COMMAND_DCC[]      = "dcc";
+const char COMMAND_DCD[]      = "dcd";
 const char COMMAND_HELP[]     = "help";
 const char COMMAND_INFO[]     = "info";
 const char COMMAND_LOCK[]     = "lock";
 const char COMMAND_PERIOD[]   = "period";
 const char COMMAND_PERMAX[]   = "permax";
 const char COMMAND_PERUNITS[] = "perunits";
-const char COMMAND_PHASE[]    = "phase";
+const char COMMAND_PHASEB[]   = "phaseb";
+const char COMMAND_PHASEC[]   = "phasec";
+const char COMMAND_PHASED[]   = "phased";
 const char COMMAND_TEXT[]     = "text";
 const char COMMAND_TIMEDATE[] = "timedate";
 const char COMMAND_TOKEN[]    = "token";
@@ -152,5 +163,4 @@ String GetInfoFromCommandString(String& sIp, String& remCommand, int& iMdnsIdx, 
 String SendTextFromCommandString(String& sIp, String& remCommand, int& iMdnsIdx, int& iMdnsCount);
 String SetMacFromCommandString(String& remCommand);
 //String RemoveQuotes(String sIn);
-
 #endif

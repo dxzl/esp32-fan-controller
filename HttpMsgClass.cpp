@@ -1,5 +1,5 @@
 // this file HttpMsgClass.cpp
-#include "FanController.h"
+#include "Gpc.h"
 
 HttpMsgClass HMC;
 
@@ -32,10 +32,17 @@ void HttpMsgClass::EncodeChangedParametersForAllIPs(){
 
   String sNew, sTemp;
 
+#if GPC_BOARD_3B || GPC_BOARD_2C || GPC_BOARD_3C
+  if (g_oldDevStatus != g_actualStatus){
+    AddCommand(CMstat, g_actualStatus, sNew); // send on/off status of up to 32 relays/devices
+    g_oldDevStatus = g_actualStatus;
+  }
+#else
   if (g_oldDevStatus != g_devStatus){
     AddCommand(CMstat, g_devStatus, sNew); // send on/off status of up to 32 relays/devices
     g_oldDevStatus = g_devStatus;
   }
+#endif
   if (g_perVals.perVal != g_oldPerVals.perVal){
     AddCommand(CMper, g_perVals.perVal, sNew);
     g_oldPerVals.perVal = g_perVals.perVal;
@@ -48,9 +55,9 @@ void HttpMsgClass::EncodeChangedParametersForAllIPs(){
     AddCommand(CMunits, g_perVals.perUnits, sNew);
     g_oldPerVals.perUnits = g_perVals.perUnits;
   }
-  if (g_perVals.phase != g_oldPerVals.phase){
-    AddCommand(CMphase, g_perVals.phase, sNew);
-    g_oldPerVals.phase = g_perVals.phase;
+  if (g_perVals.phaseB != g_oldPerVals.phaseB){
+    AddCommand(CMphaseB, g_perVals.phaseB, sNew);
+    g_oldPerVals.phaseB = g_perVals.phaseB;
   }
   if (g_perVals.dutyCycleA != g_oldPerVals.dutyCycleA){
     AddCommand(CMdcA, g_perVals.dutyCycleA, sNew);
@@ -60,6 +67,24 @@ void HttpMsgClass::EncodeChangedParametersForAllIPs(){
     AddCommand(CMdcB, g_perVals.dutyCycleB, sNew);
     g_oldPerVals.dutyCycleB = g_perVals.dutyCycleB;
   }
+#if ENABLE_SSR_C_AND_D
+  if (g_perVals.phaseC != g_oldPerVals.phaseC){
+    AddCommand(CMphaseC, g_perVals.phaseC, sNew);
+    g_oldPerVals.phaseC = g_perVals.phaseC;
+  }
+  if (g_perVals.phaseD != g_oldPerVals.phaseD){
+    AddCommand(CMphaseD, g_perVals.phaseD, sNew);
+    g_oldPerVals.phaseD = g_perVals.phaseD;
+  }
+  if (g_perVals.dutyCycleC != g_oldPerVals.dutyCycleC){
+    AddCommand(CMdcC, g_perVals.dutyCycleC, sNew);
+    g_oldPerVals.dutyCycleC = g_perVals.dutyCycleC;
+  }
+  if (g_perVals.dutyCycleD != g_oldPerVals.dutyCycleD){
+    AddCommand(CMdcD, g_perVals.dutyCycleD, sNew);
+    g_oldPerVals.dutyCycleD = g_perVals.dutyCycleD;
+  }
+#endif
 
   if (g_bMaster){
     // send current remaining g32_periodTimer value so remote units can sync to us if we are the master
@@ -221,7 +246,7 @@ int HttpMsgClass::ProcessMsgCommands(String& sInOut, int rxIdx, bool& bCMchangeD
 int HttpMsgClass::ProcessMsgCommand(int rxIdx, String& sCmd, String& sData, bool& bCMchangeDataWasReceived){
   if (sCmd.isEmpty() || sData.isEmpty())
     return -2;
-  // Note: make sure alldigits() in FCUtils.cpp allows a leading +/- sign!
+  // Note: make sure alldigits() in GpcUtils.cpp allows a leading +/- sign!
   bool bAllDigits = alldigits(sData);
   int iVal = bAllDigits ? sData.toInt() : 0;
   int iCmd = GetCommandIndex(sCmd);
@@ -277,9 +302,17 @@ int HttpMsgClass::ProcessMsgCommand(int rxIdx, String& sCmd, String& sData, bool
         TSK.QueueTask(TASK_PARMS, SUBTASK_PERVAL, iVal);
         g_oldPerVals.perVal = g_perVals.perVal;
       }
-      else if (iCmd == CMphase){
-        TSK.QueueTask(TASK_PARMS, SUBTASK_PHASE, iVal);
-        g_oldPerVals.phase = g_perVals.phase;
+      else if (iCmd == CMphaseB){
+        TSK.QueueTask(TASK_PARMS, SUBTASK_PHASEB, iVal);
+        g_oldPerVals.phaseB = g_perVals.phaseB;
+      }
+      else if (iCmd == CMphaseC){
+        TSK.QueueTask(TASK_PARMS, SUBTASK_PHASEC, iVal);
+        g_oldPerVals.phaseD = g_perVals.phaseD;
+      }
+      else if (iCmd == CMphaseD){
+        TSK.QueueTask(TASK_PARMS, SUBTASK_PHASED, iVal);
+        g_oldPerVals.phaseD = g_perVals.phaseD;
       }
       else if (iCmd == CMdcA){
         TSK.QueueTask(TASK_PARMS, SUBTASK_DCA, iVal);
@@ -288,6 +321,14 @@ int HttpMsgClass::ProcessMsgCommand(int rxIdx, String& sCmd, String& sData, bool
       else if (iCmd == CMdcB){
         TSK.QueueTask(TASK_PARMS, SUBTASK_DCB, iVal);
         g_oldPerVals.dutyCycleB = g_perVals.dutyCycleB;
+      }
+      else if (iCmd == CMdcC){
+        TSK.QueueTask(TASK_PARMS, SUBTASK_DCC, iVal);
+        g_oldPerVals.dutyCycleC = g_perVals.dutyCycleC;
+      }
+      else if (iCmd == CMdcD){
+        TSK.QueueTask(TASK_PARMS, SUBTASK_DCD, iVal);
+        g_oldPerVals.dutyCycleD = g_perVals.dutyCycleD;
       }
       else
         return -1;
